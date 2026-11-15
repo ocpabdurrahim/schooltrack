@@ -1,0 +1,305 @@
+rules_version = '2';
+
+// SchoolTrack -- see docs/data-model.md. Section headings are quoted below so a
+// surprising rule can be traced to the reason for it.
+//
+// Two ideas carry most of the weight:
+//
+//   OWNERSHIP ("§0 The decision that matters most: who owns the data").
+//   While a module still belongs to Oracle, its collections are read-only HERE
+//   even for an administrator, so a bug in either app cannot corrupt data the
+//   other system owns. The mirror importer runs through the Admin SDK, which
+//   bypasses rules entirely, so one-way mirroring still works.
+//   Cut-over is a single field in settings/ownership -- no redeploy.
+//
+//   GUARDIANS ("§2 Who may do what"). A guardian's reach is resolved ONLY from
+//   their own guardians/{email} doc, which only an ADMIN may write, and they
+//   have no write path anywhere in the database.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- identity ---------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    // The SchoolTrack owner. Mirrors SkillTrack's isAppAdmin().
+    function isAppAdmin() {
+      return signedIn() && myEmail() in ['ocpabdurrahim@gmail.com'];
+    }
+
+    // ---------- staff ------------------------------------------------------
+
+    function memberPath(s) {
+      return /databases/$(database)/documents/schools/$(s)/members/$(myEmail());
+    }
+
+    // Roles mirror the APEX schemes exactly (fn_has_role): ADMIN, TEACHER,
+    // ACCOUNTS, plus OFFICE for document work.
+    //
+    // ONE document read, not four. Firestore caps the document accesses a
+    // single rule evaluation may make, and these helpers nest -- a payment
+    // write calls hasRole() and appOwns() together. `let` binds the read once.
+    // A missing member doc makes get() return null, the comparison fails, and
+    // the request is denied, which is the outcome we want anyway.
+    function hasRole(s, roles) {
+      let m = get(memberPath(s));
+      return signedIn() && m != null &&
+             m.data.active == true &&
+             m.data.get('deleted', false) == false &&
+             m.data.role in roles;
+    }
+
+    function isStaff(s) {
+      return hasRole(s, ['ADMIN', 'TEACHER', 'ACCOUNTS', 'OFFICE']);
+    }
+
+    function isAdmin(s) {
+      return hasRole(s, ['ADMIN']);
+    }
+
+    // ---------- guardians --------------------------------------------------
+
+    function guardianPath(s) {
+      return /databases/$(database)/documents/schools/$(s)/guardians/$(myEmail());
+    }
+
+    function isGuardian(s) {
+      let g = get(guardianPath(s));
+      return signedIn() && g != null && g.data.active == true;
+    }
+
+    // "A guardian sees only the students listed in their own doc."
+    // Resolved from the guardian's OWN document -- never from a field on the
+    // student -- so a parent cannot widen their reach by editing anything.
+    function guardianSees(s, studentId) {
+      let g = get(guardianPath(s));
+      return signedIn() && g != null && g.data.active == true &&
+             g.data.studentIds.hasAny([studentId]);
+    }
+
+    // ---------- ownership switch (§0) --------------------------------------
+    // settings/ownership = { attendance: 'APP'|'ORACLE', fees: ..., results: ...,
+    //                        people: ..., payroll: ..., expenses: ... }
+    // Missing doc or missing field is read as ORACLE: the safe direction is
+    // always "Oracle still owns it, do not write".
+
+    function owner(s, module) {
+      return exists(/databases/$(database)/documents/schools/$(s)/settings/ownership)
+             ? get(/databases/$(database)/documents/schools/$(s)/settings/ownership)
+                 .data.get(module, 'ORACLE')
+             : 'ORACLE';
+    }
+
+    function appOwns(s, module) {
+      return owner(s, module) == 'APP';
+    }
+
+    // ---------- small write guards ----------------------------------------
+
+    function stamped() {
+      return request.resource.data.updatedAt == request.time;
+    }
+
+    function unchanged(field) {
+      return request.resource.data.get(field, null) == resource.data.get(field, null);
+    }
+
+    // ======================================================================
+    //  SCHOOL
+    // ======================================================================
+    match /schools/{s} {
+
+      allow read: if isStaff(s) || isGuardian(s);
+      allow write: if isAppAdmin();
+
+      // ---- access control: the app's own data, never mirrored -------------
+
+      match /members/{email} {
+        // staff can see who else has access; only ADMIN may grant it
+        allow read: if isStaff(s) || isAppAdmin();
+        allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
+      }
+
+      match /guardians/{email} {
+        // a guardian may read their OWN doc and nothing else in here, so they
+        // can see which children they are linked to -- but never edit it
+        allow read: if isAdmin(s) || isAppAdmin() || (signedIn() && email == myEmail());
+        allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
+      }
+
+      // ---- settings --------------------------------------------------------
+
+      match /settings/{docId} {
+        allow read: if isStaff(s) || isGuardian(s);
+        // ownership is the cut-over switch itself: ADMIN only, deliberately
+        allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
+      }
+
+      // ---- people and reference data: Oracle's until §0 says otherwise -----
+
+      match /classes/{classId} {
+        allow read: if isStaff(s) || isGuardian(s);
+        allow write: if appOwns(s, 'people') && isAdmin(s) && stamped();
+      }
+
+      match /students/{studentId} {
+        allow read: if isStaff(s) || guardianSees(s, studentId);
+        allow write: if appOwns(s, 'people') &&
+                        hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+      }
+
+      match /staff/{staffId} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
+        allow write: if appOwns(s, 'people') && isAdmin(s) && stamped();
+      }
+
+      match /subjects/{subjectId} {
+        allow read: if isStaff(s) || isGuardian(s);
+        allow write: if appOwns(s, 'people') && isAdmin(s) && stamped();
+      }
+
+      match /holidays/{date} {
+        allow read: if isStaff(s) || isGuardian(s);
+        allow write: if appOwns(s, 'attendance') && isAdmin(s) && stamped();
+      }
+
+      // ---- attendance: the first module SchoolTrack owns -------------------
+      // "§3 attendance/{date}/marks/{studentId}" -- class, section and roll are
+      // SNAPSHOTS taken when the mark is made (§4). The rules cannot prove the
+      // values are right, but they do force every write to carry them, so a
+      // client that forgets fails loudly instead of writing a mark that can
+      // never be attributed to a class later.
+
+      match /attendance/{date} {
+        allow read: if isStaff(s) || isGuardian(s);
+        allow write: if appOwns(s, 'attendance') &&
+                        hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+
+        match /marks/{studentId} {
+          allow read: if isStaff(s) || guardianSees(s, studentId);
+
+          allow create, update: if appOwns(s, 'attendance')
+            && hasRole(s, ['ADMIN', 'TEACHER'])
+            && request.resource.data.studentId == studentId
+            && request.resource.data.date == date
+            && request.resource.data.status in ['P', 'A', 'L', 'E']
+            && request.resource.data.markedVia in ['SCAN', 'MANUAL']
+            && request.resource.data.classId is string
+            && request.resource.data.rollNo is number
+            && request.resource.data.markedBy == myEmail()
+            && request.resource.data.markedAt == request.time;
+
+          // A register is corrected, not erased: flip the status instead.
+          allow delete: if isAdmin(s) && appOwns(s, 'attendance');
+        }
+      }
+
+      // ---- fees ------------------------------------------------------------
+
+      match /feeHeads/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
+        allow write: if appOwns(s, 'fees') && isAdmin(s) && stamped();
+      }
+
+      match /feeStructure/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
+        allow write: if appOwns(s, 'fees') && isAdmin(s) && stamped();
+      }
+
+      match /discounts/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
+        allow write: if appOwns(s, 'fees') && isAdmin(s) && stamped();
+      }
+
+      match /payments/{paymentId} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']) ||
+                       guardianSees(s, resource.data.studentId);
+
+        // "§5 Sequential receipt and voucher numbers" -- the receipt number
+        // comes from counters/receipts inside the same transaction. Lines carry
+        // the gross and discount AS COLLECTED (§4), so a later rate change
+        // cannot rewrite an old receipt.
+        allow create: if appOwns(s, 'fees')
+          && hasRole(s, ['ADMIN', 'ACCOUNTS'])
+          && request.resource.data.receiptNo is string
+          && request.resource.data.studentId is string
+          && request.resource.data.lines.size() > 0
+          && request.resource.data.createdBy == myEmail();
+
+        // A receipt is never edited or deleted. Money that was taken wrongly is
+        // corrected with another document, the way the paper ledger does it.
+        allow update, delete: if false;
+      }
+
+      match /counters/{counterId} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
+        // only ever forwards, and only by one
+        allow write: if hasRole(s, ['ADMIN', 'ACCOUNTS'])
+          && request.resource.data.next is int
+          && (!exists(/databases/$(database)/documents/schools/$(s)/counters/$(counterId))
+              || request.resource.data.next == resource.data.next + 1);
+      }
+
+      // ---- expenses --------------------------------------------------------
+
+      match /expenseHeads/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
+        allow write: if appOwns(s, 'expenses') && isAdmin(s) && stamped();
+      }
+
+      match /expenses/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
+        allow write: if appOwns(s, 'expenses') &&
+                        hasRole(s, ['ADMIN', 'ACCOUNTS']) && stamped();
+      }
+
+      // ---- exams and results -----------------------------------------------
+
+      match /exams/{examId} {
+        allow read: if isStaff(s) || isGuardian(s);
+        allow write: if appOwns(s, 'results') && isAdmin(s) && stamped();
+      }
+
+      match /results/{resultId} {
+        allow read: if isStaff(s) || guardianSees(s, resource.data.studentId);
+        allow write: if appOwns(s, 'results') &&
+                        hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+      }
+
+      // ---- payroll: never visible to anyone but ADMIN ----------------------
+
+      match /salaryPayments/{id} {
+        allow read: if isAdmin(s);
+        allow write: if appOwns(s, 'payroll') && isAdmin(s) && stamped();
+      }
+
+      // ---- issued documents -------------------------------------------------
+
+      match /documents/{id} {
+        allow read: if hasRole(s, ['ADMIN', 'OFFICE']);
+        allow write: if appOwns(s, 'people') &&
+                        hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+      }
+
+      // ---- generated reports (nightly dues, §5) -----------------------------
+
+      match /reports/{reportId} {
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
+        allow write: if false;   // written by a Cloud Function (Admin SDK)
+      }
+    }
+
+    // Anything not named above is denied. New collections must be added here
+    // deliberately rather than inheriting someone else's permissions.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

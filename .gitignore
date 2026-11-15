@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# THIS REPO IS PUBLIC. Two kinds of file must never be committed.
+#
+# 1. REAL SCHOOL DATA. Anything exported from Oracle holds students' names,
+#    their parents' names, mobile numbers and dates of birth. A public repo is
+#    forever -- a later `git rm` does not remove it from history.
+# 2. CREDENTIALS THAT ARE ACTUALLY SECRET. The Firebase *web* config (apiKey
+#    and friends) is public by design and is fine in the source; a Firebase
+#    ADMIN service-account key is not, and neither is a keystore.
+# ---------------------------------------------------------------------------
+
+# 1. data exported from Oracle, and anything derived from it
+export/
+exports/
+data/
+*.csv
+*.ndjson
+tools/*.json
+!tools/package.json
+!tools/mapping.sample.json
+
+# 2. real secrets
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+keystore.properties
+google-services.json
+
+# node / web
+node_modules/
+web/dist/
+.firebase/
+*.log
+
+# android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.idea/
+*.iml
+
+# os
+Thumbs.db
+.DS_Store

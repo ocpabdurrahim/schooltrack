@@ -1,0 +1,330 @@
+/**
+ * Security rules tests — SchoolTrack
+ *
+ * Run against the emulator, never the real project:
+ *   firebase emulators:exec --only firestore "npm run test:rules"
+ *
+ * These prove the four things the whole model rests on
+ * (docs/data-model.md §0 and §2):
+ *   1. while a module belongs to Oracle, nobody may write it here — not even
+ *      an administrator
+ *   2. a guardian sees their own children and nothing else, and can write
+ *      nothing at all
+ *   3. an attendance mark must carry its class/roll snapshot or be refused
+ *   4. receipts are immutable and their counter only ever moves forward by one
+ */
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import {
+  deleteDoc,
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
+import { readFileSync } from 'node:fs';
+import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+
+const SCHOOL = 'matkhola';
+let env: RulesTestEnvironment;
+
+const who = (email: string) =>
+  env.authenticatedContext(email.replace(/\W/g, ''), { email, email_verified: true });
+
+const admin = () => who('admin@school.test').firestore();
+const teacher = () => who('teacher@school.test').firestore();
+const accounts = () => who('accounts@school.test').firestore();
+const retired = () => who('retired@school.test').firestore();
+const parent = () => who('parent@home.test').firestore();
+const stranger = () => env.unauthenticatedContext().firestore();
+
+const p = (...parts: string[]) => ['schools', SCHOOL, ...parts].join('/');
+
+/** Sets who owns a module, bypassing the rules the way the console does. */
+async function setOwnership(modules: Record<string, string>) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), p('settings', 'ownership')), {
+      ...modules,
+      updatedAt: new Date(),
+    });
+  });
+}
+
+beforeAll(async () => {
+  env = await initializeTestEnvironment({
+    projectId: 'schooltrack-rules-test',
+    firestore: {
+      rules: readFileSync('../firebase/firestore.rules', 'utf8'),
+      host: '127.0.0.1',
+      port: 8080,
+    },
+  });
+});
+
+afterAll(async () => env.cleanup());
+
+beforeEach(async () => {
+  await env.clearFirestore();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    const now = new Date();
+
+    await setDoc(doc(db, 'schools', SCHOOL), { name: 'Matkhola ML High School', active: true });
+
+    const member = (email: string, role: string, extra = {}) =>
+      setDoc(doc(db, p('members', email)), {
+        email, name: email, role, active: true, deleted: false, updatedAt: now, ...extra,
+      });
+
+    await member('admin@school.test', 'ADMIN');
+    await member('teacher@school.test', 'TEACHER');
+    await member('accounts@school.test', 'ACCOUNTS');
+    // left the school: still listed, but must have no access at all
+    await member('retired@school.test', 'TEACHER', { active: false });
+
+    await setDoc(doc(db, p('guardians', 'parent@home.test')), {
+      email: 'parent@home.test', name: 'A Parent',
+      studentIds: ['76'], active: true, updatedAt: now,
+    });
+
+    for (const id of ['76', '77']) {
+      await setDoc(doc(db, p('students', id)), {
+        fullName: `Student ${id}`, rollNo: Number(id), classId: '61',
+        className: 'Class 6', section: 'A', status: 'A', updatedAt: now,
+      });
+    }
+
+    await setDoc(doc(db, p('attendance', '2026-11-15', 'marks', '76')), {
+      studentId: '76', classId: '61', className: 'Class 6', section: 'A', rollNo: 76,
+      date: '2026-11-15', status: 'P', markedVia: 'MANUAL',
+      markedBy: 'teacher@school.test', markedAt: now,
+    });
+
+    await setDoc(doc(db, p('payments', 'RCPT-000001')), {
+      receiptNo: 'RCPT-000001', studentId: '76', studentName: 'Student 76',
+      totalAmount: 600, method: 'Cash', createdBy: 'accounts@school.test',
+      lines: [{ feeHeadId: 'EXAM', headName: 'Exam Fee', periodLabel: 'HALF_YEARLY_EXAM-2026',
+                grossAmount: 600, discountAmount: 0, amountPaid: 600 }],
+      paymentDate: '2026-08-08', createdAt: now,
+    });
+
+    await setDoc(doc(db, p('counters', 'receipts')), { next: 2 });
+  });
+
+  // every module starts with Oracle owning it — the safe default
+  await setOwnership({
+    attendance: 'ORACLE', fees: 'ORACLE', people: 'ORACLE',
+    results: 'ORACLE', payroll: 'ORACLE', expenses: 'ORACLE',
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('signed out', () => {
+  it('reads nothing', async () => {
+    await assertFails(getDoc(doc(stranger(), p('students', '76'))));
+  });
+  it('writes nothing', async () => {
+    await assertFails(setDoc(doc(stranger(), p('students', '76')), { fullName: 'x' }));
+  });
+});
+
+describe('ownership switch (§0)', () => {
+  it('ADMIN cannot write attendance while Oracle owns it', async () => {
+    await assertFails(
+      setDoc(doc(admin(), p('attendance', '2026-11-16', 'marks', '76')), {
+        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+        status: 'P', markedVia: 'MANUAL',
+        markedBy: 'admin@school.test', markedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('TEACHER can write attendance once the app owns it', async () => {
+    await setOwnership({ attendance: 'APP' });
+    await assertSucceeds(
+      setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '76')), {
+        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+        status: 'P', markedVia: 'SCAN',
+        markedBy: 'teacher@school.test', markedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('a missing ownership doc is read as ORACLE, not as permission', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) =>
+      deleteDoc(doc(ctx.firestore(), p('settings', 'ownership'))),
+    );
+    await assertFails(
+      setDoc(doc(admin(), p('attendance', '2026-11-16', 'marks', '76')), {
+        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+        status: 'P', markedVia: 'MANUAL',
+        markedBy: 'admin@school.test', markedAt: serverTimestamp(),
+      }),
+    );
+  });
+});
+
+describe('attendance writes must carry the snapshot (§4)', () => {
+  beforeEach(() => setOwnership({ attendance: 'APP' }));
+
+  const mark = (extra: Record<string, unknown>) => ({
+    studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+    status: 'P', markedVia: 'SCAN',
+    markedBy: 'teacher@school.test', markedAt: serverTimestamp(),
+    ...extra,
+  });
+
+  const write = (data: Record<string, unknown>) =>
+    setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '76')), data);
+
+  it('rejects a mark with no classId', async () => {
+    const { classId, ...noClass } = mark({});
+    await assertFails(write(noClass));
+  });
+
+  it('rejects a mark with no rollNo', async () => {
+    const { rollNo, ...noRoll } = mark({});
+    await assertFails(write(noRoll));
+  });
+
+  it('rejects an invalid status', async () => {
+    await assertFails(write(mark({ status: 'X' })));
+  });
+
+  it('rejects a mark attributed to someone else', async () => {
+    await assertFails(write(mark({ markedBy: 'admin@school.test' })));
+  });
+
+  it('rejects a back-dated markedAt', async () => {
+    await assertFails(write(mark({ markedAt: new Date('2020-01-01') })));
+  });
+
+  it('rejects a mark whose id does not match its studentId', async () => {
+    await assertFails(
+      setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '77')), mark({})),
+    );
+  });
+});
+
+describe('guardians (§2)', () => {
+  it('reads their own child', async () => {
+    await assertSucceeds(getDoc(doc(parent(), p('students', '76'))));
+  });
+
+  it('cannot read another child', async () => {
+    await assertFails(getDoc(doc(parent(), p('students', '77'))));
+  });
+
+  it('reads their own child\'s attendance', async () => {
+    await assertSucceeds(
+      getDoc(doc(parent(), p('attendance', '2026-11-15', 'marks', '76'))),
+    );
+  });
+
+  it('cannot widen their own access', async () => {
+    await assertFails(
+      updateDoc(doc(parent(), p('guardians', 'parent@home.test')), {
+        studentIds: ['76', '77'], updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('cannot write attendance even when the app owns it', async () => {
+    await setOwnership({ attendance: 'APP' });
+    await assertFails(
+      setDoc(doc(parent(), p('attendance', '2026-11-16', 'marks', '76')), {
+        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+        status: 'P', markedVia: 'MANUAL',
+        markedBy: 'parent@home.test', markedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('cannot read payroll', async () => {
+    await assertFails(getDoc(doc(parent(), p('salaryPayments', 'x'))));
+  });
+});
+
+describe('role boundaries', () => {
+  it('a TEACHER cannot read payments', async () => {
+    await assertFails(getDoc(doc(teacher(), p('payments', 'RCPT-000001'))));
+  });
+
+  it('a TEACHER cannot create a payment even when the app owns fees', async () => {
+    await setOwnership({ fees: 'APP' });
+    await assertFails(
+      setDoc(doc(teacher(), p('payments', 'RCPT-000002')), {
+        receiptNo: 'RCPT-000002', studentId: '76', totalAmount: 100,
+        lines: [{ feeHeadId: 'TUITION', amountPaid: 100 }],
+        createdBy: 'teacher@school.test',
+      }),
+    );
+  });
+
+  it('ACCOUNTS can create a payment once the app owns fees', async () => {
+    await setOwnership({ fees: 'APP' });
+    await assertSucceeds(
+      setDoc(doc(accounts(), p('payments', 'RCPT-000002')), {
+        receiptNo: 'RCPT-000002', studentId: '76', totalAmount: 100,
+        lines: [{ feeHeadId: 'TUITION', amountPaid: 100 }],
+        createdBy: 'accounts@school.test',
+      }),
+    );
+  });
+
+  it('only ADMIN reads payroll', async () => {
+    await assertFails(getDoc(doc(accounts(), p('salaryPayments', 'x'))));
+    await assertSucceeds(getDoc(doc(admin(), p('salaryPayments', 'x'))));
+  });
+
+  it('a member who has left has no access', async () => {
+    await assertFails(getDoc(doc(retired(), p('students', '76'))));
+  });
+
+  it('only ADMIN may grant access', async () => {
+    await assertFails(
+      setDoc(doc(teacher(), p('members', 'new@school.test')), {
+        email: 'new@school.test', role: 'ADMIN', active: true,
+        deleted: false, updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(admin(), p('members', 'new@school.test')), {
+        email: 'new@school.test', role: 'TEACHER', active: true,
+        deleted: false, updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+});
+
+describe('receipts and counters (§5)', () => {
+  it('a receipt cannot be edited, even by ADMIN', async () => {
+    await setOwnership({ fees: 'APP' });
+    await assertFails(
+      updateDoc(doc(admin(), p('payments', 'RCPT-000001')), { totalAmount: 1 }),
+    );
+  });
+
+  it('a receipt cannot be deleted, even by ADMIN', async () => {
+    await setOwnership({ fees: 'APP' });
+    await assertFails(deleteDoc(doc(admin(), p('payments', 'RCPT-000001'))));
+  });
+
+  it('the counter moves forward by exactly one', async () => {
+    await assertSucceeds(setDoc(doc(accounts(), p('counters', 'receipts')), { next: 3 }));
+  });
+
+  it('the counter cannot jump', async () => {
+    await assertFails(setDoc(doc(accounts(), p('counters', 'receipts')), { next: 9 }));
+  });
+
+  it('the counter cannot go backwards', async () => {
+    await assertFails(setDoc(doc(accounts(), p('counters', 'receipts')), { next: 1 }));
+  });
+});

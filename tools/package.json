@@ -1,0 +1,15 @@
+{
+  "name": "schooltrack-tools",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "One-way mirror: Oracle CSV exports -> Firestore",
+  "scripts": {
+    "import": "node import.mjs",
+    "import:commit": "node import.mjs --commit"
+  },
+  "dependencies": {
+    "csv-parse": "5.6.0",
+    "firebase-admin": "13.0.1"
+  }
+}

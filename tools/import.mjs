@@ -1,0 +1,266 @@
+#!/usr/bin/env node
+/**
+ * SchoolTrack — one-way mirror: Oracle CSV exports → Firestore.
+ *
+ *   node import.mjs                 # dry run: says what it WOULD write
+ *   node import.mjs --commit        # actually writes
+ *   node import.mjs --only students,classes --commit
+ *
+ * Direction is Oracle → Firestore and never the reverse (data-model.md §0).
+ * While a module belongs to Oracle its collections are read-only in the
+ * security rules; this script runs through the Admin SDK, which bypasses
+ * rules, so the mirror keeps working while neither app can corrupt data the
+ * other owns.
+ *
+ * Re-running is safe and expected: every document keeps its Oracle id and is
+ * written with { merge: true }, so a second run updates rather than
+ * duplicates, and fields the app added (a photo, a note) are not wiped.
+ *
+ * Needs a service-account key — Firebase console → Project settings →
+ * Service accounts → Generate new private key — saved as
+ * tools/serviceAccount.json. THAT FILE IS GITIGNORED AND MUST STAY SO:
+ * it is a master key to the whole project.
+ */
+import { cert, initializeApp } from 'firebase-admin/app';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { parse } from 'csv-parse/sync';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DATA = join(HERE, 'data');
+const SCHOOL_ID = 'matkhola';
+
+const args = process.argv.slice(2);
+const COMMIT = args.includes('--commit');
+const ONLY = (() => {
+  const i = args.indexOf('--only');
+  return i === -1 ? null : new Set(args[i + 1].split(',').map((s) => s.trim()));
+})();
+
+// ---------------------------------------------------------------------------
+// helpers
+
+const str = (v) => (v === undefined || v === null || v === '' ? null : String(v).trim());
+const num = (v) => {
+  const s = str(v);
+  if (s === null) return null;
+  const n = Number(s.replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+const bool = (v, truthy = 'Y') => (str(v) ?? '').toUpperCase() === truthy;
+
+/** Drops nulls so a merge never overwrites a good value with nothing. */
+const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null));
+
+function read(name) {
+  const file = join(DATA, `${name}.csv`);
+  if (!existsSync(file)) return null;
+  // APEX downloads UTF-8; strip the BOM or the first header becomes "﻿id"
+  const text = readFileSync(file, 'utf8').replace(/^﻿/, '');
+  return parse(text, { columns: true, skip_empty_lines: true, trim: true });
+}
+
+// ---------------------------------------------------------------------------
+// what each file becomes.  id() -> document id, doc() -> document body
+
+const MAPPINGS = {
+  settings: {
+    path: () => ['settings'],
+    id: () => 'school',
+    doc: (r) =>
+      clean({
+        instituteName: str(r.instituteName),
+        sessionLabel: str(r.sessionLabel),
+        address: str(r.address),
+        eiin: str(r.eiin),
+        headTeacher: str(r.headTeacher),
+        weekendDays: (str(r.weekendDays) ?? 'FRI,SAT').split(',').map((d) => d.trim()),
+      }),
+  },
+
+  classes: {
+    path: () => ['classes'],
+    id: (r) => str(r.classId),
+    doc: (r) =>
+      clean({
+        className: str(r.className),
+        section: str(r.section),
+        displayName: str(r.displayName),
+        sortOrder: num(r.sortOrder),
+        active: true,
+      }),
+  },
+
+  students: {
+    path: () => ['students'],
+    id: (r) => str(r.studentId),
+    doc: (r) =>
+      clean({
+        fullName: str(r.fullName),
+        rollNo: num(r.rollNo),
+        regNo: str(r.regNo),
+        classId: str(r.classId),
+        className: str(r.className),
+        section: str(r.section),
+        groupName: str(r.groupName),
+        religion: str(r.religion),
+        gender: str(r.gender),
+        dob: str(r.dob),
+        fatherName: str(r.fatherName),
+        motherName: str(r.motherName),
+        bloodGroup: str(r.bloodGroup),
+        mobileNo: str(r.mobileNo),
+        status: str(r.status) ?? 'A',
+      }),
+  },
+
+  staff: {
+    path: () => ['staff'],
+    id: (r) => str(r.staffId),
+    doc: (r) =>
+      clean({
+        fullName: str(r.fullName),
+        designation: str(r.designation),
+        mobileNo: str(r.mobileNo),
+        staffStatus: str(r.staffStatus) ?? 'ACTIVE',
+        appUsername: str(r.appUsername),
+        joinDate: str(r.joinDate),
+      }),
+  },
+
+  subjects: {
+    path: () => ['subjects'],
+    id: (r) => str(r.subjectId),
+    doc: (r) => clean({ subjectName: str(r.subjectName), subjectCode: str(r.subjectCode) }),
+  },
+
+  exams: {
+    path: () => ['exams'],
+    id: (r) => str(r.examId),
+    doc: (r) =>
+      clean({
+        examName: str(r.examName),
+        examYear: num(r.examYear),
+        periodLabel: str(r.periodLabel),
+      }),
+  },
+
+  feeHeads: {
+    path: () => ['feeHeads'],
+    id: (r) => str(r.feeHeadId),
+    doc: (r) =>
+      clean({
+        headCode: str(r.headCode),
+        headName: str(r.headName),
+        frequency: str(r.frequency),
+        active: bool(r.isActive),
+      }),
+  },
+
+  feeStructure: {
+    path: () => ['feeStructure'],
+    // the Oracle unique constraint, carried over as the document id
+    id: (r) => `${str(r.feeHeadId)}_${str(r.className)}_${str(r.sessionYear)}`.replace(/\s+/g, '-'),
+    doc: (r) =>
+      clean({
+        feeHeadId: str(r.feeHeadId),
+        className: str(r.className),
+        sessionYear: str(r.sessionYear),
+        amount: num(r.amount),
+      }),
+  },
+
+  expenseHeads: {
+    path: () => ['expenseHeads'],
+    id: (r) => str(r.expenseHeadId),
+    doc: (r) =>
+      clean({
+        headCode: str(r.headCode),
+        headName: str(r.headName),
+        active: bool(r.isActive),
+        sortOrder: num(r.sortOrder),
+      }),
+  },
+
+  holidays: {
+    path: () => ['holidays'],
+    id: (r) => str(r.date),
+    doc: (r) => clean({ date: str(r.date), name: str(r.name), source: 'GAZETTE' }),
+  },
+};
+
+// Reference data before anything that points at it.
+const ORDER = [
+  'settings', 'classes', 'students', 'staff', 'subjects',
+  'exams', 'feeHeads', 'feeStructure', 'expenseHeads', 'holidays',
+];
+
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const keyFile = join(HERE, 'serviceAccount.json');
+  if (COMMIT && !existsSync(keyFile)) {
+    console.error('Missing tools/serviceAccount.json — needed only for --commit.');
+    process.exit(1);
+  }
+
+  let db = null;
+  if (COMMIT) {
+    initializeApp({ credential: cert(JSON.parse(readFileSync(keyFile, 'utf8'))) });
+    db = getFirestore();
+  }
+
+  console.log(COMMIT ? 'WRITING to Firestore\n' : 'DRY RUN — nothing will be written\n');
+
+  let grand = 0;
+  for (const name of ORDER) {
+    if (ONLY && !ONLY.has(name)) continue;
+
+    const rows = read(name);
+    if (rows === null) {
+      console.log(`${name.padEnd(14)} —  no data/${name}.csv, skipped`);
+      continue;
+    }
+
+    const map = MAPPINGS[name];
+    const docs = [];
+    const bad = [];
+
+    for (const r of rows) {
+      const id = map.id(r);
+      if (!id) { bad.push(r); continue; }
+      docs.push({ id, body: map.doc(r) });
+    }
+
+    if (COMMIT) {
+      // 500 writes per batch is the Firestore limit; 400 leaves room for the
+      // updatedAt sentinel on each document.
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = db.batch();
+        for (const d of docs.slice(i, i + 400)) {
+          const ref = db.collection('schools').doc(SCHOOL_ID)
+                        .collection(...map.path()).doc(d.id);
+          batch.set(ref, { ...d.body, updatedAt: FieldValue.serverTimestamp(),
+                           mirroredFrom: 'ORACLE' }, { merge: true });
+        }
+        await batch.commit();
+      }
+    }
+
+    grand += docs.length;
+    console.log(
+      `${name.padEnd(14)} ${String(docs.length).padStart(5)} document(s)` +
+      (bad.length ? `   ${bad.length} skipped (no id)` : ''),
+    );
+    if (docs.length) {
+      console.log(`${' '.repeat(15)}e.g. ${docs[0].id} -> ${JSON.stringify(docs[0].body).slice(0, 110)}…`);
+    }
+  }
+
+  console.log(`\n${grand} document(s) ${COMMIT ? 'written' : 'would be written'}.`);
+  if (!COMMIT) console.log('Re-run with --commit when the sample above looks right.');
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

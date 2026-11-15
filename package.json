@@ -1,0 +1,17 @@
+{
+  "name": "schooltrack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Android + Web school management for Matkhola ML High School, on Firestore",
+  "scripts": {
+    "rules:deploy": "firebase deploy --only firestore",
+    "rules:test": "firebase emulators:exec --only firestore \"npm --prefix web run test:rules\"",
+    "emulators": "firebase emulators:start --only firestore,auth",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:deploy": "npm --prefix web run build && firebase deploy --only hosting"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.34.1"
+  }
+}
