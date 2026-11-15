@@ -12,7 +12,7 @@ import io.github.ocpabdurrahim.schooltrack.data.AccessRepository
 import io.github.ocpabdurrahim.schooltrack.data.canMarkAttendance
 import kotlinx.coroutines.launch
 
-enum class Screen { Home, Register, Scan }
+enum class Screen { Home, Register, Scan, Students, Student, Children }
 
 /**
  * Sign-in gate. The access record — not the account — decides what is shown,
@@ -22,6 +22,7 @@ enum class Screen { Home, Register, Scan }
 fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
     var access by remember { mutableStateOf<Access>(Access.Loading) }
     var screen by remember { mutableStateOf(Screen.Home) }
+    var openStudent by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -39,24 +40,55 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
             },
         )
         else -> {
-            if (screen == Screen.Scan && current is Access.Staff) {
-                ScanScreen(
+            // Every screen is gated on the access record, not on the previous
+            // screen. A guardian may reach only their own children's pages —
+            // the rules enforce that server-side as well, but a refused read
+            // shows as an error, and a parent should never see one for simply
+            // tapping about.
+            val isStaff = current is Access.Staff
+            val mayOpen: (String) -> Boolean = { id ->
+                isStaff || (current is Access.Guardian && id in current.studentIds)
+            }
+
+            when {
+                screen == Screen.Scan && current is Access.Staff -> ScanScreen(
                     email = current.email,
                     onBack = { screen = Screen.Home },
                 )
-            } else if (screen == Screen.Register && current is Access.Staff) {
-                RegisterScreen(
+
+                screen == Screen.Register && current is Access.Staff -> RegisterScreen(
                     email = current.email,
                     canMark = current.canMarkAttendance,
                     onBack = { screen = Screen.Home },
                 )
-            } else {
-                HomeScreen(
+
+                screen == Screen.Students && isStaff -> StudentsScreen(
+                    onOpen = { openStudent = it; screen = Screen.Student },
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.Children && current is Access.Guardian -> ChildrenScreen(
+                    studentIds = current.studentIds,
+                    onOpen = { openStudent = it; screen = Screen.Student },
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.Student && mayOpen(openStudent) -> StudentScreen(
+                    studentId = openStudent,
+                    onBack = {
+                        screen = if (isStaff) Screen.Students else Screen.Children
+                    },
+                )
+
+                else -> HomeScreen(
                     access = current,
                     onOpenRegister = { screen = Screen.Register },
                     onOpenScan = { screen = Screen.Scan },
+                    onOpenStudents = { screen = Screen.Students },
+                    onOpenChildren = { screen = Screen.Children },
                     onSignOut = {
                         repo.signOut()
+                        screen = Screen.Home
                         scope.launch { refresh() }
                     },
                 )
