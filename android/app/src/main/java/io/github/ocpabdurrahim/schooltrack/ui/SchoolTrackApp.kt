@@ -9,7 +9,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import io.github.ocpabdurrahim.schooltrack.data.Access
 import io.github.ocpabdurrahim.schooltrack.data.AccessRepository
+import io.github.ocpabdurrahim.schooltrack.data.canMarkAttendance
 import kotlinx.coroutines.launch
+
+enum class Screen { Home, Register }
 
 /**
  * Sign-in gate. The access record — not the account — decides what is shown,
@@ -18,6 +21,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
     var access by remember { mutableStateOf<Access>(Access.Loading) }
+    var screen by remember { mutableStateOf(Screen.Home) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -34,12 +38,23 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 refresh()
             },
         )
-        else -> HomeScreen(
-            access = current,
-            onSignOut = {
-                repo.signOut()
-                scope.launch { refresh() }
-            },
-        )
+        else -> {
+            if (screen == Screen.Register && current is Access.Staff) {
+                RegisterScreen(
+                    email = current.email,
+                    canMark = current.canMarkAttendance,
+                    onBack = { screen = Screen.Home },
+                )
+            } else {
+                HomeScreen(
+                    access = current,
+                    onOpenRegister = { screen = Screen.Register },
+                    onSignOut = {
+                        repo.signOut()
+                        scope.launch { refresh() }
+                    },
+                )
+            }
+        }
     }
 }

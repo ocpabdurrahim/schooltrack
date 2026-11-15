@@ -10,6 +10,23 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 const val SCHOOL_ID = "matkhola"
 
+/**
+ * Development only. With -PuseEmulators=true the app talks to the Firebase
+ * emulators running on the developer's machine (10.0.2.2 is the host as seen
+ * from an Android emulator), so a half-finished screen can never write to the
+ * school's real records. Must be called before anything touches Firestore.
+ */
+object Emulators {
+    private var wired = false
+
+    fun wireIfRequested() {
+        if (wired || !io.github.ocpabdurrahim.schooltrack.BuildConfig.USE_EMULATORS) return
+        wired = true
+        FirebaseAuth.getInstance().useEmulator("10.0.2.2", 9099)
+        FirebaseFirestore.getInstance().useEmulator("10.0.2.2", 8080)
+    }
+}
+
 /** Who the signed-in person is. Mirrors the web app's Access union. */
 sealed interface Access {
     data object Loading : Access

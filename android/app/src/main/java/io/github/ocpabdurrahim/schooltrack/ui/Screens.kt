@@ -109,7 +109,7 @@ fun SignInScreen(onSignIn: suspend (String, String) -> Unit) {
 }
 
 @Composable
-fun HomeScreen(access: Access, onSignOut: () -> Unit) {
+fun HomeScreen(access: Access, onOpenRegister: () -> Unit, onSignOut: () -> Unit) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
     ) {
@@ -138,6 +138,12 @@ fun HomeScreen(access: Access, onSignOut: () -> Unit) {
                         )
                     }
                     else -> Unit
+                }
+                if (access is Access.Staff) {
+                    Button(
+                        onClick = onOpenRegister,
+                        modifier = Modifier.padding(top = 12.dp),
+                    ) { Text("Today's register") }
                 }
                 TextButton(
                     onClick = onSignOut,

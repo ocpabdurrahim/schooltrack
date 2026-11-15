@@ -17,6 +17,15 @@ android {
         versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 1
         versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // ./gradlew assembleDebug -PuseEmulators=true  points the app at the
+        // Firebase emulators on the host (10.0.2.2 from an Android emulator),
+        // so development never touches the school's real data.
+        buildConfigField(
+            "boolean",
+            "USE_EMULATORS",
+            (project.findProperty("useEmulators") as String? ?: "false"),
+        )
     }
 
     buildTypes {
@@ -31,7 +40,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
