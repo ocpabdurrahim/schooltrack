@@ -16,12 +16,22 @@
  * written with { merge: true }, so a second run updates rather than
  * duplicates, and fields the app added (a photo, a note) are not wiped.
  *
- * Needs a service-account key — Firebase console → Project settings →
- * Service accounts → Generate new private key — saved as
- * tools/serviceAccount.json. THAT FILE IS GITIGNORED AND MUST STAY SO:
- * it is a master key to the whole project.
+ * CREDENTIALS, in order of preference:
+ *
+ *   1. gcloud application-default credentials — nothing is stored in this
+ *      project folder at all:
+ *          gcloud auth application-default login
+ *      This is the better option: there is no key file to leak, and it is
+ *      tied to your own Google account rather than a standing credential.
+ *
+ *   2. tools/serviceAccount.json — Firebase console → Project settings →
+ *      Service accounts → Generate new private key. GITIGNORED AND MUST STAY
+ *      SO: it bypasses every security rule and this repository is public.
+ *
+ * Either way the Admin SDK bypasses the rules, which is exactly how the
+ * mirror writes collections the rules mark read-only.
  */
-import { cert, initializeApp } from 'firebase-admin/app';
+import { applicationDefault, cert, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { parse } from 'csv-parse/sync';
 import { existsSync, readFileSync } from 'node:fs';
@@ -201,15 +211,36 @@ const ORDER = [
 
 async function main() {
   const keyFile = join(HERE, 'serviceAccount.json');
-  if (COMMIT && !existsSync(keyFile)) {
-    console.error('Missing tools/serviceAccount.json — needed only for --commit.');
+  const hasKey = existsSync(keyFile);
+  const hasAdc = !!process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+                 !!process.env.CLOUDSDK_CONFIG ||
+                 existsSync(join(process.env.APPDATA ?? process.env.HOME ?? '',
+                                 'gcloud', 'application_default_credentials.json'));
+
+  if (COMMIT && !hasKey && !hasAdc) {
+    console.error([
+      'No credentials.',
+      '',
+      '  Either:  gcloud auth application-default login     (nothing stored here)',
+      '  Or:      save a service-account key as tools/serviceAccount.json',
+    ].join('\n'));
     process.exit(1);
   }
 
   let db = null;
   if (COMMIT) {
-    initializeApp({ credential: cert(JSON.parse(readFileSync(keyFile, 'utf8'))) });
+    initializeApp({
+      credential: hasKey
+        ? cert(JSON.parse(readFileSync(keyFile, 'utf8')))
+        : applicationDefault(),
+      projectId: 'schooltrack-1941',
+    });
     db = getFirestore();
+    console.log(
+      hasKey
+        ? 'Using tools/serviceAccount.json'
+        : 'Using gcloud application-default credentials',
+    );
   }
 
   console.log(COMMIT ? 'WRITING to Firestore\n' : 'DRY RUN — nothing will be written\n');
