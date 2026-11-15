@@ -10,9 +10,12 @@
 # ---------------------------------------------------------------------------
 
 # 1. data exported from Oracle, and anything derived from it
+#    NOTE: scoped to tools/data, NOT a bare `data/`. A bare rule also matched
+#    web/src/data/ and silently kept the attendance data layer out of the
+#    repo -- caught on 2026-11-15 only by reading the staged file list.
 export/
 exports/
-data/
+tools/data/
 *.csv
 *.ndjson
 tools/*.json
