@@ -117,6 +117,25 @@ class AttendanceRepository(
      * than duplicate.
      */
     suspend fun mark(student: Student, date: String, status: Status, via: String, email: String) {
+        markTask(student, date, status, via, email).await()
+    }
+
+    /**
+     * The same write, NOT awaited.
+     *
+     * A Firestore write Task completes only when the SERVER acknowledges it.
+     * Offline it simply never completes — while the write itself has already
+     * been applied to the local cache and persisted for retry. At a gate the
+     * next student is already holding up their card, so the scanner fires this
+     * and watches the Task only to know when it has landed.
+     */
+    fun markTask(
+        student: Student,
+        date: String,
+        status: Status,
+        via: String,
+        email: String,
+    ): com.google.android.gms.tasks.Task<Void> =
         marks().document(date + "_" + student.studentId).set(
             mapOf(
                 "studentId" to student.studentId,
@@ -130,6 +149,5 @@ class AttendanceRepository(
                 "markedBy" to email,
                 "markedAt" to FieldValue.serverTimestamp(),
             ),
-        ).await()
-    }
+        )
 }

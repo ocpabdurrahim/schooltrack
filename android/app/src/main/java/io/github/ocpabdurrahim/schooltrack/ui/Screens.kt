@@ -109,7 +109,12 @@ fun SignInScreen(onSignIn: suspend (String, String) -> Unit) {
 }
 
 @Composable
-fun HomeScreen(access: Access, onOpenRegister: () -> Unit, onSignOut: () -> Unit) {
+fun HomeScreen(
+    access: Access,
+    onOpenRegister: () -> Unit,
+    onOpenScan: () -> Unit,
+    onSignOut: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
     ) {
@@ -144,6 +149,10 @@ fun HomeScreen(access: Access, onOpenRegister: () -> Unit, onSignOut: () -> Unit
                         onClick = onOpenRegister,
                         modifier = Modifier.padding(top = 12.dp),
                     ) { Text("Today's register") }
+                    Button(
+                        onClick = onOpenScan,
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Scan at the gate") }
                 }
                 TextButton(
                     onClick = onSignOut,

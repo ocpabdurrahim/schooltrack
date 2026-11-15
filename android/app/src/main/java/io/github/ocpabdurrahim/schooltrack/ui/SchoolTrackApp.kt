@@ -12,7 +12,7 @@ import io.github.ocpabdurrahim.schooltrack.data.AccessRepository
 import io.github.ocpabdurrahim.schooltrack.data.canMarkAttendance
 import kotlinx.coroutines.launch
 
-enum class Screen { Home, Register }
+enum class Screen { Home, Register, Scan }
 
 /**
  * Sign-in gate. The access record — not the account — decides what is shown,
@@ -39,7 +39,12 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
             },
         )
         else -> {
-            if (screen == Screen.Register && current is Access.Staff) {
+            if (screen == Screen.Scan && current is Access.Staff) {
+                ScanScreen(
+                    email = current.email,
+                    onBack = { screen = Screen.Home },
+                )
+            } else if (screen == Screen.Register && current is Access.Staff) {
                 RegisterScreen(
                     email = current.email,
                     canMark = current.canMarkAttendance,
@@ -49,6 +54,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 HomeScreen(
                     access = current,
                     onOpenRegister = { screen = Screen.Register },
+                    onOpenScan = { screen = Screen.Scan },
                     onSignOut = {
                         repo.signOut()
                         scope.launch { refresh() }
