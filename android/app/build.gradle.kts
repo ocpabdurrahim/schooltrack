@@ -26,6 +26,15 @@ android {
             "USE_EMULATORS",
             (project.findProperty("useEmulators") as String? ?: "false"),
         )
+
+        // 10.0.2.2 is the host as seen from an ANDROID EMULATOR and means
+        // nothing on a real phone. To test on a handset, pass this machine's
+        // LAN address:  -PuseEmulators=true -PemulatorHost=192.168.0.12
+        buildConfigField(
+            "String",
+            "EMULATOR_HOST",
+            "\"" + (project.findProperty("emulatorHost") as String? ?: "10.0.2.2") + "\"",
+        )
     }
 
     buildTypes {

@@ -12,9 +12,14 @@ const val SCHOOL_ID = "matkhola"
 
 /**
  * Development only. With -PuseEmulators=true the app talks to the Firebase
- * emulators running on the developer's machine (10.0.2.2 is the host as seen
- * from an Android emulator), so a half-finished screen can never write to the
- * school's real records. Must be called before anything touches Firestore.
+ * emulators running on the developer's machine, so a half-finished screen can
+ * never write to the school's real records. Must be called before anything
+ * touches Firestore.
+ *
+ * The host defaults to 10.0.2.2 -- the development machine as seen from an
+ * ANDROID EMULATOR. A real phone cannot reach that address: build with
+ * -PemulatorHost=<this machine's LAN IP> and make sure the emulators are
+ * listening on 0.0.0.0 rather than loopback.
  */
 object Emulators {
     private var wired = false
@@ -22,8 +27,9 @@ object Emulators {
     fun wireIfRequested() {
         if (wired || !io.github.ocpabdurrahim.schooltrack.BuildConfig.USE_EMULATORS) return
         wired = true
-        FirebaseAuth.getInstance().useEmulator("10.0.2.2", 9099)
-        FirebaseFirestore.getInstance().useEmulator("10.0.2.2", 8080)
+        val host = io.github.ocpabdurrahim.schooltrack.BuildConfig.EMULATOR_HOST
+        FirebaseAuth.getInstance().useEmulator(host, 9099)
+        FirebaseFirestore.getInstance().useEmulator(host, 8080)
     }
 }
 

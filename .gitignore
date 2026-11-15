@@ -40,6 +40,8 @@ web/dist/
 *.log
 
 # android
+*.apk
+*.aab
 android/.gradle/
 android/build/
 android/app/build/

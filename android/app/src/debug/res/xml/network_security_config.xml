@@ -2,16 +2,13 @@
 <!--
   DEBUG BUILDS ONLY. The Firebase emulators speak plain HTTP, and Android has
   blocked cleartext by default since API 28 — which is why -PuseEmulators=true
-  silently failed to connect and every sign-in came back "did not match".
+  silently failed at first and every sign-in came back "did not match".
 
-  Only the host loopback addresses are permitted: 10.0.2.2 is the developer's
-  machine as seen from an Android emulator. Release builds do not include this
-  file at all, so production traffic stays HTTPS-only.
+  Cleartext is permitted broadly here rather than for a fixed list of hosts:
+  the development machine's LAN address changes between networks, and pinning
+  one would simply fail somewhere else. This file is NOT part of a release
+  build, so production traffic stays HTTPS-only.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
