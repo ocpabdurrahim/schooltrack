@@ -171,34 +171,44 @@ service cloud.firestore {
       }
 
       // ---- attendance: the first module SchoolTrack owns -------------------
-      // "§3 attendance/{date}/marks/{studentId}" -- class, section and roll are
+      // "§3 attendanceMarks/{date}_{studentId}" -- class, section and roll are
       // SNAPSHOTS taken when the mark is made (§4). The rules cannot prove the
-      // values are right, but they do force every write to carry them, so a
+      // values are right, but they force every write to carry them, so a
       // client that forgets fails loudly instead of writing a mark that can
       // never be attributed to a class later.
+      //
+      // FLAT, not attendance/{date}/marks/{id}. The nested shape needed a
+      // COLLECTION-GROUP query for "one student across many days", and a
+      // collection-group rule cannot be scoped to a school: it would have to
+      // sit at the root, where it cannot tell one school's marks from
+      // another's. Flat keeps every query ordinary and every rule scoped.
+      // (Found on 2026-11-15, when the student page was refused by the
+      // catch-all rule.)
 
+      // the day itself: records that attendance was opened at all, so
+      // "not taken yet" stays distinguishable from "everyone absent"
       match /attendance/{date} {
         allow read: if isStaff(s) || isGuardian(s);
         allow write: if appOwns(s, 'attendance') &&
                         hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+      }
 
-        match /marks/{studentId} {
-          allow read: if isStaff(s) || guardianSees(s, studentId);
+      match /attendanceMarks/{markId} {
+        allow read: if isStaff(s) || guardianSees(s, resource.data.studentId);
 
-          allow create, update: if appOwns(s, 'attendance')
-            && hasRole(s, ['ADMIN', 'TEACHER'])
-            && request.resource.data.studentId == studentId
-            && request.resource.data.date == date
-            && request.resource.data.status in ['P', 'A', 'L', 'E']
-            && request.resource.data.markedVia in ['SCAN', 'MANUAL']
-            && request.resource.data.classId is string
-            && request.resource.data.rollNo is number
-            && request.resource.data.markedBy == myEmail()
-            && request.resource.data.markedAt == request.time;
+        allow create, update: if appOwns(s, 'attendance')
+          && hasRole(s, ['ADMIN', 'TEACHER'])
+          // the id IS the uniqueness: one mark per student per day
+          && markId == request.resource.data.date + '_' + request.resource.data.studentId
+          && request.resource.data.status in ['P', 'A', 'L', 'E']
+          && request.resource.data.markedVia in ['SCAN', 'MANUAL']
+          && request.resource.data.classId is string
+          && request.resource.data.rollNo is number
+          && request.resource.data.markedBy == myEmail()
+          && request.resource.data.markedAt == request.time;
 
-          // A register is corrected, not erased: flip the status instead.
-          allow delete: if isAdmin(s) && appOwns(s, 'attendance');
-        }
+        // A register is corrected, not erased: flip the status instead.
+        allow delete: if isAdmin(s) && appOwns(s, 'attendance');
       }
 
       // ---- fees ------------------------------------------------------------

@@ -38,7 +38,11 @@ export type Mark = {
 export type RegisterRow = Student & { status: Status; via?: 'SCAN' | 'MANUAL' };
 
 const schoolRef = () => doc(db, 'schools', SCHOOL_ID);
-const marksRef = (date: string) => collection(schoolRef(), 'attendance', date, 'marks');
+/** Flat, school-scoped: one document per student per day, id `date_studentId`.
+ *  See firestore.rules — a nested subcollection would force collection-group
+ *  queries, which cannot be scoped to one school in the rules. */
+const marksRef = () => collection(schoolRef(), 'attendanceMarks');
+const markId = (date: string, studentId: string) => `${date}_${studentId}`;
 
 /** 2026-11-15 in Dhaka, regardless of where the device thinks it is. */
 export function todayInDhaka(): string {
@@ -83,11 +87,13 @@ export async function listStudents(classId: string | null): Promise<Student[]> {
 export async function loadRegister(classId: string | null, date: string): Promise<RegisterRow[]> {
   const [students, markSnap] = await Promise.all([
     listStudents(classId),
-    getDocs(classId ? query(marksRef(date), where('classId', '==', classId)) : query(marksRef(date))),
+    getDocs(classId
+      ? query(marksRef(), where('date', '==', date), where('classId', '==', classId))
+      : query(marksRef(), where('date', '==', date))),
   ]);
 
   const marks = new Map<string, Mark>();
-  markSnap.docs.forEach((d) => marks.set(d.id, d.data() as Mark));
+  markSnap.docs.forEach((d) => { const m = d.data() as Mark; marks.set(m.studentId, m); });
 
   return students.map((s) => {
     const m = marks.get(s.studentId);
@@ -117,7 +123,7 @@ export async function openSession(date: string, email: string) {
  */
 export async function mark(student: Student, date: string, status: Status,
                            via: 'SCAN' | 'MANUAL', email: string) {
-  await setDoc(doc(marksRef(date), student.studentId), {
+  await setDoc(doc(marksRef(), markId(date, student.studentId)), {
     studentId: student.studentId,
     classId: student.classId,
     className: student.className,
@@ -172,7 +178,7 @@ export async function scan(raw: string, classId: string | null, date: string,
     };
   }
 
-  const existing = await getDoc(doc(marksRef(date), studentId));
+  const existing = await getDoc(doc(marksRef(), markId(date, studentId)));
   const who = `${student.fullName} (${classId ? '' : `${student.className} - ${student.section}, `}Roll ${student.rollNo})`;
 
   if (existing.exists() && ['P', 'L'].includes(existing.data().status)) {

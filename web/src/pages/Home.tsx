@@ -1,23 +1,20 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { SCHOOL_ID, db } from '../firebase';
+import { todayInDhaka } from '../data/attendance';
+import { type SchoolStats, schoolStats } from '../data/people';
 
 type Ownership = Record<string, string>;
 
-/**
- * The smallest screen that proves the whole chain: sign-in, the access record,
- * the rules, and a real read from Firestore.
- *
- * It also shows settings/ownership, because during the transition "who owns
- * this module" is the single most important thing for a user to know before
- * they type anything (data-model.md §0). A module reading ORACLE means the
- * APEX app is still authoritative and this one must not be used for it.
- */
 export default function Home() {
   const { access, logout } = useAuth();
-  const [school, setSchool] = useState<string>('');
+  const staff = access.kind === 'staff';
+
+  const [school, setSchool] = useState('');
   const [ownership, setOwnership] = useState<Ownership | null>(null);
+  const [stats, setStats] = useState<SchoolStats | null>(null);
   const [problem, setProblem] = useState('');
 
   useEffect(() => {
@@ -28,11 +25,18 @@ export default function Home() {
 
         const o = await getDoc(doc(db, 'schools', SCHOOL_ID, 'settings', 'ownership'));
         setOwnership(o.exists() ? (o.data() as Ownership) : {});
+
       } catch {
         setProblem('Could not read the school record — your account may have no access yet.');
       }
+
+      // Counts are best-effort and independent: a teacher cannot read the
+      // staff collection, and that must not blank the rest of the dashboard.
+      if (staff) {
+        try { setStats(await schoolStats()); } catch { /* tiles simply do not render */ }
+      }
     })();
-  }, []);
+  }, [staff]);
 
   const modules = ['attendance', 'fees', 'people', 'results', 'payroll', 'expenses'];
 
@@ -45,27 +49,21 @@ export default function Home() {
           {access.kind === 'guardian' && <>Guardian — {access.name}</>}
           {access.kind === 'none' && <>Signed in, no access granted</>}
         </h2>
-
         <div className="row">
-          <span>Account</span>
-          <span>{'email' in access ? access.email : ''}</span>
+          <span>Account</span><span>{'email' in access ? access.email : ''}</span>
         </div>
         <div className="row">
           <span>Access</span>
           <span>
             {access.kind === 'staff' && <span className="pill">{access.role}</span>}
             {access.kind === 'guardian' && (
-              <span className="pill">
-                {access.studentIds.length} student{access.studentIds.length === 1 ? '' : 's'}
-              </span>
+              <span className="pill">{access.studentIds.length} student
+                {access.studentIds.length === 1 ? '' : 's'}</span>
             )}
             {access.kind === 'none' && <span className="pill none">none</span>}
           </span>
         </div>
-
-        <button className="link" onClick={() => void logout()} style={{ marginTop: 18 }}>
-          Sign out
-        </button>
+        <button className="link" onClick={() => void logout()} style={{ marginTop: 18 }}>Sign out</button>
       </div>
 
       {access.kind === 'none' && (
@@ -74,9 +72,45 @@ export default function Home() {
           <p style={{ fontSize: 15, lineHeight: 1.5, margin: 0 }}>
             Your sign-in worked, but nobody has been given access to this school
             under <strong>{access.email}</strong>. An administrator has to add you
-            before anything is visible. Signing in by itself grants nothing.
+            first — signing in by itself grants nothing.
           </p>
         </div>
+      )}
+
+      {stats && (
+        <>
+          <div className="card">
+            <h2>Today — {todayInDhaka()}</h2>
+            {stats.takenToday ? (
+              <div className="row">
+                <span>Attendance</span>
+                <span>
+                  <strong style={{ color: 'var(--accent)' }}>{stats.presentToday ?? '—'}</strong>
+                  <span style={{ color: 'var(--muted)' }}>
+                    {' '}present{stats.students !== null ? ` of ${stats.students}` : ''} ·{' '}
+                  </span>
+                  {stats.markedToday ?? '—'} marked
+                </span>
+              </div>
+            ) : (
+              <div className="row">
+                <span>Attendance</span>
+                <span style={{ color: 'var(--bad)', fontWeight: 600 }}>
+                  Not taken yet · <Link to="/scan">scan</Link> or <Link to="/attendance">mark</Link>
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>At a glance</h2>
+            <div className="tiles">
+              {stats.students !== null && <Tile value={stats.students} label="Students" to="/students" />}
+              {stats.staff !== null && <Tile value={stats.staff} label="Staff" />}
+              {stats.classes !== null && <Tile value={stats.classes} label="Sections" />}
+            </div>
+          </div>
+        </>
       )}
 
       {ownership && (
@@ -103,4 +137,14 @@ export default function Home() {
       {problem && <div className="card"><div className="err">{problem}</div></div>}
     </div>
   );
+}
+
+function Tile({ value, label, to }: { value: number; label: string; to?: string }) {
+  const body = (
+    <div className="tile">
+      <div className="tile-value">{value}</div>
+      <div className="tile-label">{label}</div>
+    </div>
+  );
+  return to ? <Link to={to} style={{ textDecoration: 'none' }}>{body}</Link> : body;
 }

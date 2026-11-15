@@ -4,6 +4,8 @@ import Attendance from './pages/Attendance';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Scan from './pages/Scan';
+import Student from './pages/Student';
+import Students from './pages/Students';
 
 function Nav() {
   const { pathname } = useLocation();
@@ -13,6 +15,7 @@ function Nav() {
   return (
     <nav className="nav">
       <Link to="/" style={here('/')}>Home</Link>
+      {access.kind === 'staff' && <Link to="/students" style={here('/students')}>Students</Link>}
       {access.kind === 'staff' && <Link to="/attendance" style={here('/attendance')}>Attendance</Link>}
       {access.kind === 'staff' && <Link to="/scan" style={here('/scan')}>Scan</Link>}
     </nav>
@@ -42,6 +45,8 @@ export default function App() {
       <Nav />
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/students" element={staffOnly(<Students />)} />
+        <Route path="/students/:studentId" element={staffOnly(<Student />)} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
         <Route path="/scan" element={staffOnly(<Scan />)} />
         <Route path="*" element={<Navigate to="/" replace />} />

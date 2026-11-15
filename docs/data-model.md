@@ -47,7 +47,8 @@ schools/{schoolId}                       e.g. "matkhola"
   subjects/{subjectId}
   exams/{examId}
   results/{resultId}
-  attendance/{yyyy-mm-dd}/marks/{studentId}
+  attendance/{yyyy-mm-dd}                 the day was opened
+  attendanceMarks/{yyyy-mm-dd}_{studentId}
   holidays/{yyyy-mm-dd}
   feeHeads/{feeHeadId}
   feeStructure/{structureId}
@@ -132,7 +133,7 @@ one doc, cached hard.
 one read. **They are a snapshot of the student's CURRENT class** and must never
 be used to label history — see §4.
 
-### `attendance/{date}/marks/{studentId}`
+### `attendanceMarks/{date}_{studentId}`
 ```ts
 { studentId, classId, className, section, rollNo,   // snapshot at marking time
   date: '2026-11-15', status: 'P'|'A'|'L'|'E',
@@ -146,10 +147,20 @@ rule carried over from the APEX app, and it applies to results and fees too.
 
 One doc per student per day: ~78 × 195 = ~15k docs a year, trivial for
 Firestore, and it is the right grain for an offline write queue — each scan is
-one small independent write that can be retried on its own.
+one small independent write that can be retried on its own. The document id
+carries the uniqueness, so a replayed scan overwrites rather than duplicates.
 
-A day's register is `attendance/{date}/marks` filtered by `classId`; a month's
-percentage is a **collection-group query** on `marks` over a date range.
+**FLAT, not `attendance/{date}/marks/{id}`.** The nested shape forced a
+collection-group query for "one student across many days", and a
+collection-group rule **cannot be scoped to a school** — it has to sit at the
+root, where it cannot tell one school's marks from another's. Flat keeps every
+query ordinary (`where date ==` for a register, `where studentId == … date >=`
+for a history) and every rule scoped under `schools/{id}`. Found on 2026-11-15
+when the student page was refused by the catch-all rule.
+
+`attendance/{date}` remains as a small session document recording that the day
+was opened at all — without it, "nobody marked yet" and "everyone absent" look
+identical, since a student with no mark document is absent.
 
 ### `holidays/{yyyy-mm-dd}`
 `{ date, name, source: 'GAZETTE'|'SCHOOL' }` — the 2026 list, 87 rows including

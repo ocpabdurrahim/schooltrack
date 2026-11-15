@@ -99,7 +99,7 @@ beforeEach(async () => {
       });
     }
 
-    await setDoc(doc(db, p('attendance', '2026-11-15', 'marks', '76')), {
+    await setDoc(doc(db, p('attendanceMarks', '2026-11-15_76')), {
       studentId: '76', classId: '61', className: 'Class 6', section: 'A', rollNo: 76,
       date: '2026-11-15', status: 'P', markedVia: 'MANUAL',
       markedBy: 'teacher@school.test', markedAt: now,
@@ -137,7 +137,7 @@ describe('signed out', () => {
 describe('ownership switch (§0)', () => {
   it('ADMIN cannot write attendance while Oracle owns it', async () => {
     await assertFails(
-      setDoc(doc(admin(), p('attendance', '2026-11-16', 'marks', '76')), {
+      setDoc(doc(admin(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
         status: 'P', markedVia: 'MANUAL',
         markedBy: 'admin@school.test', markedAt: serverTimestamp(),
@@ -148,7 +148,7 @@ describe('ownership switch (§0)', () => {
   it('TEACHER can write attendance once the app owns it', async () => {
     await setOwnership({ attendance: 'APP' });
     await assertSucceeds(
-      setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '76')), {
+      setDoc(doc(teacher(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
         status: 'P', markedVia: 'SCAN',
         markedBy: 'teacher@school.test', markedAt: serverTimestamp(),
@@ -161,7 +161,7 @@ describe('ownership switch (§0)', () => {
       deleteDoc(doc(ctx.firestore(), p('settings', 'ownership'))),
     );
     await assertFails(
-      setDoc(doc(admin(), p('attendance', '2026-11-16', 'marks', '76')), {
+      setDoc(doc(admin(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
         status: 'P', markedVia: 'MANUAL',
         markedBy: 'admin@school.test', markedAt: serverTimestamp(),
@@ -181,7 +181,7 @@ describe('attendance writes must carry the snapshot (§4)', () => {
   });
 
   const write = (data: Record<string, unknown>) =>
-    setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '76')), data);
+    setDoc(doc(teacher(), p('attendanceMarks', '2026-11-16_76')), data);
 
   it('rejects a mark with no classId', async () => {
     const { classId, ...noClass } = mark({});
@@ -205,9 +205,13 @@ describe('attendance writes must carry the snapshot (§4)', () => {
     await assertFails(write(mark({ markedAt: new Date('2020-01-01') })));
   });
 
-  it('rejects a mark whose id does not match its studentId', async () => {
+  it('rejects a mark whose id does not match date_studentId', async () => {
+    // the document id IS the uniqueness: one mark per student per day
     await assertFails(
-      setDoc(doc(teacher(), p('attendance', '2026-11-16', 'marks', '77')), mark({})),
+      setDoc(doc(teacher(), p('attendanceMarks', '2026-11-16_77')), mark({})),
+    );
+    await assertFails(
+      setDoc(doc(teacher(), p('attendanceMarks', 'nonsense')), mark({})),
     );
   });
 });
@@ -223,7 +227,7 @@ describe('guardians (§2)', () => {
 
   it('reads their own child\'s attendance', async () => {
     await assertSucceeds(
-      getDoc(doc(parent(), p('attendance', '2026-11-15', 'marks', '76'))),
+      getDoc(doc(parent(), p('attendanceMarks', '2026-11-15_76'))),
     );
   });
 
@@ -238,7 +242,7 @@ describe('guardians (§2)', () => {
   it('cannot write attendance even when the app owns it', async () => {
     await setOwnership({ attendance: 'APP' });
     await assertFails(
-      setDoc(doc(parent(), p('attendance', '2026-11-16', 'marks', '76')), {
+      setDoc(doc(parent(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
         status: 'P', markedVia: 'MANUAL',
         markedBy: 'parent@home.test', markedAt: serverTimestamp(),

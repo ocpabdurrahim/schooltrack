@@ -35,3 +35,9 @@ select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radiu
 .scan-bad { background: #fdecea; color: var(--bad); }
 .scan-input { font-size: 20px !important; text-align: center; letter-spacing: 1px; }
 .scan-cam { width: 100%; max-width: 320px; margin: 14px auto 0; }
+
+.tiles { display: flex; gap: 12px; flex-wrap: wrap; }
+.tile { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 8px; padding: 14px; text-align: center; }
+.tile-value { font-size: 26px; font-weight: 700; color: var(--ink); }
+.tile-label { font-size: 13px; color: var(--muted); margin-top: 2px; }
+a { color: var(--accent); }
