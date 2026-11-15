@@ -46,7 +46,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/students" element={staffOnly(<Students />)} />
-        <Route path="/students/:studentId" element={staffOnly(<Student />)} />
+        {/* guardians reach this for their own children; the page and the
+            rules both check that it is theirs */}
+        <Route path="/students/:studentId" element={<Student />} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
         <Route path="/scan" element={staffOnly(<Scan />)} />
         <Route path="*" element={<Navigate to="/" replace />} />

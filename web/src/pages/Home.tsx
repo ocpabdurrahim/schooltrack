@@ -5,6 +5,7 @@ import { useAuth } from '../auth';
 import { SCHOOL_ID, db } from '../firebase';
 import { todayInDhaka } from '../data/attendance';
 import { type SchoolStats, schoolStats } from '../data/people';
+import { type Child, myChildren } from '../data/guardian';
 
 type Ownership = Record<string, string>;
 
@@ -15,6 +16,7 @@ export default function Home() {
   const [school, setSchool] = useState('');
   const [ownership, setOwnership] = useState<Ownership | null>(null);
   const [stats, setStats] = useState<SchoolStats | null>(null);
+  const [children, setChildren] = useState<Child[] | null>(null);
   const [problem, setProblem] = useState('');
 
   useEffect(() => {
@@ -35,8 +37,11 @@ export default function Home() {
       if (staff) {
         try { setStats(await schoolStats()); } catch { /* tiles simply do not render */ }
       }
+      if (access.kind === 'guardian') {
+        try { setChildren(await myChildren(access.studentIds)); } catch { setChildren([]); }
+      }
     })();
-  }, [staff]);
+  }, [staff, access]);
 
   const modules = ['attendance', 'fees', 'people', 'results', 'payroll', 'expenses'];
 
@@ -113,7 +118,38 @@ export default function Home() {
         </>
       )}
 
-      {ownership && (
+      {children && (
+        <div className="card">
+          <h2>{children.length === 1 ? 'My child' : 'My children'}</h2>
+          {children.length === 0 && (
+            <p style={{ margin: 0, color: 'var(--muted)' }}>
+              No student records are linked to this account yet.
+            </p>
+          )}
+          {children.map(({ student, month }) => (
+            <div className="row" key={student.studentId}>
+              <span style={{ color: 'var(--ink)' }}>
+                <Link to={`/students/${student.studentId}`}>{student.fullName}</Link>
+                <span style={{ color: 'var(--muted)' }}>
+                  {' '}· {student.className} - {student.section} · Roll {student.rollNo}
+                </span>
+              </span>
+              <span>
+                {month.marked === 0
+                  ? <span style={{ color: 'var(--muted)' }}>no days marked</span>
+                  : <>
+                      <strong style={{ color: (month.percent ?? 0) >= 75 ? 'var(--accent)' : 'var(--bad)' }}>
+                        {month.percent}%
+                      </strong>
+                      <span style={{ color: 'var(--muted)' }}> this month</span>
+                    </>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ownership && access.kind === 'staff' && (
         <div className="card">
           <h2>Which system owns what</h2>
           {modules.map((m) => {

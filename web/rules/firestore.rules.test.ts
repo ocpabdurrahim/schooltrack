@@ -20,12 +20,16 @@ import {
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
@@ -99,11 +103,13 @@ beforeEach(async () => {
       });
     }
 
-    await setDoc(doc(db, p('attendanceMarks', '2026-11-15_76')), {
-      studentId: '76', classId: '61', className: 'Class 6', section: 'A', rollNo: 76,
-      date: '2026-11-15', status: 'P', markedVia: 'MANUAL',
-      markedBy: 'teacher@school.test', markedAt: now,
-    });
+    for (const id of ['76', '77']) {
+      await setDoc(doc(db, p('attendanceMarks', `2026-11-15_${id}`)), {
+        studentId: id, classId: '61', className: 'Class 6', section: 'A', rollNo: Number(id),
+        date: '2026-11-15', status: 'P', markedVia: 'MANUAL',
+        markedBy: 'teacher@school.test', markedAt: now,
+      });
+    }
 
     await setDoc(doc(db, p('payments', 'RCPT-000001')), {
       receiptNo: 'RCPT-000001', studentId: '76', studentName: 'Student 76',
@@ -252,6 +258,30 @@ describe('guardians (§2)', () => {
 
   it('cannot read payroll', async () => {
     await assertFails(getDoc(doc(parent(), p('salaryPayments', 'x'))));
+  });
+
+  // The UI also hides other children, but that is courtesy. These are the
+  // checks that actually stop a determined parent with a URL bar.
+  it('may query the attendance of their OWN child', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(parent(), p('attendanceMarks')),
+      where('studentId', '==', '76'),
+    )));
+  });
+
+  it('cannot query the attendance of another child', async () => {
+    await assertFails(getDocs(query(
+      collection(parent(), p('attendanceMarks')),
+      where('studentId', '==', '77'),
+    )));
+  });
+
+  it('cannot query the whole register', async () => {
+    await assertFails(getDocs(collection(parent(), p('attendanceMarks'))));
+  });
+
+  it('cannot list all students', async () => {
+    await assertFails(getDocs(collection(parent(), p('students'))));
   });
 });
 

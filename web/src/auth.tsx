@@ -34,16 +34,28 @@ async function resolveAccess(user: User): Promise<Access> {
   const email = (user.email ?? '').toLowerCase();
   if (!email) return { kind: 'none', email: '' };
 
-  const member = await getDoc(doc(db, 'schools', SCHOOL_ID, 'members', email));
-  if (member.exists()) {
+  // EACH LOOKUP IS TRIED SEPARATELY, because a refusal is a normal answer
+  // here, not a failure. A guardian is not allowed to read `members` at all,
+  // so letting that denial escape would end the chain before the guardian
+  // lookup ran — every parent would be told they had no access.
+  const read = async (collection: 'members' | 'guardians') => {
+    try {
+      return await getDoc(doc(db, 'schools', SCHOOL_ID, collection, email));
+    } catch {
+      return null;   // denied: this person is simply not that kind of user
+    }
+  };
+
+  const member = await read('members');
+  if (member?.exists()) {
     const m = member.data();
     if (m.active === true && m.deleted !== true) {
       return { kind: 'staff', role: m.role as Role, name: m.name ?? email, email };
     }
   }
 
-  const guardian = await getDoc(doc(db, 'schools', SCHOOL_ID, 'guardians', email));
-  if (guardian.exists()) {
+  const guardian = await read('guardians');
+  if (guardian?.exists()) {
     const g = guardian.data();
     if (g.active === true) {
       return {

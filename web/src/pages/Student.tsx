@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useAuth } from '../auth';
 import { STATUS_LABEL, type Status } from '../data/attendance';
 import {
   type AttendanceSummary, type StudentDetail,
@@ -16,12 +17,17 @@ import {
  */
 export default function Student() {
   const { studentId = '' } = useParams();
+  const { access } = useAuth();
+  // The rules would refuse this anyway; saying so plainly beats
+  // "could not load", which reads like a fault in the app.
+  const mine = access.kind !== 'guardian' || access.studentIds.includes(studentId);
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [year, setYear] = useState<AttendanceSummary | null>(null);
   const [month, setMonth] = useState<AttendanceSummary | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error' | 'forbidden'>('loading');
 
   useEffect(() => {
+    if (!mine) { setState('forbidden'); return; }
     (async () => {
       try {
         const s = await getStudent(studentId);
@@ -38,9 +44,18 @@ export default function Student() {
         setState('error');
       }
     })();
-  }, [studentId]);
+  }, [studentId, mine]);
 
   if (state === 'loading') return <div className="wrap"><div className="card">Loading…</div></div>;
+  if (state === 'forbidden') return (
+    <div className="wrap"><div className="card">
+      <h1>Not your student</h1>
+      <p style={{ margin: 0 }}>
+        This account is linked only to its own children. If that is wrong, the
+        school office can correct it. <Link to="/">Back</Link>
+      </p>
+    </div></div>
+  );
   if (state === 'missing') return (
     <div className="wrap"><div className="card">
       <p style={{ margin: 0 }}>No student with id {studentId}. <Link to="/students">Back to the list</Link></p>
