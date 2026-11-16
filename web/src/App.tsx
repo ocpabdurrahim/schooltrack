@@ -47,36 +47,37 @@ function Nav() {
   const money = staff && (access.role === 'ADMIN' || access.role === 'ACCOUNTS');
   // certificates and ID cards are the office's work, with the head
   const records = staff && (access.role === 'ADMIN' || access.role === 'OFFICE');
-  const here = (p: string) => (pathname === p ? { fontWeight: 700 } : undefined);
+  const here = (p: string) => (pathname === p ? 'here' : undefined);
 
   return (
     <nav className="nav">
-      <Link to="/" style={here('/')}>Home</Link>
-      {staff && <Link to="/students" style={here('/students')}>Students</Link>}
-      {staff && <Link to="/attendance" style={here('/attendance')}>Attendance</Link>}
-      {staff && <Link to="/scan" style={here('/scan')}>Scan</Link>}
-      {staff && <Link to="/attendance/monthly" style={here('/attendance/monthly')}>Monthly</Link>}
-      {staff && <Link to="/attendance/low" style={here('/attendance/low')}>Low %</Link>}
-      {money && <Link to="/fees/collect" style={here('/fees/collect')}>Collect fee</Link>}
-      {money && <Link to="/fees/receipts" style={here('/fees/receipts')}>Receipts</Link>}
-      {money && <Link to="/fees/dues" style={here('/fees/dues')}>Dues</Link>}
-      {staff && <Link to="/marks" style={here('/marks')}>Marks</Link>}
-      {staff && <Link to="/results" style={here('/results')}>Results</Link>}
-      {admin && <Link to="/exams" style={here('/exams')}>Exams</Link>}
-      {admin && <Link to="/exams/routine" style={here('/exams/routine')}>Routine</Link>}
-      {records && <Link to="/exams/admit-cards" style={here('/exams/admit-cards')}>Admit cards</Link>}
-      {staff && <Link to="/exams/seat-plan" style={here('/exams/seat-plan')}>Seat plan</Link>}
-      {records && <Link to="/certificates" style={here('/certificates')}>Certificates</Link>}
-      {records && <Link to="/id-cards" style={here('/id-cards')}>ID cards</Link>}
-      {admin && <Link to="/fees/setup" style={here('/fees/setup')}>Fee setup</Link>}
-      {admin && <Link to="/classes" style={here('/classes')}>Classes</Link>}
-      {admin && <Link to="/staff" style={here('/staff')}>Staff</Link>}
-      {admin && <Link to="/users" style={here('/users')}>Users</Link>}
-      {admin && <Link to="/attendance/holidays" style={here('/attendance/holidays')}>Holidays</Link>}
-      {money && <Link to="/expenses" style={here('/expenses')}>Expenses</Link>}
-      {money && <Link to="/reports/income-expense" style={here('/reports/income-expense')}>Report</Link>}
-      {admin && <Link to="/payroll" style={here('/payroll')}>Payroll</Link>}
-      {admin && <Link to="/setup" style={here('/setup')}>Setup</Link>}
+      <Link className="nav-brand" to="/"><i aria-hidden="true" />SchoolTrack</Link>
+      <Link to="/" className={here('/')}>Home</Link>
+      {staff && <Link to="/students" className={here('/students')}>Students</Link>}
+      {staff && <Link to="/attendance" className={here('/attendance')}>Attendance</Link>}
+      {staff && <Link to="/scan" className={here('/scan')}>Scan</Link>}
+      {staff && <Link to="/attendance/monthly" className={here('/attendance/monthly')}>Monthly</Link>}
+      {staff && <Link to="/attendance/low" className={here('/attendance/low')}>Low %</Link>}
+      {money && <Link to="/fees/collect" className={here('/fees/collect')}>Collect fee</Link>}
+      {money && <Link to="/fees/receipts" className={here('/fees/receipts')}>Receipts</Link>}
+      {money && <Link to="/fees/dues" className={here('/fees/dues')}>Dues</Link>}
+      {staff && <Link to="/marks" className={here('/marks')}>Marks</Link>}
+      {staff && <Link to="/results" className={here('/results')}>Results</Link>}
+      {admin && <Link to="/exams" className={here('/exams')}>Exams</Link>}
+      {admin && <Link to="/exams/routine" className={here('/exams/routine')}>Routine</Link>}
+      {records && <Link to="/exams/admit-cards" className={here('/exams/admit-cards')}>Admit cards</Link>}
+      {staff && <Link to="/exams/seat-plan" className={here('/exams/seat-plan')}>Seat plan</Link>}
+      {records && <Link to="/certificates" className={here('/certificates')}>Certificates</Link>}
+      {records && <Link to="/id-cards" className={here('/id-cards')}>ID cards</Link>}
+      {admin && <Link to="/fees/setup" className={here('/fees/setup')}>Fee setup</Link>}
+      {admin && <Link to="/classes" className={here('/classes')}>Classes</Link>}
+      {admin && <Link to="/staff" className={here('/staff')}>Staff</Link>}
+      {admin && <Link to="/users" className={here('/users')}>Users</Link>}
+      {admin && <Link to="/attendance/holidays" className={here('/attendance/holidays')}>Holidays</Link>}
+      {money && <Link to="/expenses" className={here('/expenses')}>Expenses</Link>}
+      {money && <Link to="/reports/income-expense" className={here('/reports/income-expense')}>Report</Link>}
+      {admin && <Link to="/payroll" className={here('/payroll')}>Payroll</Link>}
+      {admin && <Link to="/setup" className={here('/setup')}>Setup</Link>}
     </nav>
   );
 }

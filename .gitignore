@@ -18,6 +18,9 @@ exports/
 tools/data/
 *.csv
 *.ndjson
+# printed sheets land in the working folder: an ID card sheet, an admit card,
+# a receipt. They carry names and photographs, so they are data too.
+*.pdf
 tools/*.json
 !tools/package.json
 !tools/mapping.sample.json
