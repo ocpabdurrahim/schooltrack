@@ -54,6 +54,23 @@ docs/        data-model.md  <- read this first
 
 This school's own deployment lives at **https://schooltrack-1941.web.app**.
 
+## Building the Android app
+
+```
+cd android
+./gradlew assembleRelease          # app/build/outputs/apk/release/app-release.apk
+./gradlew installDebug -PuseEmulators=true    # a handset against the emulators
+```
+
+Signing comes from `android/keystore.properties`, which points at the release
+keystore. Both are gitignored — **this repo is public** — and both must be backed
+up: Android only lets an installed app be updated by a build signed with the
+same key, so losing them means every phone has to uninstall first. Without that
+file the release build is simply unsigned and a fresh clone still builds.
+
+The version comes from `-PversionNameOverride` / `-PversionCodeOverride`,
+defaulting to the values in `app/build.gradle.kts`.
+
 ## Security model in one paragraph
 
 Staff sign in with email and password; their access comes from

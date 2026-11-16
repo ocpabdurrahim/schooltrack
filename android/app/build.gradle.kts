@@ -1,9 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
     alias(libs.plugins.ksp)
+}
+
+/**
+ * Release signing.
+ *
+ * The keystore and its passwords live in android/keystore.properties, which is
+ * gitignored along with *.jks: THIS REPO IS PUBLIC, and a signing key in it
+ * would let anyone publish an update that phones accept as ours. Without that
+ * file the release build is simply unsigned, so a fresh clone still builds.
+ */
+val signing = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -15,7 +30,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.1.0"
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // ./gradlew assembleDebug -PuseEmulators=true  points the app at the
@@ -37,10 +52,25 @@ android {
         )
     }
 
+    signingConfigs {
+        if (signing.containsKey("storeFile")) {
+            create("release") {
+                storeFile = rootProject.file(signing.getProperty("storeFile"))
+                storePassword = signing.getProperty("storePassword")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = signing.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // R8 stays off on purpose: Firestore, ML Kit and CameraX all need
+            // keep rules, and a school finding out at the gate that the scanner
+            // was stripped is not worth the few megabytes.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
