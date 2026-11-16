@@ -139,14 +139,20 @@ class SheetsTest {
     // ---- the results a parent reads ---------------------------------------
     // The same cases as the web's resultLines block.
 
-    private fun exam(examId: String, examName: String, examYear: String, published: Boolean = true) =
-        Exam(
-            examId = examId,
-            examName = examName,
-            examYear = examYear,
-            periodLabel = "$examName-$examYear".uppercase(),
-            published = published,
-        )
+    private fun exam(
+        examId: String,
+        examName: String,
+        examYear: String,
+        published: Boolean = true,
+        sortOrder: Long = 0,
+    ) = Exam(
+        examId = examId,
+        examName = examName,
+        examYear = examYear,
+        periodLabel = "$examName-$examYear".uppercase(),
+        published = published,
+        sortOrder = sortOrder,
+    )
 
     private fun tabulationFor(marks: Map<String, Double>, absent: List<String> = emptyList()) =
         tabulate(
@@ -163,7 +169,34 @@ class SheetsTest {
         )
 
     @Test
-    fun `the results run oldest first, so progress reads forwards`() {
+    fun `the school's order decides within a year, which the name cannot`() {
+        // "Annual" sorts before "Half yearly" alphabetically but comes after it
+        // in the year — the whole reason the order field exists.
+        val marks = mapOf("Bangla" to 70.0, "English" to 70.0, "Maths" to 70.0)
+        val lines = resultLines(
+            listOf(
+                exam("annual-2026", "Annual", "2026", sortOrder = 2) to tabulationFor(marks),
+                exam("half-yearly-2026", "Half yearly", "2026", sortOrder = 1) to tabulationFor(marks),
+            ),
+        )
+        assertEquals(listOf("Half yearly", "Annual"), lines.map { it.examName })
+    }
+
+    @Test
+    fun `without an order it falls back to the exam id`() {
+        val marks = mapOf("Bangla" to 70.0, "English" to 70.0, "Maths" to 70.0)
+        val lines = resultLines(
+            listOf(
+                exam("half-yearly-2026", "Half yearly", "2026") to tabulationFor(marks),
+                exam("annual-2026", "Annual", "2026") to tabulationFor(marks),
+            ),
+        )
+        assertEquals(listOf("annual-2026", "half-yearly-2026"), lines.map { it.examId })
+        assertEquals(true, lines.all { it.sortOrder == 0L })
+    }
+
+    @Test
+    fun `the results run oldest year first, so a report reads forwards`() {
         val lines = resultLines(
             listOf(
                 exam("final-2026", "Final", "2026") to

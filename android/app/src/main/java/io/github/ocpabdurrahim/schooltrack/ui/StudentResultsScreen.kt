@@ -171,14 +171,19 @@ fun StudentResultsScreen(
 
             if (lines.size > 1) {
                 Text(
-                    "GPA BY EXAM",
+                    // Only "progress" when every exam on the chart carries the
+                    // school's own order; otherwise they are lined up by name.
+                    if (lines.all { it.sortOrder > 0 }) "PROGRESS" else "GPA BY EXAM",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = Muted,
                     modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                 )
                 Row(
-                    Modifier.fillMaxWidth().height(110.dp),
+                    // tall enough for the GPA above the bar AND the two label
+                    // lines below it: at 110.dp the year was clipped off the
+                    // bottom of the tallest column
+                    Modifier.fillMaxWidth().height(134.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.Bottom,
                 ) {

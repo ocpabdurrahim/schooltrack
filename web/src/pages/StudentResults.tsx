@@ -136,11 +136,13 @@ export default function StudentResults() {
 
           {lines.length > 1 && (
             <>
-              {/* NOT called progress: an exam carries no date, so two exams in
-                  the same year are ordered by name, and a chart labelled
-                  "progress" would read as a rise or a fall that the data does
-                  not actually know about. */}
-              <h2 style={{ marginTop: 20 }}>GPA by exam</h2>
+              {/* Only called progress when every exam on the chart carries the
+                  school's own order. Otherwise two exams in the same year are
+                  lined up by name, and "progress" would read as a rise or a
+                  fall the data does not know about. */}
+              <h2 style={{ marginTop: 20 }}>
+                {lines.every((l) => l.sortOrder > 0) ? 'Progress' : 'GPA by exam'}
+              </h2>
               <div className="bars" style={{ height: 110 }}>
                 {lines.map((line) => (
                   <div className="bar-col" key={line.examId} title={`${line.examName} ${line.examYear}`}>

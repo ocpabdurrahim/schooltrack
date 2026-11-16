@@ -20,6 +20,14 @@ data class Exam(
     val examYear: String,
     val periodLabel: String,   // HALF_YEARLY_EXAM-2026 — the fee module matches on this
     val published: Boolean,
+    /**
+     * Where this exam sits in the school's year: 1 for the first, 2 for the
+     * next. Exams carry no date, and the name does not order them — "Annual"
+     * sorts before "Half yearly" alphabetically but comes after it in the year.
+     * Default 0, which falls back to the old behaviour rather than inventing an
+     * order for exams entered before this field existed.
+     */
+    val sortOrder: Long = 0,
 )
 
 data class Subject(
@@ -76,6 +84,9 @@ class ExamsRepository(
     // -----------------------------------------------------------------------
     // exams
 
+    // NOT ordered by sortOrder in the query: Firestore drops documents that lack
+    // the field, so every exam saved before this field existed would vanish from
+    // the list. Sorted here instead, newest first, which is what the pickers want.
     suspend fun listExams(): List<Exam> =
         school().collection("exams").orderBy("examYear", Query.Direction.DESCENDING)
             .get().await().documents.map {
@@ -85,8 +96,14 @@ class ExamsRepository(
                     examYear = it.getString("examYear").orEmpty(),
                     periodLabel = it.getString("periodLabel").orEmpty(),
                     published = it.getBoolean("published") ?: false,
+                    sortOrder = it.getLong("sortOrder") ?: 0,
                 )
             }
+            .sortedWith(
+                compareByDescending<Exam> { it.examYear }
+                    .thenByDescending { it.sortOrder }
+                    .thenByDescending { it.examId },
+            )
 
     suspend fun saveExam(e: Exam): String {
         val examId = e.examId.ifBlank { examIdFor(e.examName, e.examYear) }
@@ -97,6 +114,7 @@ class ExamsRepository(
                     "examYear" to e.examYear.trim(),
                     "periodLabel" to periodLabelFor(e.examName, e.examYear),
                     "published" to e.published,
+                    "sortOrder" to e.sortOrder,
                 ),
             ),
             SetOptions.merge(),
@@ -275,10 +293,12 @@ fun totalMarks(t: Tabulation): Double? {
  * One line per exam: earliest YEAR first, then by exam id. The twin of
  * resultLines() in web/src/data/exams.ts, with the same test cases.
  *
- * NOT chronological within a year, and nothing here pretends it is. An exam
- * carries no date of its own, so "Annual" sorts before "Half yearly" in 2026;
- * the screen labels the chart "GPA by exam" rather than "progress" for exactly
- * that reason.
+ * Within a year the school's own order decides (sortOrder on the exam: 1 for
+ * the first exam of the year, 2 for the next). Exams carry no date, and the
+ * name does not order them — "Annual" sorts before "Half yearly" alphabetically
+ * but comes after it in the year. Where the order was never set both are 0 and
+ * the fallback is the exam id; the screen only calls the chart "progress" once
+ * every exam on it has a real order.
  *
  * The marks total and the percentage are withheld while any mark is missing. A
  * part-entered exam shown as a percentage reads as a bad result rather than an
@@ -296,11 +316,12 @@ data class ResultLine(
     val obtained: Double?,
     val outOf: Double,
     val percent: Double?,
+    val sortOrder: Long,
 )
 
 fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
     results
-        .sortedWith(compareBy({ it.first.examYear }, { it.first.examId }))
+        .sortedWith(compareBy({ it.first.examYear }, { it.first.sortOrder }, { it.first.examId }))
         .map { (exam, tabulation) ->
             val outOf = tabulation.subjects.sumOf { it.mark.fullMarks }
             val obtained = totalMarks(tabulation)
@@ -309,6 +330,7 @@ fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
                 examName = exam.examName,
                 examYear = exam.examYear,
                 published = exam.published,
+                sortOrder = exam.sortOrder,
                 gpa = tabulation.gpa,
                 letter = tabulation.letter,
                 incomplete = tabulation.incomplete,

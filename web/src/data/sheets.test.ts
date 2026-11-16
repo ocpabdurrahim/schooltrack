@@ -126,8 +126,15 @@ describe('meritOrder', () => {
 });
 
 describe('resultLines, the results a parent reads', () => {
-  const exam = (examId: string, examName: string, examYear: string, published = true): Exam => ({
-    examId, examName, examYear, published, periodLabel: `${examName}-${examYear}`.toUpperCase(),
+  const exam = (
+    examId: string,
+    examName: string,
+    examYear: string,
+    published = true,
+    sortOrder = 0,
+  ): Exam => ({
+    examId, examName, examYear, published, sortOrder,
+    periodLabel: `${examName}-${examYear}`.toUpperCase(),
   });
 
   const tabulationFor = (marks: Marks, absent: string[] = []) =>
@@ -140,12 +147,33 @@ describe('resultLines, the results a parent reads', () => {
       isOptional: s.isOptional,
     })));
 
-  it('runs oldest first, so progress reads forwards', () => {
+  it('runs oldest year first, so a report reads forwards', () => {
     const lines = resultLines([
       { exam: exam('final-2026', 'Final', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 80, Maths: 80 }) },
       { exam: exam('half-2025', 'Half yearly', '2025'), tabulation: tabulationFor({ Bangla: 60, English: 60, Maths: 60 }) },
     ]);
     expect(lines.map((l) => l.examYear)).toEqual(['2025', '2026']);
+  });
+
+  it("follows the school's order within a year, which the name cannot", () => {
+    // "Annual" sorts before "Half yearly" alphabetically but comes after it in
+    // the year — the whole reason the order field exists.
+    const marks = { Bangla: 70, English: 70, Maths: 70 };
+    const lines = resultLines([
+      { exam: exam('annual-2026', 'Annual', '2026', true, 2), tabulation: tabulationFor(marks) },
+      { exam: exam('half-yearly-2026', 'Half yearly', '2026', true, 1), tabulation: tabulationFor(marks) },
+    ]);
+    expect(lines.map((l) => l.examName)).toEqual(['Half yearly', 'Annual']);
+  });
+
+  it('falls back to the exam id when no order was ever set', () => {
+    const marks = { Bangla: 70, English: 70, Maths: 70 };
+    const lines = resultLines([
+      { exam: exam('half-yearly-2026', 'Half yearly', '2026'), tabulation: tabulationFor(marks) },
+      { exam: exam('annual-2026', 'Annual', '2026'), tabulation: tabulationFor(marks) },
+    ]);
+    expect(lines.map((l) => l.examId)).toEqual(['annual-2026', 'half-yearly-2026']);
+    expect(lines.every((l) => l.sortOrder === 0)).toBe(true);
   });
 
   it('gives the marks out of the full marks of every subject sat', () => {

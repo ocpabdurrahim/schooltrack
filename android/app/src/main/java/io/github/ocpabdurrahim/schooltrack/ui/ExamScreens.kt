@@ -66,7 +66,7 @@ fun ExamsScreen(
     var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
     var classNames by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    var exam by remember { mutableStateOf(Exam("", "", "", "", false)) }
+    var exam by remember { mutableStateOf(Exam("", "", "", "", false, 0)) }
     var subject by remember { mutableStateOf(Subject("", "")) }
     var busy by remember { mutableStateOf(true) }
     var problem by remember { mutableStateOf("") }
@@ -103,7 +103,8 @@ fun ExamsScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
-                                e.periodLabel + if (e.published) "  ·  published" else "",
+                                (if (e.sortOrder > 0) "#${e.sortOrder}  ·  " else "") +
+                                    e.periodLabel + if (e.published) "  ·  published" else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -115,6 +116,21 @@ fun ExamsScreen(
 
                 Field("Exam name", exam.examName) { exam = exam.copy(examName = it) }
                 Field("Year", exam.examYear) { exam = exam.copy(examYear = it) }
+                Field(
+                    "Order in the year",
+                    if (exam.sortOrder == 0L) "" else exam.sortOrder.toString(),
+                    numeric = true,
+                ) { exam = exam.copy(sortOrder = it.toLongOrNull() ?: 0) }
+                Text(
+                    "The order decides how the exams line up on a parent's results report: 1 for " +
+                        "the first exam of the year, 2 for the next. The name cannot do it — " +
+                        "\"Annual\" sorts before \"Half yearly\" alphabetically but comes after it " +
+                        "in the year. Left empty, the report falls back to that alphabetical order " +
+                        "and does not call it progress.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
                 Text(
                     "Period label: " + periodLabelFor(
                         exam.examName.ifBlank { "EXAM" }, exam.examYear,
@@ -132,7 +148,7 @@ fun ExamsScreen(
                         scope.launch {
                             try {
                                 exams.saveExam(exam)
-                                exam = Exam("", "", java.time.Year.now().value.toString(), "", false)
+                                exam = Exam("", "", java.time.Year.now().value.toString(), "", false, 0)
                                 load()
                             } catch (_: Exception) { problem = REFUSED; busy = false }
                         }

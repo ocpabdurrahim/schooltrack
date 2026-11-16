@@ -32,6 +32,14 @@ export type Exam = {
   examYear: string;
   periodLabel: string;     // HALF_YEARLY_EXAM-2026 — the fee module matches on this
   published: boolean;
+  /**
+   * Where this exam sits in the school's year: 1 for the first, 2 for the
+   * next. Exams carry no date, and the name does not order them — "Annual"
+   * sorts before "Half yearly" alphabetically but comes after it in the year.
+   * Default 0, which falls back to the old behaviour rather than inventing an
+   * order for exams entered before this field existed.
+   */
+  sortOrder: number;
 };
 
 export type Subject = {
@@ -69,7 +77,19 @@ export const examIdFor = (examName: string, examYear: string) =>
 
 export async function listExams(): Promise<Exam[]> {
   const snap = await getDocs(query(collection(school(), 'exams'), orderBy('examYear', 'desc')));
-  return snap.docs.map((d) => ({ examId: d.id, ...(d.data() as Omit<Exam, 'examId'>) }));
+  // NOT ordered by sortOrder in the query: Firestore drops documents that lack
+  // the field, so every exam saved before this field existed would vanish from
+  // the list. Sorted here instead, newest first, which is what the pickers want.
+  return snap.docs
+    .map((d) => ({
+      examId: d.id,
+      ...(d.data() as Omit<Exam, 'examId' | 'sortOrder'>),
+      sortOrder: (d.data().sortOrder as number) ?? 0,
+    }))
+    .sort((a, b) =>
+      b.examYear.localeCompare(a.examYear) ||
+      b.sortOrder - a.sortOrder ||
+      b.examId.localeCompare(a.examId));
 }
 
 export async function saveExam(e: Omit<Exam, 'examId' | 'periodLabel'> & { examId?: string }) {
@@ -81,6 +101,7 @@ export async function saveExam(e: Omit<Exam, 'examId' | 'periodLabel'> & { examI
       examYear: e.examYear.trim(),
       periodLabel: periodLabelFor(e.examName, e.examYear),
       published: e.published,
+      sortOrder: Number(e.sortOrder) || 0,
     }),
     { merge: true },
   );
@@ -294,11 +315,12 @@ export function totalMarks(t: Tabulation): number | null {
 /**
  * One line per exam: earliest YEAR first, then by exam id.
  *
- * NOT chronological within a year, and nothing here pretends it is. An exam
- * carries no date of its own, so "Annual" sorts before "Half yearly" in 2026;
- * the report labels the chart "GPA by exam" rather than "progress" for exactly
- * that reason. A stable order that is honest beats a guessed one that reads as
- * a rise or a fall the data does not know about.
+ * Within a year the school's own order decides (sortOrder on the exam: 1 for
+ * the first exam of the year, 2 for the next). Exams carry no date, and the
+ * name does not order them — "Annual" sorts before "Half yearly" alphabetically
+ * but comes after it in the year. Where the order was never set both are 0 and
+ * the fallback is the exam id, which is at least stable; the report only calls
+ * the chart "progress" once every exam on it has a real order.
  *
  * The marks total and the percentage are withheld while any compulsory mark is
  * still missing. A part-entered exam shown as a percentage reads as a bad
@@ -316,6 +338,7 @@ export type ResultLine = {
   obtained: number | null;
   outOf: number;
   percent: number | null;
+  sortOrder: number;
 };
 
 export function resultLines(
@@ -324,6 +347,7 @@ export function resultLines(
   return [...results]
     .sort((a, b) =>
       a.exam.examYear.localeCompare(b.exam.examYear) ||
+      (a.exam.sortOrder ?? 0) - (b.exam.sortOrder ?? 0) ||
       a.exam.examId.localeCompare(b.exam.examId))
     .map(({ exam, tabulation }) => {
       const outOf = tabulation.subjects.reduce((t, s) => t + s.fullMarks, 0);
@@ -333,6 +357,7 @@ export function resultLines(
         examName: exam.examName,
         examYear: exam.examYear,
         published: exam.published,
+        sortOrder: exam.sortOrder ?? 0,
         gpa: tabulation.gpa,
         letter: tabulation.letter,
         incomplete: tabulation.incomplete,

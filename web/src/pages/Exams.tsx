@@ -11,7 +11,7 @@ import {
 } from '../data/exams';
 import { currentYear } from '../data/fees';
 
-const blankExam = { examName: '', examYear: currentYear(), published: false };
+const blankExam = { examName: '', examYear: currentYear(), published: false, sortOrder: 0 };
 const blankSubject = {
   subjectName: '', subjectCode: '', classNames: [] as string[],
   fullMarks: 100, isOptional: false, sortOrder: 0,
@@ -89,6 +89,9 @@ export default function Exams() {
           <div className="row" key={e.examId}>
             <span style={{ color: 'var(--ink)' }}>
               {e.examName} {e.examYear}
+              {e.sortOrder > 0 && (
+                <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 13 }}>#{e.sortOrder}</span>
+              )}
               {e.published && <span className="pill" style={{ marginLeft: 8 }}>published</span>}
             </span>
             <span>
@@ -114,7 +117,19 @@ export default function Exams() {
             <input id="ey" value={exam.examYear}
                    onChange={(e) => setExam({ ...exam, examYear: e.target.value })} />
           </div>
+          <div style={{ flex: '1 1 110px' }}>
+            <label htmlFor="eo">Order in the year</label>
+            <input id="eo" type="number" min={0} value={exam.sortOrder}
+                   onChange={(e) => setExam({ ...exam, sortOrder: Number(e.target.value) || 0 })} />
+          </div>
         </div>
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
+          The order decides how the exams line up on a parent's results report:
+          1 for the first exam of the year, 2 for the next. The name cannot do
+          it — "Annual" sorts before "Half yearly" alphabetically but comes
+          after it in the year. Left at 0, the report falls back to that
+          alphabetical order and does not call it progress.
+        </p>
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
           Period label: <code>{periodLabelFor(exam.examName || 'EXAM', exam.examYear)}</code> —
           the same text the fee module uses, so an exam fee and its exam match.
