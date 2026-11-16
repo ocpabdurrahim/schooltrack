@@ -384,6 +384,12 @@ a feature:
   `bootstrap.mjs --verify` marks the address confirmed through the Admin SDK —
   the rules require a confirmed address and there is no other way to repair it
   from outside the console.
+
+  Email/Password sign-in was switched off on the live project until 2026-11-16,
+  which is why it had no accounts at all: the sign-up form could only answer
+  "Sign-up is switched off for this project". It is on now. A new project needs
+  that switch before anything else works — step 1 of the README.
+
 - **A real printed QR scanned by a real phone** — the card code is round-tripped
   in a test on both sides, but no one has yet held a printed card in front of a
   handset.
