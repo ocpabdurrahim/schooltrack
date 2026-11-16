@@ -255,6 +255,8 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpenStudents = { screen = Screen.Students },
                     onOpenChildren = { screen = Screen.Children },
                     onOpen = { screen = it },
+                    // the dashboard opens a child straight from its card
+                    onOpenStudent = { openStudent = it; screen = Screen.Student },
                     onSignOut = {
                         repo.signOut()
                         screen = Screen.Home
