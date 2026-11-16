@@ -38,11 +38,7 @@ class ScanRepository(
     val pending: StateFlow<Int> = _pending
 
     /** 'SMS-STU-76' from a printed card, or a bare '76' typed by hand. */
-    fun parseCode(raw: String): String? {
-        val code = raw.trim().uppercase()
-        Regex("^SMS-STU-(\\d+)$").find(code)?.let { return it.groupValues[1] }
-        return if (Regex("^\\d+$").matches(code)) code else null
-    }
+    fun parseCode(raw: String): String? = parseCardCode(raw)
 
     /**
      * Pulls every active student into Firestore's local cache, so cards can be
@@ -128,4 +124,17 @@ class ScanRepository(
         java.text.SimpleDateFormat("HH:mm", java.util.Locale.UK).apply {
             timeZone = java.util.TimeZone.getTimeZone("Asia/Dhaka")
         }.format(java.util.Date())
+}
+
+/**
+ * 'SMS-STU-76' from a printed card, or a bare '76' typed by hand.
+ *
+ * Top-level on purpose: this is the other half of what [cardCode] writes onto
+ * the ID card, and the pair of them is worth a unit test. Inside the
+ * repository it could not be tested without Firestore.
+ */
+fun parseCardCode(raw: String): String? {
+    val code = raw.trim().uppercase()
+    Regex("""^SMS-STU-(\d+)$""").find(code)?.let { return it.groupValues[1] }
+    return if (Regex("""^\d+$""").matches(code)) code else null
 }

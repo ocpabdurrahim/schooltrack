@@ -280,12 +280,62 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    owing), and **monthly heads are only expected up to the current month**, so
    nobody is billed in March for December. Exam fees are never predicted —
    there is no exam module yet, so they are collected as a named line.
-6. **Exams and results** — exam setup, mark entry, tabulation, progress report.
-   APEX pages 39–43. This is what makes the exam fee predictable, and what
-   fills the "Results and documents" box on the student page.
-7. **Certificates and ID cards** — testimonial, transfer, character; the QR ID
-   card the scanner already reads. APEX pages 45, 46.
-8. **Payroll** — staff salary structure, pay salary, salary register, payslip.
-   APEX pages 47–51.
-9. **Expenses and reports** — expense heads, vouchers, income vs expense.
-   APEX pages 53, 54, 1.
+6. ~~**Exams and results**~~ — exam and subject setup, mark entry, result
+   sheet with positions, publishing, and the printable progress report.
+   *Done.* The grading rules live in ONE place per app — `web/src/data/
+   grading.ts` and `android/.../data/Grading.kt` — with the **same 12 test
+   cases on both sides**, because a student must not be shown two different
+   GPAs. One F in a compulsory subject fails the exam; the optional 4th
+   subject only ever adds (points above 2.00, never in the divisor, failing it
+   fails nothing); a missing mark is not a zero, so there is no GPA and no
+   position until it is entered. Publishing closes mark entry and is what
+   lets a parent see the result — it freezes no numbers, since everything is
+   computed from the marks.
+   Still to do here: exam routine, admit cards, rooms and seat plan (p39–42).
+7. ~~**Certificates and ID cards**~~ — testimonial, transfer and character
+   certificates with a serial from a counter and a register of everything
+   issued, plus printable ID cards carrying the QR the gate scanner reads.
+   *Done.* The student's class, roll and parents' names are **snapshotted onto
+   the certificate**: a transfer certificate must keep saying Class 8 after the
+   roll is promoted. Nothing is edited or deleted — a certificate issued
+   wrongly is cancelled by issuing another, and the register keeps both.
+   **The card's QR is round-tripped in a test on both sides** (encoded, decoded
+   by an independent decoder, then fed through the scanner's own parser),
+   because a card that will not scan is discovered at the gate with a queue
+   behind it. Cards are printed from the web; the phone shows one card so a
+   card that will not scan can be held beside it.
+8. ~~**Payroll**~~ — salary structure per person, the annual increment, paying
+   a month, the salary register and printable payslips. APEX pages 47–51.
+   *Done, ADMIN only.* **One payment per person per month**, because the
+   document id is `staffId_YYYY-MM`: paying a month twice corrects the record
+   instead of paying twice, and the screen shows who is already paid so the
+   second run has to be deliberate. Every figure is copied onto the payment,
+   so a rise cannot rewrite an old payslip. **Allowances are amounts, not
+   percentages of the basic** — a percentage recalculates history. The
+   increment falls due twelve months after the last one, never "every
+   January", which would give someone who joined in November a thirteen-month
+   first year.
+9. ~~**Expenses and reports**~~ — expense heads, vouchers with a number from a
+   counter (`EXP-000001`, the format Oracle derived with a virtual column),
+   spending by head, and income against expense month by month. APEX pages 53,
+   54, 1. *Done.* **Income is what was COLLECTED, never what was charged** —
+   unpaid dues are a hope, and setting them beside real spending would make
+   the school look solvent on money nobody has handed over. Paying a salary in
+   the payroll screen does **not** post an expense by itself; that is stated on
+   the report rather than hidden.
+
+---
+
+## 8. What is still missing
+
+Everything above is built on both clients. These were part of the APEX app and
+have no counterpart here yet:
+
+- **Exam operations** — routine, admit cards, room allocation, seat plan
+  (APEX pages 39–42). The exam records exist; only the printed logistics are
+  absent.
+- **Attendance reports** — the monthly sheet, the low-attendance list and
+  holiday management (APEX pages 36–38). Marking and the per-student history
+  are built; these are the summaries on top of them.
+- **Setup of the live project** — `tools/bootstrap.mjs` has never been run
+  against `schooltrack-1941`, which is still empty.

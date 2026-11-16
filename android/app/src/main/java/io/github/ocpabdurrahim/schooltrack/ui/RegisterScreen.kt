@@ -103,7 +103,7 @@ fun RegisterScreen(
             TextButton(onClick = onBack) { Text("Back") }
         }
         Text(
-            today + "  Â·  " + present + " of " + rows.size + " present",
+            today + "  ·  " + present + " of " + rows.size + " present",
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -140,7 +140,7 @@ fun RegisterScreen(
         }
 
         if (busy) {
-            Text("Loadingâ€¦", modifier = Modifier.padding(top = 16.dp))
+            Text("Loading…", modifier = Modifier.padding(top = 16.dp))
         }
 
         LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp)) {

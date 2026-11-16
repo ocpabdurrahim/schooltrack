@@ -1,0 +1,594 @@
+package io.github.ocpabdurrahim.schooltrack.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
+import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
+import io.github.ocpabdurrahim.schooltrack.data.Exam
+import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
+import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.ResultRow
+import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
+import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
+import io.github.ocpabdurrahim.schooltrack.data.StudentResult
+import io.github.ocpabdurrahim.schooltrack.data.Subject
+import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.gradeFor
+import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
+import io.github.ocpabdurrahim.schooltrack.data.sheetFor
+import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
+import kotlinx.coroutines.launch
+
+// ===========================================================================
+// exams and subjects
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExamsScreen(
+    onBack: () -> Unit,
+    exams: ExamsRepository = remember { ExamsRepository() },
+    admin: AdminRepository = remember { AdminRepository() },
+) {
+    val scope = rememberCoroutineScope()
+    var examList by remember { mutableStateOf<List<Exam>>(emptyList()) }
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var classNames by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    var exam by remember { mutableStateOf(Exam("", "", "", "", false)) }
+    var subject by remember { mutableStateOf(Subject("", "")) }
+    var busy by remember { mutableStateOf(true) }
+    var problem by remember { mutableStateOf("") }
+
+    suspend fun load() {
+        try {
+            examList = exams.listExams()
+            subjects = exams.listSubjects()
+            classNames = admin.listAllClasses().filter { it.active }.map { it.className }.distinct()
+        } catch (_: Exception) {
+            problem = "Could not read the exams."
+        }
+        busy = false
+    }
+
+    LaunchedEffect(Unit) {
+        exam = exam.copy(examYear = java.time.Year.now().value.toString())
+        load()
+    }
+
+    AdminScaffold("Exams and subjects", "What is examined, and who sits what", onBack) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Exams", style = MaterialTheme.typography.titleMedium)
+                examList.forEach { e ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { exam = e; problem = "" }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                e.examName + " " + e.examYear,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                e.periodLabel + if (e.published) "  ·  published" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text("edit", color = MaterialTheme.colorScheme.primary)
+                    }
+                    HorizontalDivider()
+                }
+
+                Field("Exam name", exam.examName) { exam = exam.copy(examName = it) }
+                Field("Year", exam.examYear) { exam = exam.copy(examYear = it) }
+                Text(
+                    "Period label: " + periodLabelFor(
+                        exam.examName.ifBlank { "EXAM" }, exam.examYear,
+                    ) + " — the same text the fee module uses.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        if (exam.examName.isBlank()) { problem = "An exam needs a name."; return@Button }
+                        busy = true; problem = ""
+                        scope.launch {
+                            try {
+                                exams.saveExam(exam)
+                                exam = Exam("", "", java.time.Year.now().value.toString(), "", false)
+                                load()
+                            } catch (_: Exception) { problem = REFUSED; busy = false }
+                        }
+                    },
+                    modifier = Modifier.padding(top = 12.dp),
+                ) { Text(if (exam.examId.isBlank()) "Add exam" else "Save exam") }
+                Problem(problem)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Subjects", style = MaterialTheme.typography.titleMedium)
+                subjects.forEach { s ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { subject = s; problem = "" }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                s.subjectName + if (s.isOptional) "  (4th subject)" else "",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                s.classNames.joinToString(", ").ifBlank { "no class" } +
+                                    "  ·  " + s.fullMarks.toInt() + " marks",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text("edit", color = MaterialTheme.colorScheme.primary)
+                    }
+                    HorizontalDivider()
+                }
+
+                Field("Subject", subject.subjectName) { subject = subject.copy(subjectName = it) }
+                Field("Code", subject.subjectCode.orEmpty()) { subject = subject.copy(subjectCode = it) }
+                Field("Full marks", subject.fullMarks.toInt().toString(), numeric = true) {
+                    subject = subject.copy(fullMarks = it.toDoubleOrNull() ?: 100.0)
+                }
+
+                Text("Classes that sit it", style = MaterialTheme.typography.labelMedium,
+                     modifier = Modifier.padding(top = 12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    classNames.forEach { n ->
+                        FilterChip(
+                            selected = n in subject.classNames,
+                            onClick = {
+                                subject = subject.copy(
+                                    classNames = if (n in subject.classNames) subject.classNames - n
+                                    else subject.classNames + n,
+                                )
+                            },
+                            label = { Text(n) },
+                        )
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = subject.isOptional,
+                        onCheckedChange = { subject = subject.copy(isOptional = it) },
+                    )
+                    Text("Optional (4th subject)")
+                }
+                Text(
+                    "An optional subject only ever helps: points above 2.00 are added, it is " +
+                        "not counted in the average, and failing it does not fail the student.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        if (subject.subjectName.isBlank()) {
+                            problem = "A subject needs a name."; return@Button
+                        }
+                        if (subject.classNames.isEmpty()) {
+                            problem = "Tick at least one class that sits this subject."
+                            return@Button
+                        }
+                        busy = true; problem = ""
+                        scope.launch {
+                            try {
+                                exams.saveSubject(subject)
+                                subject = Subject("", "")
+                                load()
+                            } catch (_: Exception) { problem = REFUSED; busy = false }
+                        }
+                    },
+                    modifier = Modifier.padding(top = 12.dp),
+                ) { Text(if (subject.subjectId.isBlank()) "Add subject" else "Save subject") }
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// mark entry
+
+@Composable
+fun MarkEntryScreen(
+    onBack: () -> Unit,
+    repo: ExamsRepository = remember { ExamsRepository() },
+    people: PeopleRepository = remember { PeopleRepository() },
+    attendance: AttendanceRepository = remember { AttendanceRepository() },
+) {
+    val scope = rememberCoroutineScope()
+    var exams by remember { mutableStateOf<List<Exam>>(emptyList()) }
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var classes by remember { mutableStateOf<List<SchoolClass>>(emptyList()) }
+    var examId by remember { mutableStateOf("") }
+    var classId by remember { mutableStateOf("") }
+    var subjectId by remember { mutableStateOf("") }
+    var students by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
+    var entries by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
+    var busy by remember { mutableStateOf(true) }
+    var note by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        try {
+            exams = repo.listExams()
+            subjects = repo.listSubjects()
+            classes = attendance.listClasses()
+            examId = exams.firstOrNull { !it.published }?.examId ?: exams.firstOrNull()?.examId.orEmpty()
+            classId = classes.firstOrNull()?.classId.orEmpty()
+        } catch (_: Exception) {
+            problem = "Could not read the exams."
+        }
+        busy = false
+    }
+
+    val exam = exams.firstOrNull { it.examId == examId }
+    val className = students.firstOrNull()?.className.orEmpty()
+    val classSubjects = if (className.isBlank()) subjects else subjectsForClass(subjects, className)
+    val subject = classSubjects.firstOrNull { it.subjectId == subjectId }
+
+    LaunchedEffect(classId, examId, subjectId) {
+        if (classId.isBlank() || examId.isBlank()) return@LaunchedEffect
+        busy = true
+        try {
+            val roll = people.findStudents(classId, "")
+            val marks = repo.marksForExam(examId, classId).filter { it.subjectId == subjectId }
+            students = roll
+            entries = roll.associate { s ->
+                val got = marks.firstOrNull { it.studentId == s.studentId }
+                s.studentId to ((got?.marks?.let { m ->
+                    if (m == m.toLong().toDouble()) m.toLong().toString() else m.toString()
+                } ?: "") to (got?.absent ?: false))
+            }
+            problem = ""
+        } catch (_: Exception) {
+            problem = "Could not load the marks."
+        }
+        busy = false
+    }
+
+    LaunchedEffect(className, subjects) {
+        if (classSubjects.isNotEmpty() && classSubjects.none { it.subjectId == subjectId }) {
+            subjectId = classSubjects.first().subjectId
+        }
+    }
+
+    AdminScaffold(
+        "Mark entry",
+        listOfNotNull(
+            exam?.let { it.examName + " " + it.examYear },
+            classes.firstOrNull { it.classId == classId }?.displayName,
+            subject?.subjectName,
+        ).joinToString(" · ").ifBlank { "Pick an exam" },
+        onBack,
+    ) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Picker("Exam", exams.map { it.examId to (it.examName + " " + it.examYear) }, examId) {
+                    examId = it
+                }
+                Picker("Section", classes.map { it.classId to it.displayName }, classId) { classId = it }
+                Picker(
+                    "Subject",
+                    classSubjects.map {
+                        it.subjectId to it.subjectName + if (it.isOptional) " (4th)" else ""
+                    },
+                    subjectId,
+                ) { subjectId = it }
+
+                if (exam?.published == true) {
+                    Problem("This exam is published. Unpublish it before correcting a mark.")
+                }
+                if (classSubjects.isEmpty()) {
+                    Problem("No subject is assigned to this class yet.")
+                }
+                Problem(problem)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    (if (busy) "Working…" else students.size.toString() + " student(s)") +
+                        (subject?.let { "  ·  out of " + it.fullMarks.toInt() } ?: ""),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+
+                students.forEach { s ->
+                    val (marksText, absent) = entries[s.studentId] ?: ("" to false)
+                    val value = marksText.toDoubleOrNull()
+                    val grade = subject?.let { gradeFor(value, it.fullMarks, absent) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            s.rollNo.toString(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(28.dp),
+                        )
+                        Text(s.fullName, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            grade?.letter.orEmpty(),
+                            fontWeight = FontWeight.Bold,
+                            color = if (grade?.letter == "F") MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Field(
+                            "Marks", marksText, numeric = true,
+                            modifier = Modifier.weight(1f),
+                        ) { entries = entries + (s.studentId to (it to absent)) }
+                        Checkbox(
+                            checked = absent,
+                            onCheckedChange = { entries = entries + (s.studentId to (marksText to it)) },
+                        )
+                        Text("absent", style = MaterialTheme.typography.bodySmall)
+                    }
+                    HorizontalDivider()
+                }
+
+                Button(
+                    enabled = !busy && subject != null && students.isNotEmpty() &&
+                        exam?.published != true,
+                    onClick = {
+                        val s = subject ?: return@Button
+                        busy = true; problem = ""; note = ""
+                        scope.launch {
+                            try {
+                                repo.saveMarks(
+                                    students.map { st ->
+                                        val (m, absent) = entries[st.studentId] ?: ("" to false)
+                                        ResultRow(
+                                            examId = examId,
+                                            studentId = st.studentId,
+                                            subjectId = s.subjectId,
+                                            subjectName = s.subjectName,
+                                            marks = m.trim().toDoubleOrNull(),
+                                            absent = absent,
+                                            classId = classId,
+                                            rollNo = st.rollNo,
+                                            fullMarks = s.fullMarks,
+                                            isOptional = s.isOptional,
+                                        )
+                                    },
+                                )
+                                note = students.size.toString() + " marks saved."
+                            } catch (_: Exception) {
+                                problem = "That save was refused. Only a teacher or the head " +
+                                    "may enter marks."
+                            }
+                            busy = false
+                        }
+                    },
+                    modifier = Modifier.padding(top = 12.dp),
+                ) { Text(if (busy) "Saving…" else "Save marks") }
+
+                if (note.isNotEmpty()) {
+                    Text(note, color = MaterialTheme.colorScheme.primary,
+                         modifier = Modifier.padding(top = 8.dp))
+                }
+                Text(
+                    "A blank box means not entered yet, which is not a zero: that student has " +
+                        "no GPA until it is filled in.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// the sheet
+
+@Composable
+fun ResultsScreen(
+    isAdmin: Boolean,
+    onOpenStudent: (String) -> Unit,
+    onBack: () -> Unit,
+    repo: ExamsRepository = remember { ExamsRepository() },
+    people: PeopleRepository = remember { PeopleRepository() },
+    attendance: AttendanceRepository = remember { AttendanceRepository() },
+) {
+    val scope = rememberCoroutineScope()
+    var exams by remember { mutableStateOf<List<Exam>>(emptyList()) }
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var classes by remember { mutableStateOf<List<SchoolClass>>(emptyList()) }
+    var examId by remember { mutableStateOf("") }
+    var classId by remember { mutableStateOf("") }
+    var rows by remember { mutableStateOf<List<StudentResult>>(emptyList()) }
+    var busy by remember { mutableStateOf(true) }
+    var problem by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        try {
+            exams = repo.listExams()
+            subjects = repo.listSubjects()
+            classes = attendance.listClasses()
+            examId = exams.firstOrNull()?.examId.orEmpty()
+            classId = classes.firstOrNull()?.classId.orEmpty()
+        } catch (_: Exception) {
+            problem = "Could not read the exams."
+        }
+        busy = false
+    }
+
+    LaunchedEffect(examId, classId, subjects) {
+        if (examId.isBlank() || classId.isBlank()) return@LaunchedEffect
+        busy = true
+        try {
+            rows = sheetFor(
+                people.findStudents(classId, ""),
+                subjects,
+                repo.marksForExam(examId, classId),
+                examId,
+            )
+            problem = ""
+        } catch (_: Exception) {
+            problem = "Could not build the result sheet."
+        }
+        busy = false
+    }
+
+    val exam = exams.firstOrNull { it.examId == examId }
+    val className = rows.firstOrNull()?.student?.className.orEmpty()
+    val columns = if (className.isBlank()) emptyList() else subjectsForClass(subjects, className)
+
+    AdminScaffold(
+        "Result sheet",
+        listOfNotNull(
+            exam?.let { it.examName + " " + it.examYear },
+            classes.firstOrNull { it.classId == classId }?.displayName,
+        ).joinToString(" · ").ifBlank { "Pick an exam" },
+        onBack,
+    ) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Picker("Exam", exams.map { it.examId to (it.examName + " " + it.examYear) }, examId) {
+                    examId = it
+                }
+                Picker("Section", classes.map { it.classId to it.displayName }, classId) { classId = it }
+
+                if (isAdmin && exam != null) {
+                    Button(
+                        enabled = !busy,
+                        onClick = {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    repo.publishExam(exam.examId, !exam.published)
+                                    exams = repo.listExams()
+                                } catch (_: Exception) {
+                                    problem = "Only an administrator may publish a result."
+                                }
+                                busy = false
+                            }
+                        },
+                        modifier = Modifier.padding(top = 12.dp),
+                    ) { Text(if (exam.published) "Unpublish" else "Publish result") }
+                }
+                Problem(problem)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    if (busy) "Working…"
+                    else rows.size.toString() + " student(s)  ·  " +
+                        rows.count { (it.tabulation.gpa ?: 0.0) > 0 } + " passed",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+
+                rows.forEach { r ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpenStudent(r.student.studentId) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            r.student.rollNo.toString(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.width(28.dp),
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(r.student.fullName, style = MaterialTheme.typography.bodyMedium)
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                columns.forEach { c ->
+                                    val s = r.tabulation.subjects
+                                        .firstOrNull { it.mark.subjectId == c.subjectId }
+                                    Text(
+                                        c.subjectName.take(4) + " " +
+                                            when {
+                                                s == null -> "—"
+                                                s.mark.absent -> "abs"
+                                                s.mark.marks == null -> "—"
+                                                else -> s.mark.marks.toInt().toString()
+                                            } + "   ",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (s?.grade?.letter == "F")
+                                            MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                gpaText(r.tabulation.gpa),
+                                fontWeight = FontWeight.Bold,
+                                color = if (r.tabulation.letter == "F")
+                                    MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                r.tabulation.letter +
+                                    (r.position?.let { "  ·  pos " + it } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                }
+
+                Text(
+                    "A dash is a mark not yet entered, and that student has no GPA and no " +
+                        "position. The optional subject only ever adds.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                TextButton(onClick = onBack) { Text("Back") }
+            }
+        }
+    }
+}

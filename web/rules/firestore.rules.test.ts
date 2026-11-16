@@ -1,12 +1,12 @@
 ﻿/**
- * Security rules tests â€” SchoolTrack
+ * Security rules tests — SchoolTrack
  *
  * Run against the emulator, never the real project:
  *   firebase emulators:exec --only firestore "npm run test:rules"
  *
  * These prove the four things the whole model rests on
- * (docs/data-model.md Â§0 and Â§2):
- *   1. while a module belongs to Oracle, nobody may write it here â€” not even
+ * (docs/data-model.md §0 and §2):
+ *   1. while a module belongs to Oracle, nobody may write it here — not even
  *      an administrator
  *   2. a guardian sees their own children and nothing else, and can write
  *      nothing at all
@@ -156,7 +156,7 @@ describe('who may mark attendance', () => {
   });
 });
 
-describe('attendance writes must carry the snapshot (Â§4)', () => {
+describe('attendance writes must carry the snapshot (§4)', () => {
   const mark = (extra: Record<string, unknown>) => ({
     studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
     status: 'P', markedVia: 'SCAN',
@@ -200,7 +200,7 @@ describe('attendance writes must carry the snapshot (Â§4)', () => {
   });
 });
 
-describe('guardians (Â§2)', () => {
+describe('guardians (§2)', () => {
   it('reads their own child', async () => {
     await assertSucceeds(getDoc(doc(parent(), p('students', '76'))));
   });
@@ -312,7 +312,7 @@ describe('role boundaries', () => {
   });
 });
 
-describe('receipts and counters (Â§5)', () => {
+describe('receipts and counters (§5)', () => {
   it('a receipt cannot be edited, even by ADMIN', async () => {
     await assertFails(
       updateDoc(doc(admin(), p('payments', 'RCPT-000001')), { totalAmount: 1 }),

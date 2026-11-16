@@ -70,7 +70,7 @@ export default function Classes() {
     <div className="wrap">
       <div className="card">
         <h1>Classes and sections</h1>
-        <h2>{busy ? 'Workingâ€¦' : `${rows.length} section${rows.length === 1 ? '' : 's'}`}</h2>
+        <h2>{busy ? 'Working…' : `${rows.length} section${rows.length === 1 ? '' : 's'}`}</h2>
 
         {rows.map((c) => (
           <div className="row" key={c.classId}>
@@ -87,7 +87,7 @@ export default function Classes() {
 
         {!busy && rows.length === 0 && (
           <p style={{ color: 'var(--muted)', margin: 0 }}>
-            No sections yet. Add the first one below â€” students cannot be added until a
+            No sections yet. Add the first one below — students cannot be added until a
             section exists to put them in.
           </p>
         )}
@@ -123,7 +123,7 @@ export default function Classes() {
           In use
         </label>
 
-        <button onClick={save} disabled={busy}>{busy ? 'Savingâ€¦' : 'Save section'}</button>
+        <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save section'}</button>
         {editing && (
           <button className="link" style={{ marginLeft: 14 }}
                   onClick={() => { setEditing(null); setForm({ ...blank }); }}>

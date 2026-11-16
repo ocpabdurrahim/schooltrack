@@ -18,6 +18,10 @@ import kotlinx.coroutines.launch
 enum class Screen {
     Home, Register, Scan, Students, Student, Children,
     Setup, Classes, StaffAdmin, Users, StudentEdit,
+    ExamSetup, MarkEntry, Results, ReportCard,
+    Certificates, Certificate, IdCard,
+    Payroll, PaySalary, SalaryRegister, Payslip,
+    Expenses, IncomeExpense,
     FeeSetup, Collect, Receipts, Receipt, Dues,
 }
 
@@ -32,6 +36,11 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
     var openStudent by remember { mutableStateOf("") }
     var editStudent by remember { mutableStateOf("") }
     var openReceipt by remember { mutableStateOf("") }
+    var openExam by remember { mutableStateOf("") }
+    var openDoc by remember { mutableStateOf("") }
+    // the register opened from Home should show THIS month, not an empty one
+    var openMonth by remember { mutableStateOf(java.time.YearMonth.now().toString()) }
+    var openSlip by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -90,6 +99,9 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 )
 
                 screen == Screen.Student && mayOpen(openStudent) -> StudentScreen(
+                    onOpenReport = { openExam = it; screen = Screen.ReportCard },
+                    onOpenCard = { screen = Screen.IdCard },
+                    isGuardian = current is Access.Guardian,
                     studentId = openStudent,
                     onEdit = if (current.canEditStudents) {
                         { editStudent = openStudent; screen = Screen.StudentEdit }
@@ -128,6 +140,73 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
 
                 screen == Screen.Dues && current.canCollectFees ->
                     DuesScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.MarkEntry && isStaff ->
+                    MarkEntryScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.Results && isStaff -> ResultsScreen(
+                    isAdmin = current.isAdmin,
+                    onOpenStudent = { openStudent = it; screen = Screen.Student },
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.ReportCard && mayOpen(openStudent) -> ReportCardScreen(
+                    examId = openExam,
+                    studentId = openStudent,
+                    isGuardian = current is Access.Guardian,
+                    onBack = { screen = Screen.Student },
+                )
+
+                screen == Screen.Certificates && current is Access.Staff &&
+                    current.canEditStudents -> CertificatesScreen(
+                    email = current.email,
+                    onOpen = { openDoc = it; screen = Screen.Certificate },
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.Certificate && current.canEditStudents -> CertificateScreen(
+                    serialNo = openDoc,
+                    onBack = { screen = Screen.Certificates },
+                )
+
+                screen == Screen.IdCard && mayOpen(openStudent) -> IdCardScreen(
+                    studentId = openStudent,
+                    onBack = { screen = Screen.Student },
+                )
+
+                screen == Screen.Expenses && current is Access.Staff &&
+                    current.canCollectFees -> ExpensesScreen(
+                    email = current.email,
+                    isAdmin = current.isAdmin,
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.IncomeExpense && current.canCollectFees ->
+                    IncomeExpenseScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.Payroll && current.isAdmin ->
+                    SalaryStructureScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.PaySalary && current is Access.Staff && current.isAdmin ->
+                    PaySalaryScreen(
+                        email = current.email,
+                        onPaid = { openMonth = it; screen = Screen.SalaryRegister },
+                        onBack = { screen = Screen.Home },
+                    )
+
+                screen == Screen.SalaryRegister && current.isAdmin -> SalaryRegisterScreen(
+                    month = openMonth,
+                    onOpenPayslip = { openSlip = it; screen = Screen.Payslip },
+                    onBack = { screen = Screen.Home },
+                )
+
+                screen == Screen.Payslip && current.isAdmin -> PayslipScreen(
+                    id = openSlip,
+                    onBack = { screen = Screen.SalaryRegister },
+                )
+
+                screen == Screen.ExamSetup && current.isAdmin ->
+                    ExamsScreen(onBack = { screen = Screen.Home })
 
                 screen == Screen.FeeSetup && current.isAdmin ->
                     FeeSetupScreen(onBack = { screen = Screen.Home })

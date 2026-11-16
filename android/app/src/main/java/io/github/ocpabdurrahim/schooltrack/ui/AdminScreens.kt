@@ -203,7 +203,7 @@ fun SchoolSetupScreen(
                         }
                     },
                     modifier = Modifier.padding(top = 14.dp),
-                ) { Text(if (busy) "Savingâ€¦" else "Save settings") }
+                ) { Text(if (busy) "Saving…" else "Save settings") }
 
                 if (note.isNotEmpty()) {
                     Text(note, color = MaterialTheme.colorScheme.primary,
@@ -247,7 +247,7 @@ fun ClassesScreen(
 
     AdminScaffold(
         "Classes and sections",
-        if (busy) "Workingâ€¦" else "${rows.size} section(s)",
+        if (busy) "Working…" else "${rows.size} section(s)",
         onBack,
     ) {
         Card(Modifier.fillMaxWidth()) {
@@ -267,7 +267,7 @@ fun ClassesScreen(
                         Column {
                             Text(c.displayName, style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                c.classId + (if (!c.active) "  Â·  retired" else ""),
+                                c.classId + (if (!c.active) "  ·  retired" else ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -346,7 +346,7 @@ fun ClassesScreen(
                         }
                     },
                     modifier = Modifier.padding(top = 12.dp),
-                ) { Text(if (busy) "Savingâ€¦" else "Save section") }
+                ) { Text(if (busy) "Saving…" else "Save section") }
 
                 if (editingId != null) {
                     TextButton(onClick = { clear(); problem = "" }) { Text("cancel") }
@@ -375,7 +375,7 @@ fun StaffScreen(
         rows = try {
             repo.listStaff()
         } catch (_: Exception) {
-            problem = "Could not read the staff list â€” it is visible to the head, " +
+            problem = "Could not read the staff list — it is visible to the head, " +
                 "the accounts user and the office only."
             emptyList()
         }
@@ -384,7 +384,7 @@ fun StaffScreen(
 
     LaunchedEffect(Unit) { load() }
 
-    AdminScaffold("Staff", if (busy) "Workingâ€¦" else "${rows.size} record(s)", onBack) {
+    AdminScaffold("Staff", if (busy) "Working…" else "${rows.size} record(s)", onBack) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 rows.forEach { p ->
@@ -400,7 +400,7 @@ fun StaffScreen(
                                 listOfNotNull(
                                     p.designation,
                                     if (p.staffStatus != "ACTIVE") p.staffStatus else null,
-                                ).joinToString("  Â·  "),
+                                ).joinToString("  ·  "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -457,7 +457,7 @@ fun StaffScreen(
                         }
                     },
                     modifier = Modifier.padding(top = 12.dp),
-                ) { Text(if (busy) "Savingâ€¦" else "Save staff member") }
+                ) { Text(if (busy) "Saving…" else "Save staff member") }
 
                 if (form.staffId.isNotEmpty()) {
                     TextButton(onClick = { form = StaffRow(staffId = "", fullName = "") }) {

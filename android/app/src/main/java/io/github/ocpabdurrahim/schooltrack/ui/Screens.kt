@@ -36,6 +36,7 @@ import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.SchoolStats
 import io.github.ocpabdurrahim.schooltrack.data.canCollectFees
+import io.github.ocpabdurrahim.schooltrack.data.canEditStudents
 import io.github.ocpabdurrahim.schooltrack.data.isAdmin
 import kotlinx.coroutines.launch
 
@@ -111,7 +112,7 @@ fun SignInScreen(
                                 "to grant you access before you can see anything."
                             busy = false
                         } else if (!onSignIn(email, password)) {
-                            note = "Confirm your email address first â€” check your inbox " +
+                            note = "Confirm your email address first — check your inbox " +
                                 "for the link, then sign in again."
                             busy = false
                         }
@@ -132,8 +133,8 @@ fun SignInScreen(
         ) {
             Text(
                 when {
-                    busy && signingUp -> "Creatingâ€¦"
-                    busy -> "Signing inâ€¦"
+                    busy && signingUp -> "Creating…"
+                    busy -> "Signing in…"
                     signingUp -> "Create account"
                     else -> "Sign in"
                 },
@@ -256,6 +257,42 @@ fun HomeScreen(
                     ) { Text("My children") }
                 }
 
+                if (access is Access.Staff) {
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Exams",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.MarkEntry) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Mark entry") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Results) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Result sheet") }
+                    if (access.isAdmin) {
+                        OutlinedButton(
+                            onClick = { onOpen(Screen.ExamSetup) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Exams and subjects") }
+                    }
+                }
+
+                if (access.canEditStudents) {
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Documents",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Certificates) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Certificates") }
+                }
+
                 if (access.canCollectFees) {
                     HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
                     Text(
@@ -275,12 +312,41 @@ fun HomeScreen(
                         onClick = { onOpen(Screen.Dues) },
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     ) { Text("Dues") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Expenses) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Expenses") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.IncomeExpense) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Income and expense") }
                     if (access.isAdmin) {
                         OutlinedButton(
                             onClick = { onOpen(Screen.FeeSetup) },
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         ) { Text("Fee setup") }
                     }
+                }
+
+                if (access.isAdmin) {
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Payroll",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.PaySalary) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Pay salary") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.SalaryRegister) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Salary register") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Payroll) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Salary structure") }
                 }
 
                 if (access.isAdmin) {
@@ -320,7 +386,7 @@ fun HomeScreen(
         }
 
         Text(
-            "Fees, results, certificates and payroll are not built yet.",
+            "Exam routine, admit cards and the attendance reports are still to come.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
@@ -340,11 +406,11 @@ private fun DashboardCard(stats: SchoolStats?) {
             Text("At a glance", style = MaterialTheme.typography.titleMedium)
 
             if (stats == null) {
-                Text("Loadingâ€¦", modifier = Modifier.padding(top = 12.dp))
+                Text("Loading…", modifier = Modifier.padding(top = 12.dp))
                 return@Column
             }
 
-            val n = { v: Int? -> v?.toString() ?: "â€“" }
+            val n = { v: Int? -> v?.toString() ?: "–" }
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -377,7 +443,7 @@ private fun DashboardCard(stats: SchoolStats?) {
                         ) {
                             (stats.presentToday * 100 / stats.markedToday).toString() + "%"
                         } else {
-                            "â€“"
+                            "–"
                         },
                         "of marked",
                     )

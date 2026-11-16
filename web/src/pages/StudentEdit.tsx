@@ -127,7 +127,7 @@ export default function StudentEdit() {
             <label htmlFor="cls">Section</label>
             <select id="cls" value={form.classId}
                     onChange={(e) => setForm({ ...form, classId: e.target.value })}>
-              <option value="">â€” pick a section â€”</option>
+              <option value="">— pick a section —</option>
               {classes
                 .filter((c) => c.active !== false || c.classId === form.classId)
                 .map((c) => (
@@ -152,7 +152,7 @@ export default function StudentEdit() {
             <label htmlFor="g">Gender</label>
             <select id="g" value={form.gender}
                     onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-              <option value="">â€”</option>
+              <option value="">—</option>
               <option value="M">Male</option>
               <option value="F">Female</option>
             </select>
@@ -198,7 +198,7 @@ export default function StudentEdit() {
           attendance, receipts and certificates all point at this record.
         </p>
 
-        <button onClick={save} disabled={busy}>{busy ? 'Savingâ€¦' : 'Save student'}</button>
+        <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save student'}</button>
         <Link to={studentId ? `/students/${studentId}` : '/students'}
               style={{ marginLeft: 14, fontSize: 14 }}>
           cancel

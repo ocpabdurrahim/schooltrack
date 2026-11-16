@@ -108,8 +108,8 @@ export default function Scan() {
       <div className="card">
         <h1>Scan attendance</h1>
         <h2>
-          {counts.total ? `${counts.present} of ${counts.total} present` : 'Â '}
-          {' Â· '}
+          {counts.total ? `${counts.present} of ${counts.total} present` : ' '}
+          {' · '}
           <Link to="/attendance">mark by hand instead</Link>
         </h2>
 
@@ -117,7 +117,7 @@ export default function Scan() {
           <div style={{ flex: '1 1 200px' }}>
             <label htmlFor="cls">Section</label>
             <select id="cls" value={classId} onChange={(e) => setClassId(e.target.value)}>
-              <option value="">â€” Whole school (gate) â€”</option>
+              <option value="">— Whole school (gate) —</option>
               {classes.map((c) => (
                 <option key={c.classId} value={c.classId}>{c.displayName}</option>
               ))}
@@ -180,5 +180,5 @@ function beep(ok: boolean) {
     gain.gain.value = 0.08;
     osc.start();
     setTimeout(() => { osc.stop(); void ctx.close(); }, ok ? 110 : 320);
-  } catch { /* no audio on this device â€” the colour still shows */ }
+  } catch { /* no audio on this device — the colour still shows */ }
 }

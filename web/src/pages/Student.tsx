@@ -7,6 +7,9 @@ import {
   attendanceFor, getStudent, startOfMonth, startOfYear,
 } from '../data/people';
 import { type StudentFees, currentYear, money, studentFees } from '../data/fees';
+import { type Exam, listExams, listSubjects, resultsForStudent } from '../data/exams';
+import { type IssuedDocument, documentsFor, typeLabel } from '../data/documents';
+import { type Tabulation, gpaText } from '../data/grading';
 
 /**
  * One student, everything SchoolTrack knows.
@@ -25,6 +28,8 @@ export default function Student() {
   const [year, setYear] = useState<AttendanceSummary | null>(null);
   const [month, setMonth] = useState<AttendanceSummary | null>(null);
   const [fees, setFees] = useState<StudentFees | null>(null);
+  const [results, setResults] = useState<{ exam: Exam; tabulation: Tabulation }[] | null>(null);
+  const [docs, setDocs] = useState<IssuedDocument[] | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error' | 'forbidden'>('loading');
 
   useEffect(() => {
@@ -41,10 +46,26 @@ export default function Student() {
         setYear(y); setMonth(m);
         setState('ready');
 
-        // Fees are fetched after the page is usable and never allowed to fail
-        // it: a teacher may read neither receipts nor the rate card, and a
-        // guardian may read receipts but not the rate card.
+        // Fees and results are fetched after the page is usable and never
+        // allowed to fail it: a teacher may read neither receipts nor the rate
+        // card, and a guardian may read receipts but not the rate card.
         setFees(await studentFees(s, currentYear()).catch(() => null));
+
+        // A PARENT SEES PUBLISHED RESULTS ONLY. Staff see everything, so a
+        // teacher can check a sheet before it goes out; a parent reading a
+        // half-entered result would be reading a number that is going to move.
+        const all = await Promise.all([listExams(), listSubjects()])
+          .then(([exams, subjects]) => resultsForStudent(s, exams, subjects))
+          .catch(() => null);
+        setResults(
+          all === null ? null
+            : access.kind === 'guardian' ? all.filter((r) => r.exam.published)
+            : all,
+        );
+
+        // The register is the office's, so a teacher's refusal just hides the
+        // card rather than failing the page.
+        setDocs(await documentsFor(studentId).catch(() => null));
       } catch (e) {
         console.error('student page failed:', e);
         setState('error');
@@ -186,14 +207,61 @@ export default function Student() {
         </div>
       )}
 
-      <div className="card">
-        <h2>Results and documents</h2>
-        <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>
-          Not built yet. They will appear here as each module is added —
-          an empty box now would read as “no marks”, which is worse than
-          saying nothing.
-        </p>
-      </div>
+      {results !== null && results.length > 0 && (
+        <div className="card">
+          <h2>Results</h2>
+          {results.map(({ exam, tabulation }) => (
+            <div className="row" key={exam.examId}>
+              <span style={{ color: 'var(--ink)' }}>
+                <Link to={`/report/${exam.examId}/${studentId}`}>{exam.examName} {exam.examYear}</Link>
+                {!exam.published && (
+                  <span className="pill none" style={{ marginLeft: 8 }}>not published</span>
+                )}
+              </span>
+              <span>
+                {tabulation.incomplete
+                  ? <span style={{ color: 'var(--muted)' }}>marks not all in</span>
+                  : <>
+                      <strong style={{
+                        color: tabulation.letter === 'F' ? 'var(--bad)' : 'var(--accent)',
+                      }}>
+                        {gpaText(tabulation.gpa)}
+                      </strong>
+                      <span style={{ color: 'var(--muted)' }}> · {tabulation.letter}</span>
+                      {tabulation.failed.length > 0 && (
+                        <span style={{ color: 'var(--bad)' }}> · failed {tabulation.failed.join(', ')}</span>
+                      )}
+                    </>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {docs !== null && (
+        <div className="card">
+          <h2>Documents</h2>
+          {docs.length === 0 && (
+            <p style={{ color: 'var(--muted)', margin: 0 }}>
+              Nothing has been issued to this student.
+            </p>
+          )}
+          {docs.map((d) => (
+            <div className="row" key={d.serialNo}>
+              <span style={{ color: 'var(--ink)' }}>
+                <Link to={`/certificates/${d.serialNo}`}>{d.serialNo}</Link>
+                <span style={{ color: 'var(--muted)', marginLeft: 10 }}>{typeLabel(d.type)}</span>
+              </span>
+              <span>{d.issueDate}</span>
+            </div>
+          ))}
+          <p style={{ marginTop: 12, marginBottom: 0 }}>
+            <Link to="/certificates">Issue a certificate</Link>
+            {' · '}
+            <Link to="/id-cards">ID cards for this section</Link>
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -212,3 +280,6 @@ function summarise(a: AttendanceSummary | null) {
 function colour(s: Status) {
   return s === 'P' ? '#0a730a' : s === 'A' ? '#c00000' : s === 'L' ? '#b45309' : '#1d4ed8';
 }
+
+
+

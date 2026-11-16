@@ -53,7 +53,7 @@ export default function Staff() {
     <div className="wrap">
       <div className="card">
         <h1>Staff</h1>
-        <h2>{busy ? 'Workingâ€¦' : `${rows.length} record${rows.length === 1 ? '' : 's'}`}</h2>
+        <h2>{busy ? 'Working…' : `${rows.length} record${rows.length === 1 ? '' : 's'}`}</h2>
 
         {rows.map((p) => (
           <div className="row" key={p.staffId}>
@@ -113,7 +113,7 @@ export default function Staff() {
           </div>
         </div>
 
-        <button onClick={save} disabled={busy}>{busy ? 'Savingâ€¦' : 'Save staff member'}</button>
+        <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save staff member'}</button>
         {form.staffId && (
           <button className="link" style={{ marginLeft: 14 }}
                   onClick={() => { setForm({ ...blank }); setProblem(''); }}>
