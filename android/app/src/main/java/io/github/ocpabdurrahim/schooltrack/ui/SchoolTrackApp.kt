@@ -19,6 +19,8 @@ enum class Screen {
     Home, Register, Scan, Students, Student, Children,
     Setup, Classes, StaffAdmin, Users, StudentEdit,
     ExamSetup, MarkEntry, Results, ReportCard,
+    Routine, SeatPlan, AdmitCards,
+    MonthlySheet, LowAttendance, HolidayCalendar,
     Certificates, Certificate, IdCard,
     Payroll, PaySalary, SalaryRegister, Payslip,
     Expenses, IncomeExpense,
@@ -207,6 +209,29 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
 
                 screen == Screen.ExamSetup && current.isAdmin ->
                     ExamsScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.Routine && current.isAdmin ->
+                    RoutineScreen(onBack = { screen = Screen.Home })
+
+                // the plan is read by whoever is invigilating, not only the office
+                screen == Screen.SeatPlan && isStaff ->
+                    SeatPlanScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.AdmitCards && current.canEditStudents ->
+                    AdmitCardsScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.MonthlySheet && isStaff ->
+                    MonthlySheetScreen(onBack = { screen = Screen.Home })
+
+                screen == Screen.LowAttendance && isStaff -> LowAttendanceScreen(
+                    onOpenStudent = { openStudent = it; screen = Screen.Student },
+                    onBack = { screen = Screen.Home },
+                )
+
+                // the calendar and the weekend decide every percentage, so only
+                // the head may change them
+                screen == Screen.HolidayCalendar && current.isAdmin ->
+                    HolidaysScreen(onBack = { screen = Screen.Home })
 
                 screen == Screen.FeeSetup && current.isAdmin ->
                     FeeSetupScreen(onBack = { screen = Screen.Home })

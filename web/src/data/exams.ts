@@ -268,3 +268,97 @@ export async function getExam(examId: string): Promise<Exam | null> {
   const snap = await getDoc(doc(school(), 'exams', examId));
   return snap.exists() ? ({ examId, ...(snap.data() as Omit<Exam, 'examId'>) }) : null;
 }
+
+// ---------------------------------------------------------------------------
+// the two sheets
+//
+// Both are views over the same marks: nothing below is stored, so correcting a
+// mark corrects the tabulation, the result sheet and the progress report
+// together.
+
+/**
+ * The total of every subject sat, INCLUDING the optional one.
+ *
+ * The optional subject counts towards the total even though it only partly
+ * counts towards the GPA — that is how a tabulation sheet has always been
+ * read, and a total that silently dropped a subject the student sat would be
+ * queried by the first teacher to add up the row by hand.
+ *
+ * Null while any mark is missing: a part-total is worse than no total.
+ */
+export function totalMarks(t: Tabulation): number | null {
+  if (t.subjects.some((s) => s.marks === null && !s.absent)) return null;
+  return t.subjects.reduce((sum, s) => sum + (s.absent ? 0 : s.marks ?? 0), 0);
+}
+
+export type SubjectStat = {
+  subjectId: string;
+  subjectName: string;
+  highest: number | null;
+  lowest: number | null;
+  average: number | null;
+  passed: number;
+  failed: number;
+  absent: number;
+};
+
+/** Per-subject statistics for the foot of the tabulation sheet. */
+export function subjectStats(results: StudentResult[], subjects: Subject[]): SubjectStat[] {
+  return subjects.map((subject) => {
+    const marks: number[] = [];
+    let passed = 0;
+    let failed = 0;
+    let absent = 0;
+
+    for (const r of results) {
+      const s = r.tabulation.subjects.find((x) => x.subjectId === subject.subjectId);
+      if (!s) continue;
+      if (s.absent) { absent++; failed++; continue; }
+      if (s.marks === null) continue;
+      marks.push(s.marks);
+      if (s.letter === 'F') failed++; else passed++;
+    }
+
+    return {
+      subjectId: subject.subjectId,
+      subjectName: subject.subjectName,
+      highest: marks.length ? Math.max(...marks) : null,
+      lowest: marks.length ? Math.min(...marks) : null,
+      average: marks.length
+        ? Math.round((marks.reduce((a, b) => a + b, 0) / marks.length) * 10) / 10
+        : null,
+      passed,
+      failed,
+      absent,
+    };
+  });
+}
+
+/** How many of each grade, in scale order — the foot of the result sheet. */
+export function gradeDistribution(results: StudentResult[]): { letter: string; count: number }[] {
+  const order = ['A+', 'A', 'A-', 'B', 'C', 'D', 'F'];
+  const counts = new Map<string, number>();
+  for (const r of results) {
+    if (r.tabulation.incomplete) continue;
+    counts.set(r.tabulation.letter, (counts.get(r.tabulation.letter) ?? 0) + 1);
+  }
+  return order
+    .filter((letter) => counts.has(letter))
+    .map((letter) => ({ letter, count: counts.get(letter) ?? 0 }));
+}
+
+/**
+ * Merit order: best first, then by roll so the order is stable between runs.
+ * Students whose marks are not all in have no position and go last — they are
+ * not failures, they are simply not finished.
+ */
+export function meritOrder(results: StudentResult[]): StudentResult[] {
+  return [...results].sort((a, b) => {
+    if (a.tabulation.incomplete !== b.tabulation.incomplete) {
+      return a.tabulation.incomplete ? 1 : -1;
+    }
+    const diff = (b.tabulation.gpa ?? -1) - (a.tabulation.gpa ?? -1);
+    if (diff !== 0) return diff;
+    return a.student.rollNo - b.student.rollNo;
+  });
+}

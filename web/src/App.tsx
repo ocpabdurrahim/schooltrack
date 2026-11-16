@@ -1,6 +1,8 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
+import AdmitCards from './pages/AdmitCards';
 import Attendance from './pages/Attendance';
+import AttendanceMonthly from './pages/AttendanceMonthly';
 import Certificate from './pages/Certificate';
 import Certificates from './pages/Certificates';
 import Classes from './pages/Classes';
@@ -9,10 +11,12 @@ import Dues from './pages/Dues';
 import Exams from './pages/Exams';
 import Expenses from './pages/Expenses';
 import FeeSetup from './pages/FeeSetup';
+import Holidays from './pages/Holidays';
 import Home from './pages/Home';
 import IdCards from './pages/IdCards';
 import IncomeExpense from './pages/IncomeExpense';
 import Login from './pages/Login';
+import LowAttendance from './pages/LowAttendance';
 import MarkEntry from './pages/MarkEntry';
 import PaySalary from './pages/PaySalary';
 import Payslip from './pages/Payslip';
@@ -20,9 +24,11 @@ import Receipt from './pages/Receipt';
 import Receipts from './pages/Receipts';
 import ReportCard from './pages/ReportCard';
 import Results from './pages/Results';
+import Routine from './pages/Routine';
 import SalaryRegister from './pages/SalaryRegister';
 import SalaryStructure from './pages/SalaryStructure';
 import Scan from './pages/Scan';
+import SeatPlan from './pages/SeatPlan';
 import Setup from './pages/Setup';
 import Staff from './pages/Staff';
 import Student from './pages/Student';
@@ -49,18 +55,24 @@ function Nav() {
       {staff && <Link to="/students" style={here('/students')}>Students</Link>}
       {staff && <Link to="/attendance" style={here('/attendance')}>Attendance</Link>}
       {staff && <Link to="/scan" style={here('/scan')}>Scan</Link>}
+      {staff && <Link to="/attendance/monthly" style={here('/attendance/monthly')}>Monthly</Link>}
+      {staff && <Link to="/attendance/low" style={here('/attendance/low')}>Low %</Link>}
       {money && <Link to="/fees/collect" style={here('/fees/collect')}>Collect fee</Link>}
       {money && <Link to="/fees/receipts" style={here('/fees/receipts')}>Receipts</Link>}
       {money && <Link to="/fees/dues" style={here('/fees/dues')}>Dues</Link>}
       {staff && <Link to="/marks" style={here('/marks')}>Marks</Link>}
       {staff && <Link to="/results" style={here('/results')}>Results</Link>}
       {admin && <Link to="/exams" style={here('/exams')}>Exams</Link>}
+      {admin && <Link to="/exams/routine" style={here('/exams/routine')}>Routine</Link>}
+      {records && <Link to="/exams/admit-cards" style={here('/exams/admit-cards')}>Admit cards</Link>}
+      {staff && <Link to="/exams/seat-plan" style={here('/exams/seat-plan')}>Seat plan</Link>}
       {records && <Link to="/certificates" style={here('/certificates')}>Certificates</Link>}
       {records && <Link to="/id-cards" style={here('/id-cards')}>ID cards</Link>}
       {admin && <Link to="/fees/setup" style={here('/fees/setup')}>Fee setup</Link>}
       {admin && <Link to="/classes" style={here('/classes')}>Classes</Link>}
       {admin && <Link to="/staff" style={here('/staff')}>Staff</Link>}
       {admin && <Link to="/users" style={here('/users')}>Users</Link>}
+      {admin && <Link to="/attendance/holidays" style={here('/attendance/holidays')}>Holidays</Link>}
       {money && <Link to="/expenses" style={here('/expenses')}>Expenses</Link>}
       {money && <Link to="/reports/income-expense" style={here('/reports/income-expense')}>Report</Link>}
       {admin && <Link to="/payroll" style={here('/payroll')}>Payroll</Link>}
@@ -117,6 +129,11 @@ export default function App() {
             rules both check that it is theirs */}
         <Route path="/students/:studentId" element={<Student />} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
+        <Route path="/attendance/monthly" element={staffOnly(<AttendanceMonthly />)} />
+        <Route path="/attendance/low" element={staffOnly(<LowAttendance />)} />
+        {/* the holiday calendar and the weekend decide every percentage, so
+            only the head may change them */}
+        <Route path="/attendance/holidays" element={adminOnly(<Holidays />)} />
         <Route path="/scan" element={staffOnly(<Scan />)} />
         <Route path="/fees/collect" element={moneyOnly(<Collect />)} />
         <Route path="/fees/receipts" element={moneyOnly(<Receipts />)} />
@@ -124,6 +141,10 @@ export default function App() {
         <Route path="/fees/dues" element={moneyOnly(<Dues />)} />
         <Route path="/fees/setup" element={adminOnly(<FeeSetup />)} />
         <Route path="/exams" element={adminOnly(<Exams />)} />
+        <Route path="/exams/routine" element={adminOnly(<Routine />)} />
+        <Route path="/exams/admit-cards" element={recordsOnly(<AdmitCards />)} />
+        {/* the plan is read by whoever is invigilating, not only the office */}
+        <Route path="/exams/seat-plan" element={staffOnly(<SeatPlan />)} />
         <Route path="/certificates" element={recordsOnly(<Certificates />)} />
         <Route path="/certificates/:serialNo" element={recordsOnly(<Certificate />)} />
         <Route path="/id-cards" element={recordsOnly(<IdCards />)} />

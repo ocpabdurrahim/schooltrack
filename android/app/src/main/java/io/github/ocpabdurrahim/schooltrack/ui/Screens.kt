@@ -248,6 +248,27 @@ fun HomeScreen(
                         onClick = onOpenStudents,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) { Text("Students") }
+
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Attendance reports",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.MonthlySheet) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Monthly sheet") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.LowAttendance) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Low attendance") }
+                    if (access.isAdmin) {
+                        OutlinedButton(
+                            onClick = { onOpen(Screen.HolidayCalendar) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Holidays") }
+                    }
                 }
 
                 if (access is Access.Guardian) {
@@ -272,7 +293,21 @@ fun HomeScreen(
                         onClick = { onOpen(Screen.Results) },
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     ) { Text("Result sheet") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.SeatPlan) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Seat plan") }
+                    if (access.canEditStudents) {
+                        OutlinedButton(
+                            onClick = { onOpen(Screen.AdmitCards) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Admit cards") }
+                    }
                     if (access.isAdmin) {
+                        OutlinedButton(
+                            onClick = { onOpen(Screen.Routine) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Exam routine") }
                         OutlinedButton(
                             onClick = { onOpen(Screen.ExamSetup) },
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),

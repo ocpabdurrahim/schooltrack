@@ -6,8 +6,8 @@
  *
  * These prove the four things the whole model rests on
  * (docs/data-model.md §0 and §2):
- *   1. while a module belongs to Oracle, nobody may write it here — not even
- *      an administrator
+ *   1. access comes only from members/{email} or guardians/{email}; signing in
+ *      successfully grants nothing by itself
  *   2. a guardian sees their own children and nothing else, and can write
  *      nothing at all
  *   3. an attendance mark must carry its class/roll snapshot or be refused
@@ -110,6 +110,19 @@ beforeEach(async () => {
     });
 
     await setDoc(doc(db, p('counters', 'receipts')), { next: 2 });
+
+    await setDoc(doc(db, p('holidays', '2026-12-16')), {
+      date: '2026-12-16', name: 'Victory Day', source: 'SCHOOL', updatedAt: now,
+    });
+
+    await setDoc(doc(db, p('exams', 'HALF_YEARLY-2026')), {
+      examName: 'Half Yearly', examYear: 2026, published: false, updatedAt: now,
+    });
+
+    await setDoc(doc(db, p('settings', 'rooms')), {
+      rooms: [{ roomId: 'ROOM_101', roomName: 'Room 101', capacity: 30, columns: 2 }],
+      updatedAt: now,
+    });
   });
 });
 
@@ -333,5 +346,62 @@ describe('receipts and counters (§5)', () => {
 
   it('the counter cannot go backwards', async () => {
     await assertFails(setDoc(doc(accounts(), p('counters', 'receipts')), { next: 1 }));
+  });
+});
+
+describe('the calendar and exam operations', () => {
+  it('a TEACHER reads holidays — the monthly sheet cannot be drawn without them', async () => {
+    await assertSucceeds(getDoc(doc(teacher(), p('holidays', '2026-12-16'))));
+  });
+
+  it('only ADMIN may add a holiday', async () => {
+    await assertFails(
+      setDoc(doc(teacher(), p('holidays', '2026-02-21')), {
+        date: '2026-02-21', name: 'Language Day', updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(admin(), p('holidays', '2026-02-21')), {
+        date: '2026-02-21', name: 'Language Day', updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('a holiday must be stamped', async () => {
+    await assertFails(
+      setDoc(doc(admin(), p('holidays', '2026-02-21')), {
+        date: '2026-02-21', name: 'Language Day',
+      }),
+    );
+  });
+
+  // The one deletable record in the database. Delete is deliberately outside
+  // stamped(), because a delete carries no request.resource to stamp.
+  it('ADMIN may delete a holiday, and a TEACHER may not', async () => {
+    await assertFails(deleteDoc(doc(teacher(), p('holidays', '2026-12-16'))));
+    await assertSucceeds(deleteDoc(doc(admin(), p('holidays', '2026-12-16'))));
+  });
+
+  it('only ADMIN may set the routine, which lives on the exam', async () => {
+    const routine = [{
+      classId: '61', subjectId: 'BANGLA', subjectName: 'Bangla',
+      date: '2026-12-01', startTime: '10:00', endTime: '13:00',
+    }];
+    await assertFails(
+      setDoc(doc(teacher(), p('exams', 'HALF_YEARLY-2026')),
+        { routine, updatedAt: serverTimestamp() }, { merge: true }),
+    );
+    await assertSucceeds(
+      setDoc(doc(admin(), p('exams', 'HALF_YEARLY-2026')),
+        { routine, updatedAt: serverTimestamp() }, { merge: true }),
+    );
+  });
+
+  it('a TEACHER reads the rooms for the seat plan but cannot change them', async () => {
+    await assertSucceeds(getDoc(doc(teacher(), p('settings', 'rooms'))));
+    await assertFails(
+      setDoc(doc(teacher(), p('settings', 'rooms')),
+        { rooms: [], updatedAt: serverTimestamp() }, { merge: true }),
+    );
   });
 });

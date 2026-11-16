@@ -250,3 +250,86 @@ fun sheetFor(
 
     return rows.sortedBy { it.student.rollNo }
 }
+
+// ---------------------------------------------------------------------------
+// the two sheets
+//
+// Both are views over the same marks: nothing below is stored, so correcting a
+// mark corrects the tabulation, the result sheet and the progress report
+// together. The web twin is in web/src/data/exams.ts.
+
+/**
+ * The total of every subject sat, INCLUDING the optional one.
+ *
+ * The optional subject counts towards the total even though it only partly
+ * counts towards the GPA — that is how a tabulation sheet has always been
+ * read. Null while any mark is missing: a part-total is worse than none.
+ */
+fun totalMarks(t: Tabulation): Double? {
+    if (t.subjects.any { it.mark.marks == null && !it.mark.absent }) return null
+    return t.subjects.sumOf { if (it.mark.absent) 0.0 else (it.mark.marks ?: 0.0) }
+}
+
+data class SubjectStat(
+    val subjectId: String,
+    val subjectName: String,
+    val highest: Double?,
+    val lowest: Double?,
+    val average: Double?,
+    val passed: Int,
+    val failed: Int,
+    val absent: Int,
+)
+
+/** Per-subject statistics for the foot of the tabulation sheet. */
+fun subjectStats(results: List<StudentResult>, subjects: List<Subject>): List<SubjectStat> =
+    subjects.map { subject ->
+        val marks = mutableListOf<Double>()
+        var passed = 0
+        var failed = 0
+        var absent = 0
+
+        for (r in results) {
+            val s = r.tabulation.subjects.firstOrNull { it.mark.subjectId == subject.subjectId }
+                ?: continue
+            if (s.mark.absent) { absent++; failed++; continue }
+            val m = s.mark.marks ?: continue
+            marks += m
+            if (s.grade.letter == "F") failed++ else passed++
+        }
+
+        SubjectStat(
+            subjectId = subject.subjectId,
+            subjectName = subject.subjectName,
+            highest = marks.maxOrNull(),
+            lowest = marks.minOrNull(),
+            average = if (marks.isEmpty()) null
+            else Math.round(marks.average() * 10) / 10.0,
+            passed = passed,
+            failed = failed,
+            absent = absent,
+        )
+    }
+
+/** How many of each grade, in scale order — the foot of the result sheet. */
+fun gradeDistribution(results: List<StudentResult>): List<Pair<String, Int>> {
+    val order = listOf("A+", "A", "A-", "B", "C", "D", "F")
+    val counts = mutableMapOf<String, Int>()
+    for (r in results) {
+        if (r.tabulation.incomplete) continue
+        counts[r.tabulation.letter] = (counts[r.tabulation.letter] ?: 0) + 1
+    }
+    return order.filter { counts.containsKey(it) }.map { it to (counts[it] ?: 0) }
+}
+
+/**
+ * Merit order: best first, then by roll so the order is stable between runs.
+ * Students whose marks are not all in have no position and go last — they are
+ * not failures, they are simply not finished.
+ */
+fun meritOrder(results: List<StudentResult>): List<StudentResult> =
+    results.sortedWith(
+        compareBy<StudentResult> { it.tabulation.incomplete }
+            .thenByDescending { it.tabulation.gpa ?: -1.0 }
+            .thenBy { it.student.rollNo },
+    )

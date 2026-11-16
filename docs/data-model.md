@@ -280,8 +280,20 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    owing), and **monthly heads are only expected up to the current month**, so
    nobody is billed in March for December. Exam fees are never predicted —
    there is no exam module yet, so they are collected as a named line.
-6. ~~**Exams and results**~~ — exam and subject setup, mark entry, result
-   sheet with positions, publishing, and the printable progress report.
+6. ~~**Exams and results**~~ — exam and subject setup, mark entry, **two
+   sheets** (tabulation and result sheet), publishing, and the printable
+   progress report.
+   The **tabulation sheet** is the working grid: every subject's mark *and*
+   grade, the total, GPA, grade and position, with highest / lowest / average
+   / failed per subject at the foot. It prints landscape — `@page` cannot be
+   scoped to an element, so the rule is injected for the duration of the
+   print. The **result sheet** is what goes on the noticeboard: merit order,
+   total, GPA, grade, passed or failed with the failed subjects named, and a
+   summary with the pass percentage and grade distribution.
+   The **total includes the optional subject** even though it only partly
+   counts towards the GPA — that is how a tabulation has always been read —
+   and is null while any mark is missing, because a part-total is worse than
+   none.
    *Done.* The grading rules live in ONE place per app — `web/src/data/
    grading.ts` and `android/.../data/Grading.kt` — with the **same 12 test
    cases on both sides**, because a student must not be shown two different
@@ -291,7 +303,6 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    position until it is entered. Publishing closes mark entry and is what
    lets a parent see the result — it freezes no numbers, since everything is
    computed from the marks.
-   Still to do here: exam routine, admit cards, rooms and seat plan (p39–42).
 7. ~~**Certificates and ID cards**~~ — testimonial, transfer and character
    certificates with a serial from a counter and a register of everything
    issued, plus printable ID cards carrying the QR the gate scanner reads.
@@ -324,18 +335,51 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    the payroll screen does **not** post an expense by itself; that is stated on
    the report rather than hidden.
 
+10. ~~**Exam operations**~~ — the routine, the rooms, the seat plan and the
+    admit card. APEX pages 39–42. *Done.* None of it needed a new collection:
+    the routine lives on `exams/{examId}.routine` and the rooms in
+    `settings/rooms`, both of which already have rules — a new collection would
+    have meant a rules change and a deploy for a printed timetable.
+    **Two students of the same class are never seated side by side** while any
+    other class still has someone waiting: the classes are interleaved
+    round-robin in roll order, so the plan is also identical every time it is
+    printed. Anyone who does not fit is **reported, not dropped** off the end of
+    the last bench. The admit card reads its room and seat from the same
+    functions the seat plan prints, so a card cannot disagree with the plan on
+    the wall. Setting a paper and saving a room both run in a **transaction**:
+    the routine is one array on one document, so writing a copy held on screen
+    would silently drop whatever was added in between — two quick taps and a
+    paper vanishes.
+11. ~~**Attendance reports**~~ — the monthly sheet, the low-attendance list and
+    the holidays the other two depend on. APEX pages 36–38. *Done.* A working
+    day is a day that is neither a weekend nor a holiday, computed in one place
+    and tested on both sides, because getting it wrong makes every percentage
+    wrong; **a holiday falling on a weekend is counted once**, not twice.
+    The percentage is **of the days actually marked**, the same rule as
+    everywhere else here — a section nobody marked for a fortnight would
+    otherwise show every child as a truant — and a student with nothing marked
+    gets no percentage at all and stays off the low-attendance list: unmarked is
+    not absent. **A holiday is the one record in this database that may be
+    deleted** (a day marked by mistake has to come back, and nothing points at
+    it), which is why the rule splits `create, update` from `delete`: there is
+    no `request.resource` on a delete, so a single `write` rule with `stamped()`
+    refuses every removal. Attendance already marked on a day later made a
+    holiday is left alone — the register says what happened, and the calendar
+    should not rewrite it.
+
 ---
 
 ## 8. What is still missing
 
-Everything above is built on both clients. These were part of the APEX app and
-have no counterpart here yet:
+Every module of the APEX app is now built on both clients. What is left is not
+a feature:
 
-- **Exam operations** — routine, admit cards, room allocation, seat plan
-  (APEX pages 39–42). The exam records exist; only the printed logistics are
-  absent.
-- **Attendance reports** — the monthly sheet, the low-attendance list and
-  holiday management (APEX pages 36–38). Marking and the per-student history
-  are built; these are the summaries on top of them.
 - **Setup of the live project** — `tools/bootstrap.mjs` has never been run
-  against `schooltrack-1941`, which is still empty.
+  against `schooltrack-1941`, which is still empty, and the web app has never
+  been deployed to hosting. Both need the school's own administrator email.
+- **A real printed QR scanned by a real phone** — the card code is round-tripped
+  in a test on both sides, but no one has yet held a printed card in front of a
+  handset.
+- **Dependency advisories** — `npm audit` reports high-severity advisories in
+  `firebase` (`@grpc/grpc-js`) and `react-router-dom` (`@remix-run/router`).
+  They need a bump and a re-test, not a redesign.

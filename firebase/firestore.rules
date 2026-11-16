@@ -141,9 +141,15 @@ service cloud.firestore {
         allow write: if isAdmin(s) && stamped();
       }
 
+      // A holiday is the one record here that may be DELETED: a day marked by
+      // mistake has to come back, and nothing else points at the document.
+      // Delete is kept out of the stamped() guard on purpose -- there is no
+      // request.resource on a delete, so a single `write` rule with stamped()
+      // would refuse every removal.
       match /holidays/{date} {
         allow read: if isStaff(s) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if isAdmin(s);
       }
 
       // ---- attendance -------------------------------------------------------

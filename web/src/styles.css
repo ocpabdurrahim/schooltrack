@@ -39,6 +39,11 @@ select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radiu
 /* Printing a receipt prints the RECEIPT, not the screen it sits in. The APEX
    app's print button printing the whole page was a real complaint; here the
    nav, the buttons and every other card are dropped and the sheet is plain. */
+/* Portrait by default. The tabulation sheet needs landscape, and @page cannot
+   be scoped to an element or toggled by a class, so Results.tsx injects a
+   one-line @page rule before printing and removes it afterwards. */
+@page { size: A4 portrait; margin: 12mm; }
+
 @media print {
   .nav, .no-print { display: none !important; }
   body { background: #fff; }

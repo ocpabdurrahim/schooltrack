@@ -41,6 +41,10 @@ import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
 import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
+import io.github.ocpabdurrahim.schooltrack.data.meritOrder
+import io.github.ocpabdurrahim.schooltrack.data.subjectStats
+import io.github.ocpabdurrahim.schooltrack.data.totalMarks
 import io.github.ocpabdurrahim.schooltrack.data.gradeFor
 import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
@@ -427,7 +431,15 @@ fun MarkEntryScreen(
 }
 
 // ===========================================================================
-// the sheet
+// the two sheets
+//
+// TABULATION — the working grid: every subject's mark and grade, the total,
+// GPA, grade and position, with subject statistics at the foot.
+// RESULT SHEET — what goes on the noticeboard: merit order, passed or failed,
+// with the grade distribution.
+//
+// Both are views over the same marks. Printing is on the web app; a sheet
+// wants a sheet of paper.
 
 @Composable
 fun ResultsScreen(
@@ -444,6 +456,7 @@ fun ResultsScreen(
     var classes by remember { mutableStateOf<List<SchoolClass>>(emptyList()) }
     var examId by remember { mutableStateOf("") }
     var classId by remember { mutableStateOf("") }
+    var view by remember { mutableStateOf("tabulation") }
     var rows by remember { mutableStateOf<List<StudentResult>>(emptyList()) }
     var busy by remember { mutableStateOf(true) }
     var problem by remember { mutableStateOf("") }
@@ -473,7 +486,7 @@ fun ResultsScreen(
             )
             problem = ""
         } catch (_: Exception) {
-            problem = "Could not build the result sheet."
+            problem = "Could not build the sheet."
         }
         busy = false
     }
@@ -481,9 +494,14 @@ fun ResultsScreen(
     val exam = exams.firstOrNull { it.examId == examId }
     val className = rows.firstOrNull()?.student?.className.orEmpty()
     val columns = if (className.isBlank()) emptyList() else subjectsForClass(subjects, className)
+    val complete = rows.count { !it.tabulation.incomplete }
+    val passed = rows.count { (it.tabulation.gpa ?: 0.0) > 0 }
+    val stats = subjectStats(rows, columns)
+    val distribution = gradeDistribution(rows)
+    val shown = if (view == "sheet") meritOrder(rows) else rows
 
     AdminScaffold(
-        "Result sheet",
+        if (view == "sheet") "Result sheet" else "Tabulation sheet",
         listOfNotNull(
             exam?.let { it.examName + " " + it.examYear },
             classes.firstOrNull { it.classId == classId }?.displayName,
@@ -496,6 +514,14 @@ fun ResultsScreen(
                     examId = it
                 }
                 Picker("Section", classes.map { it.classId to it.displayName }, classId) { classId = it }
+                Picker(
+                    "Sheet",
+                    listOf(
+                        "tabulation" to "Tabulation (marks and grades)",
+                        "sheet" to "Result sheet (merit order)",
+                    ),
+                    view,
+                ) { view = it }
 
                 if (isAdmin && exam != null) {
                     Button(
@@ -523,42 +549,69 @@ fun ResultsScreen(
             Column(Modifier.padding(16.dp)) {
                 Text(
                     if (busy) "Working…"
-                    else rows.size.toString() + " student(s)  ·  " +
-                        rows.count { (it.tabulation.gpa ?: 0.0) > 0 } + " passed",
+                    else rows.size.toString() + " student(s)  ·  " + complete +
+                        " complete  ·  " + passed + " passed",
                     style = MaterialTheme.typography.titleMedium,
                 )
 
-                rows.forEach { r ->
+                shown.forEach { r ->
                     Row(
                         Modifier.fillMaxWidth().clickable { onOpenStudent(r.student.studentId) }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            r.student.rollNo.toString(),
+                            if (view == "sheet") (r.position?.toString() ?: "—")
+                            else r.student.rollNo.toString(),
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.width(28.dp),
+                            modifier = Modifier.width(32.dp),
                         )
                         Column(Modifier.weight(1f)) {
                             Text(r.student.fullName, style = MaterialTheme.typography.bodyMedium)
-                            Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                columns.forEach { c ->
-                                    val s = r.tabulation.subjects
-                                        .firstOrNull { it.mark.subjectId == c.subjectId }
-                                    Text(
-                                        c.subjectName.take(4) + " " +
-                                            when {
-                                                s == null -> "—"
-                                                s.mark.absent -> "abs"
-                                                s.mark.marks == null -> "—"
-                                                else -> s.mark.marks.toInt().toString()
-                                            } + "   ",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (s?.grade?.letter == "F")
-                                            MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+
+                            if (view == "tabulation") {
+                                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                    columns.forEach { c ->
+                                        val s = r.tabulation.subjects
+                                            .firstOrNull { it.mark.subjectId == c.subjectId }
+                                        Text(
+                                            c.subjectName.take(4) + " " +
+                                                when {
+                                                    s == null -> "—"
+                                                    s.mark.absent -> "abs"
+                                                    s.mark.marks == null -> "—"
+                                                    else -> s.mark.marks.toInt().toString() +
+                                                        " " + s.grade.letter
+                                                } + "   ",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (s?.grade?.letter == "F")
+                                                MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
+                                Text(
+                                    "total " + (totalMarks(r.tabulation)?.toInt()?.toString() ?: "—"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Text(
+                                    "roll " + r.student.rollNo + "  ·  total " +
+                                        (totalMarks(r.tabulation)?.toInt()?.toString() ?: "—") +
+                                        "  ·  " + when {
+                                            r.tabulation.incomplete -> "marks not all in"
+                                            r.tabulation.letter == "F" ->
+                                                "Failed" + if (r.tabulation.failed.isNotEmpty())
+                                                    " — " + r.tabulation.failed.joinToString(", ")
+                                                else ""
+                                            else -> "Passed"
+                                        },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (r.tabulation.letter == "F")
+                                        MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                         Column(horizontalAlignment = Alignment.End) {
@@ -571,7 +624,8 @@ fun ResultsScreen(
                             )
                             Text(
                                 r.tabulation.letter +
-                                    (r.position?.let { "  ·  pos " + it } ?: ""),
+                                    (if (view == "tabulation")
+                                        (r.position?.let { "  ·  pos " + it } ?: "") else ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -580,14 +634,87 @@ fun ResultsScreen(
                     HorizontalDivider()
                 }
 
-                Text(
-                    "A dash is a mark not yet entered, and that student has no GPA and no " +
-                        "position. The optional subject only ever adds.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-                TextButton(onClick = onBack) { Text("Back") }
+                if (!busy && rows.isEmpty()) Text("No students in this section.")
+            }
+        }
+
+        if (view == "tabulation" && stats.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("By subject", style = MaterialTheme.typography.titleMedium)
+                    stats.forEach { s ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(s.subjectName, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "highest " + (s.highest?.toInt()?.toString() ?: "—") +
+                                        "  ·  lowest " + (s.lowest?.toInt()?.toString() ?: "—") +
+                                        "  ·  average " + (s.average?.toString() ?: "—"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                s.failed.toString() + " failed",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (s.failed > 0) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        HorizontalDivider()
+                    }
+                    Text(
+                        "Statistics ignore a mark that has not been entered, and count an " +
+                            "absence as a fail. The optional subject adds to the total, and " +
+                            "to the GPA only above 2.00.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
+
+        if (view == "sheet" && rows.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Summary", style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Appeared", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(rows.size.toString())
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Passed", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            passed.toString() +
+                                if (complete > 0) "  (" + (passed * 100 / complete) + "%)" else "",
+                        )
+                    }
+                    distribution.forEach { (letter, count) ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(letter, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(count.toString())
+                        }
+                    }
+                    Text(
+                        "Printing is on the web app — a result sheet wants a sheet of paper.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
             }
         }
     }
