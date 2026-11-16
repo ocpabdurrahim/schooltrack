@@ -29,7 +29,7 @@ import { type SchoolStats, schoolStats } from '../data/people';
  * denied is worse than showing nothing at all.
  */
 export default function Home() {
-  const { access, logout } = useAuth();
+  const { access } = useAuth();
   const staff = access.kind === 'staff';
   const today = todayInDhaka();
 
@@ -99,7 +99,7 @@ export default function Home() {
             <span className="hero-who">
               {'name' in access ? access.name : 'email' in access ? access.email : ''}
             </span>
-            <button className="link" onClick={() => void logout()}>Sign out</button>
+            {/* Sign out lives in the bar now, on every page rather than this one */}
           </div>
         </header>
 

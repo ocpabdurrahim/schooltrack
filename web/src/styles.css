@@ -103,19 +103,22 @@ button[disabled], button[disabled]:hover { opacity: .55; cursor: default; backgr
   font-size: 12.5px; font-weight: 600;
 }
 
-/* --- the bar across the top ------------------------------------------------ */
+/* ---------------------------------------------------------------------------
+   The bar across the top: six menus at most, each opening a panel. On a small
+   screen the whole lot collapses behind one button and the panels become
+   accordions — same markup, different rules, so there is one behaviour to get
+   right rather than two.
+   --------------------------------------------------------------------------- */
 
 .nav {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: 0; z-index: 30;
   background: rgba(255, 255, 255, .94);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--line);
   padding: 9px 14px;
   display: flex; align-items: center; gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.nav::-webkit-scrollbar { display: none; }
+
 .nav-brand {
   display: inline-flex; align-items: center; gap: 9px;
   margin-right: 8px; padding-right: 12px;
@@ -128,12 +131,103 @@ button[disabled], button[disabled]:hover { opacity: .55; cursor: default; backgr
   width: 22px; height: 22px; border-radius: 7px;
   background: linear-gradient(140deg, var(--accent-ink), #12a873);
 }
-.nav a {
-  color: var(--muted); text-decoration: none; font-size: 14px;
-  padding: 7px 11px; border-radius: 999px; white-space: nowrap;
+
+.nav-menu { display: flex; align-items: center; gap: 2px; margin-right: auto; }
+.nav-group { position: relative; }
+
+/* a menu's own button, and Home, which is a link rather than a menu */
+.nav .nav-top {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin: 0; padding: 8px 12px;
+  border: 0; border-radius: 999px;
+  background: none; box-shadow: none;
+  color: var(--muted); font-family: inherit; font-size: 14.5px; font-weight: 500;
+  text-decoration: none; white-space: nowrap; cursor: pointer;
 }
-.nav a:hover { color: var(--ink); background: var(--line-soft); }
-.nav a.here { color: var(--accent-ink); background: var(--accent-soft); font-weight: 600; }
+.nav .nav-top:hover { background: var(--line-soft); color: var(--ink); }
+.nav .nav-top.showing { background: var(--line-soft); color: var(--ink); }
+.nav .nav-top.here { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.nav .nav-top svg { transition: transform .15s ease; }
+.nav .nav-top.showing svg { transform: rotate(180deg); }
+
+.nav-panel {
+  position: absolute; top: calc(100% + 7px); left: 0; z-index: 40;
+  min-width: 262px;
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: 13px;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, .13);
+  padding: 6px;
+}
+.nav-item {
+  display: block; padding: 9px 11px; border-radius: 9px;
+  color: var(--ink) !important; text-decoration: none; font-size: 14.5px;
+}
+.nav-item small { display: block; margin-top: 1px; color: var(--muted); font-size: 12.5px; }
+.nav-item:hover { background: var(--line-soft); }
+.nav-item.here { background: var(--accent-soft); color: var(--accent-ink) !important; font-weight: 600; }
+.nav-item.here small { color: var(--accent-ink); opacity: .75; }
+
+.nav-user { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.nav-role {
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--line-soft); color: var(--ink-soft);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+}
+.nav .nav-signout {
+  margin: 0; padding: 7px 11px;
+  background: none; box-shadow: none; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+}
+.nav .nav-signout:hover { background: var(--line-soft); color: var(--ink); }
+
+/* the one button everything hides behind on a small screen */
+.nav .nav-burger {
+  display: none; align-items: center; gap: 8px;
+  margin: 0 auto 0 0; padding: 7px 12px 7px 10px;
+  background: none; box-shadow: none;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--ink); font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.nav .nav-burger span { display: grid; gap: 3px; }
+.nav .nav-burger b { display: block; width: 15px; height: 2px; border-radius: 2px; background: var(--ink-soft); }
+.nav .nav-burger.open { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent-ink); }
+.nav .nav-burger.open b { background: var(--accent-ink); }
+
+@media (max-width: 900px) {
+  .nav { padding: 9px 12px; }
+  .nav .nav-burger { display: inline-flex; }
+  /* Home stays in the bar itself, so it is one tap on a phone too */
+  .nav .nav-home { width: auto; padding: 8px 11px; font-size: 14px; }
+
+  .nav-menu {
+    display: none;
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 40;
+    margin: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 14px 30px rgba(16, 24, 40, .12);
+    padding: 8px;
+    max-height: calc(100vh - 58px); overflow-y: auto;
+  }
+  .nav-menu.open { display: block; }
+
+  .nav-group { position: static; }
+  .nav .nav-top { width: 100%; justify-content: space-between; border-radius: 10px; padding: 11px 12px; font-size: 15px; }
+
+  /* the dropdown becomes an indented list under its own heading */
+  .nav-panel {
+    position: static; min-width: 0;
+    margin: 2px 0 6px 12px; padding: 0 0 0 10px;
+    border: 0; border-left: 2px solid var(--line); border-radius: 0;
+    box-shadow: none;
+  }
+  .nav-item { padding: 10px 10px; }
+}
+
+@media (max-width: 420px) {
+  .nav-brand { font-size: 0; gap: 0; padding-right: 10px; margin-right: 6px; }  /* the mark alone */
+  .nav-role { display: none; }
+}
 
 /* --- the scan screen ------------------------------------------------------- */
 

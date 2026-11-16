@@ -1,4 +1,5 @@
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import Nav from './components/Nav';
 import { useAuth } from './auth';
 import AdmitCards from './pages/AdmitCards';
 import Attendance from './pages/Attendance';
@@ -35,52 +36,6 @@ import Student from './pages/Student';
 import StudentEdit from './pages/StudentEdit';
 import Students from './pages/Students';
 import Users from './pages/Users';
-
-function Nav() {
-  const { pathname } = useLocation();
-  const { access } = useAuth();
-  if (access.kind === 'signedOut' || access.kind === 'none') return null;
-
-  const staff = access.kind === 'staff';
-  const admin = staff && access.role === 'ADMIN';
-  // who may touch money: the rules let ADMIN and ACCOUNTS read payments
-  const money = staff && (access.role === 'ADMIN' || access.role === 'ACCOUNTS');
-  // certificates and ID cards are the office's work, with the head
-  const records = staff && (access.role === 'ADMIN' || access.role === 'OFFICE');
-  const here = (p: string) => (pathname === p ? 'here' : undefined);
-
-  return (
-    <nav className="nav">
-      <Link className="nav-brand" to="/"><i aria-hidden="true" />SchoolTrack</Link>
-      <Link to="/" className={here('/')}>Home</Link>
-      {staff && <Link to="/students" className={here('/students')}>Students</Link>}
-      {staff && <Link to="/attendance" className={here('/attendance')}>Attendance</Link>}
-      {staff && <Link to="/scan" className={here('/scan')}>Scan</Link>}
-      {staff && <Link to="/attendance/monthly" className={here('/attendance/monthly')}>Monthly</Link>}
-      {staff && <Link to="/attendance/low" className={here('/attendance/low')}>Low %</Link>}
-      {money && <Link to="/fees/collect" className={here('/fees/collect')}>Collect fee</Link>}
-      {money && <Link to="/fees/receipts" className={here('/fees/receipts')}>Receipts</Link>}
-      {money && <Link to="/fees/dues" className={here('/fees/dues')}>Dues</Link>}
-      {staff && <Link to="/marks" className={here('/marks')}>Marks</Link>}
-      {staff && <Link to="/results" className={here('/results')}>Results</Link>}
-      {admin && <Link to="/exams" className={here('/exams')}>Exams</Link>}
-      {admin && <Link to="/exams/routine" className={here('/exams/routine')}>Routine</Link>}
-      {records && <Link to="/exams/admit-cards" className={here('/exams/admit-cards')}>Admit cards</Link>}
-      {staff && <Link to="/exams/seat-plan" className={here('/exams/seat-plan')}>Seat plan</Link>}
-      {records && <Link to="/certificates" className={here('/certificates')}>Certificates</Link>}
-      {records && <Link to="/id-cards" className={here('/id-cards')}>ID cards</Link>}
-      {admin && <Link to="/fees/setup" className={here('/fees/setup')}>Fee setup</Link>}
-      {admin && <Link to="/classes" className={here('/classes')}>Classes</Link>}
-      {admin && <Link to="/staff" className={here('/staff')}>Staff</Link>}
-      {admin && <Link to="/users" className={here('/users')}>Users</Link>}
-      {admin && <Link to="/attendance/holidays" className={here('/attendance/holidays')}>Holidays</Link>}
-      {money && <Link to="/expenses" className={here('/expenses')}>Expenses</Link>}
-      {money && <Link to="/reports/income-expense" className={here('/reports/income-expense')}>Report</Link>}
-      {admin && <Link to="/payroll" className={here('/payroll')}>Payroll</Link>}
-      {admin && <Link to="/setup" className={here('/setup')}>Setup</Link>}
-    </nav>
-  );
-}
 
 export default function App() {
   const { access } = useAuth();
