@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
@@ -53,7 +53,7 @@ export default function Attendance() {
       if (!opened) { await openSession(date, email); setOpened(true); }
       await mark(row, date, status, 'MANUAL', email);
     } catch {
-      setProblem('That change was refused — attendance may still belong to the APEX app.');
+      setProblem('That change was refused. Your account may not mark attendance.');
       void refresh();
     }
   }
@@ -66,7 +66,7 @@ export default function Attendance() {
         <h1>Attendance</h1>
         <h2>
           {opened ? `${present} of ${rows.length} present` : 'Not taken yet for this day'}
-          {' · '}
+          {' Â· '}
           <Link to="/scan">scan cards instead</Link>
         </h2>
 
@@ -90,7 +90,7 @@ export default function Attendance() {
       {problem && <div className="card"><div className="err">{problem}</div></div>}
 
       <div className="card">
-        {busy && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+        {busy && <p style={{ color: 'var(--muted)' }}>Loadingâ€¦</p>}
         {!busy && rows.length === 0 && <p style={{ color: 'var(--muted)' }}>No active students in this section.</p>}
 
         {rows.map((r) => (
@@ -124,7 +124,7 @@ export default function Attendance() {
       {!canMark && (
         <div className="card">
           <p style={{ margin: 0, fontSize: 14, color: 'var(--muted)' }}>
-            You can see this register but not change it — marking attendance is for
+            You can see this register but not change it â€” marking attendance is for
             teachers and administrators.
           </p>
         </div>

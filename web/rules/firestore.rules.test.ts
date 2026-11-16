@@ -1,12 +1,12 @@
-/**
- * Security rules tests — SchoolTrack
+﻿/**
+ * Security rules tests â€” SchoolTrack
  *
  * Run against the emulator, never the real project:
  *   firebase emulators:exec --only firestore "npm run test:rules"
  *
  * These prove the four things the whole model rests on
- * (docs/data-model.md §0 and §2):
- *   1. while a module belongs to Oracle, nobody may write it here — not even
+ * (docs/data-model.md Â§0 and Â§2):
+ *   1. while a module belongs to Oracle, nobody may write it here â€” not even
  *      an administrator
  *   2. a guardian sees their own children and nothing else, and can write
  *      nothing at all
@@ -48,16 +48,6 @@ const parent = () => who('parent@home.test').firestore();
 const stranger = () => env.unauthenticatedContext().firestore();
 
 const p = (...parts: string[]) => ['schools', SCHOOL, ...parts].join('/');
-
-/** Sets who owns a module, bypassing the rules the way the console does. */
-async function setOwnership(modules: Record<string, string>) {
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), p('settings', 'ownership')), {
-      ...modules,
-      updatedAt: new Date(),
-    });
-  });
-}
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
@@ -121,12 +111,6 @@ beforeEach(async () => {
 
     await setDoc(doc(db, p('counters', 'receipts')), { next: 2 });
   });
-
-  // every module starts with Oracle owning it — the safe default
-  await setOwnership({
-    attendance: 'ORACLE', fees: 'ORACLE', people: 'ORACLE',
-    results: 'ORACLE', payroll: 'ORACLE', expenses: 'ORACLE',
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -140,19 +124,8 @@ describe('signed out', () => {
   });
 });
 
-describe('ownership switch (§0)', () => {
-  it('ADMIN cannot write attendance while Oracle owns it', async () => {
-    await assertFails(
-      setDoc(doc(admin(), p('attendanceMarks', '2026-11-16_76')), {
-        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
-        status: 'P', markedVia: 'MANUAL',
-        markedBy: 'admin@school.test', markedAt: serverTimestamp(),
-      }),
-    );
-  });
-
-  it('TEACHER can write attendance once the app owns it', async () => {
-    await setOwnership({ attendance: 'APP' });
+describe('who may mark attendance', () => {
+  it('TEACHER can mark', async () => {
     await assertSucceeds(
       setDoc(doc(teacher(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
@@ -162,23 +135,28 @@ describe('ownership switch (§0)', () => {
     );
   });
 
-  it('a missing ownership doc is read as ORACLE, not as permission', async () => {
-    await env.withSecurityRulesDisabled(async (ctx) =>
-      deleteDoc(doc(ctx.firestore(), p('settings', 'ownership'))),
-    );
+  it('ACCOUNTS cannot mark', async () => {
     await assertFails(
-      setDoc(doc(admin(), p('attendanceMarks', '2026-11-16_76')), {
+      setDoc(doc(accounts(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
         status: 'P', markedVia: 'MANUAL',
-        markedBy: 'admin@school.test', markedAt: serverTimestamp(),
+        markedBy: 'accounts@school.test', markedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('a member whose access was switched off cannot mark', async () => {
+    await assertFails(
+      setDoc(doc(retired(), p('attendanceMarks', '2026-11-16_76')), {
+        studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
+        status: 'P', markedVia: 'MANUAL',
+        markedBy: 'retired@school.test', markedAt: serverTimestamp(),
       }),
     );
   });
 });
 
-describe('attendance writes must carry the snapshot (§4)', () => {
-  beforeEach(() => setOwnership({ attendance: 'APP' }));
-
+describe('attendance writes must carry the snapshot (Â§4)', () => {
   const mark = (extra: Record<string, unknown>) => ({
     studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
     status: 'P', markedVia: 'SCAN',
@@ -222,7 +200,7 @@ describe('attendance writes must carry the snapshot (§4)', () => {
   });
 });
 
-describe('guardians (§2)', () => {
+describe('guardians (Â§2)', () => {
   it('reads their own child', async () => {
     await assertSucceeds(getDoc(doc(parent(), p('students', '76'))));
   });
@@ -245,8 +223,7 @@ describe('guardians (§2)', () => {
     );
   });
 
-  it('cannot write attendance even when the app owns it', async () => {
-    await setOwnership({ attendance: 'APP' });
+  it('cannot write attendance', async () => {
     await assertFails(
       setDoc(doc(parent(), p('attendanceMarks', '2026-11-16_76')), {
         studentId: '76', classId: '61', rollNo: 76, date: '2026-11-16',
@@ -290,8 +267,7 @@ describe('role boundaries', () => {
     await assertFails(getDoc(doc(teacher(), p('payments', 'RCPT-000001'))));
   });
 
-  it('a TEACHER cannot create a payment even when the app owns fees', async () => {
-    await setOwnership({ fees: 'APP' });
+  it('a TEACHER cannot create a payment', async () => {
     await assertFails(
       setDoc(doc(teacher(), p('payments', 'RCPT-000002')), {
         receiptNo: 'RCPT-000002', studentId: '76', totalAmount: 100,
@@ -301,8 +277,7 @@ describe('role boundaries', () => {
     );
   });
 
-  it('ACCOUNTS can create a payment once the app owns fees', async () => {
-    await setOwnership({ fees: 'APP' });
+  it('ACCOUNTS can create a payment', async () => {
     await assertSucceeds(
       setDoc(doc(accounts(), p('payments', 'RCPT-000002')), {
         receiptNo: 'RCPT-000002', studentId: '76', totalAmount: 100,
@@ -337,16 +312,14 @@ describe('role boundaries', () => {
   });
 });
 
-describe('receipts and counters (§5)', () => {
+describe('receipts and counters (Â§5)', () => {
   it('a receipt cannot be edited, even by ADMIN', async () => {
-    await setOwnership({ fees: 'APP' });
     await assertFails(
       updateDoc(doc(admin(), p('payments', 'RCPT-000001')), { totalAmount: 1 }),
     );
   });
 
   it('a receipt cannot be deleted, even by ADMIN', async () => {
-    await setOwnership({ fees: 'APP' });
     await assertFails(deleteDoc(doc(admin(), p('payments', 'RCPT-000001'))));
   });
 

@@ -1,0 +1,210 @@
+﻿import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
+import { getStudent } from '../data/people';
+
+type Form = {
+  fullName: string;
+  rollNo: number;
+  classId: string;
+  regNo: string;
+  groupName: string;
+  gender: string;
+  dob: string;
+  fatherName: string;
+  motherName: string;
+  bloodGroup: string;
+  mobileNo: string;
+  status: 'A' | 'I';
+};
+
+const blank: Form = {
+  fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', gender: '',
+  dob: '', fatherName: '', motherName: '', bloodGroup: '', mobileNo: '', status: 'A',
+};
+
+export default function StudentEdit() {
+  const { studentId } = useParams();
+  const navigate = useNavigate();
+  const isNew = !studentId;
+
+  const [form, setForm] = useState<Form>(blank);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [problem, setProblem] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        // ALL classes, not only the ones in use: a student may sit in a section
+        // that has since been retired, and filtering it out here would silently
+        // blank their section the next time anyone saved the record.
+        const cs = await listAllClasses();
+        if (!live) return;
+        setClasses(cs);
+
+        if (studentId) {
+          const s = await getStudent(studentId);
+          if (!live) return;
+          if (!s) { setProblem('No student with that number.'); return; }
+          setForm({
+            fullName: s.fullName ?? '',
+            rollNo: s.rollNo ?? 0,
+            classId: s.classId ?? '',
+            regNo: s.regNo ?? '',
+            groupName: s.groupName ?? '',
+            gender: s.gender ?? '',
+            dob: s.dob ?? '',
+            fatherName: s.fatherName ?? '',
+            motherName: s.motherName ?? '',
+            bloodGroup: s.bloodGroup ?? '',
+            mobileNo: s.mobileNo ?? '',
+            status: s.status ?? 'A',
+          });
+        } else {
+          const first = cs.find((c) => c.active !== false);
+          if (first) setForm((f) => ({ ...f, classId: first.classId }));
+        }
+      } catch {
+        if (live) setProblem('Could not load this page.');
+      } finally {
+        if (live) setBusy(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [studentId]);
+
+  const text = (k: keyof Form) => ({
+    value: String(form[k] ?? ''),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm({ ...form, [k]: e.target.value }),
+  });
+
+  async function save() {
+    if (!form.fullName.trim()) { setProblem('A student needs a name.'); return; }
+    if (!form.classId) { setProblem('Pick a section. If there are none, add one first.'); return; }
+
+    setBusy(true);
+    setProblem('');
+    try {
+      const id = await saveStudent({ ...form, studentId, className: '', section: '' }, classes);
+      navigate(`/students/${id}`);
+    } catch {
+      setProblem(
+        'That save was refused. Only the head or the office may add students.',
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="wrap">
+      <div className="card">
+        <h1>{isNew ? 'New student' : `Edit student ${studentId}`}</h1>
+        <h2>
+          {isNew
+            ? 'The student number is given automatically, and becomes the QR code on the ID card'
+            : `Card code SMS-STU-${studentId}`}
+        </h2>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '3 1 260px' }}>
+            <label htmlFor="fn">Full name</label>
+            <input id="fn" {...text('fullName')} />
+          </div>
+          <div style={{ flex: '1 1 100px' }}>
+            <label htmlFor="roll">Roll</label>
+            {/* empty rather than 0 on a new record: a prefilled zero has to be
+                deleted before every single student is typed in */}
+            <input id="roll" type="number" value={form.rollNo || ''}
+                   onChange={(e) => setForm({ ...form, rollNo: Number(e.target.value) })} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '2 1 200px' }}>
+            <label htmlFor="cls">Section</label>
+            <select id="cls" value={form.classId}
+                    onChange={(e) => setForm({ ...form, classId: e.target.value })}>
+              <option value="">â€” pick a section â€”</option>
+              {classes
+                .filter((c) => c.active !== false || c.classId === form.classId)
+                .map((c) => (
+                  <option key={c.classId} value={c.classId}>
+                    {c.displayName}{c.active === false ? ' (retired)' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 160px' }}>
+            <label htmlFor="reg">Registration no.</label>
+            <input id="reg" {...text('regNo')} />
+          </div>
+          <div style={{ flex: '1 1 140px' }}>
+            <label htmlFor="grp">Group</label>
+            <input id="grp" placeholder="Science" {...text('groupName')} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 140px' }}>
+            <label htmlFor="g">Gender</label>
+            <select id="g" value={form.gender}
+                    onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+              <option value="">â€”</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+          <div style={{ flex: '1 1 160px' }}>
+            <label htmlFor="dob">Date of birth</label>
+            <input id="dob" type="date" {...text('dob')} />
+          </div>
+          <div style={{ flex: '1 1 120px' }}>
+            <label htmlFor="bg">Blood group</label>
+            <input id="bg" placeholder="B+" {...text('bloodGroup')} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 220px' }}>
+            <label htmlFor="fa">Father's name</label>
+            <input id="fa" {...text('fatherName')} />
+          </div>
+          <div style={{ flex: '1 1 220px' }}>
+            <label htmlFor="mo">Mother's name</label>
+            <input id="mo" {...text('motherName')} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}>
+            <label htmlFor="mob">Guardian's mobile</label>
+            <input id="mob" {...text('mobileNo')} />
+          </div>
+          <div style={{ flex: '1 1 200px' }}>
+            <label htmlFor="st">Status</label>
+            <select id="st" value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value as 'A' | 'I' })}>
+              <option value="A">Studying</option>
+              <option value="I">Left</option>
+            </select>
+          </div>
+        </div>
+
+        <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 14 }}>
+          A student who leaves is marked <strong>Left</strong> rather than removed: their
+          attendance, receipts and certificates all point at this record.
+        </p>
+
+        <button onClick={save} disabled={busy}>{busy ? 'Savingâ€¦' : 'Save student'}</button>
+        <Link to={studentId ? `/students/${studentId}` : '/students'}
+              style={{ marginLeft: 14, fontSize: 14 }}>
+          cancel
+        </Link>
+        {problem && <div className="err">{problem}</div>}
+      </div>
+    </div>
+  );
+}

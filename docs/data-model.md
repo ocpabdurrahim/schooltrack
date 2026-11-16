@@ -1,37 +1,28 @@
 # SchoolTrack — data model
 
-Android (Kotlin/Compose) + Web (React/Vite) on Firestore, rebuilding the
-Oracle APEX app **SMS** (app 161019, Matkhola ML High School).
-Same shape as [[SkillTrack]]: `firebase/firestore.rules` quotes the section
-headings below, so when a rule looks surprising the reason is here.
+Android (Kotlin/Compose) + Web (React/Vite) on Firestore: a **standalone
+school management app**, the same shape as [[SkillTrack]].
+`firebase/firestore.rules` quotes the section headings below, so when a rule
+looks surprising the reason is here.
 
 ---
 
-## 0. The decision that matters most: who owns the data
+## 0. What this app is
 
-The APEX app is **in daily use** — fees are being collected, attendance taken,
-salaries paid. Firestore is a second database. The moment both are live for the
-same module, the two disagree and neither can be trusted.
+SchoolTrack is the system of record. It holds its own data and is not linked
+to any other system.
 
-So this is a **migration with a transition**, not two systems running forever:
+It began life (Nov 2026) as a companion to the Oracle APEX app **SMS** (app
+161019), with a `settings/ownership` document saying which system owned each
+module and rules that refused writes to anything Oracle owned. **That is gone.**
+The switch, the rules gate and the one-way CSV mirror were removed on
+2026-11-15 when the app became a standalone replica. Anything in this repo that
+still speaks of a module "belonging" to Oracle is out of date — and the
+importer under `tools/` is now only an optional one-time way to carry old
+records in, not part of how the app works.
 
-| Module | Owner at launch | Then |
-|---|---|---|
-| Attendance (incl. QR gate) | **SchoolTrack** from go-live day | APEX pages 35/44/55 stop being used |
-| Fees | **SchoolTrack** once the receipt counter is cut over | APEX page 15 becomes read-only |
-| Students, staff, classes, subjects | **Oracle**, mirrored read-only | ported when their screens land |
-| Results, exams, certificates, payroll, expenses | **Oracle** | ported module by module |
-
-Two rules that keep this honest:
-
-1. **One owner per module, written down, from day one.** No module is ever
-   written by both systems — not "temporarily", not "just this week".
-2. **The mirror is one-way.** Oracle → Firestore, re-runnable, never the
-   reverse. A mirrored collection is read-only in the rules, so a bug in the app
-   cannot corrupt data that Oracle still owns.
-
-Cut-over day for a module = flip its owner here, make the APEX page read-only,
-re-run the mirror once more, and let SchoolTrack write from then on.
+The APEX app remains the reference for *what the screens must do* — its
+modules are listed in §7 as the build order — but not for where the data lives.
 
 ---
 
@@ -255,34 +246,46 @@ the correct behaviour for history anyway (§4).
 
 ---
 
-## 6. Migration from Oracle
+## 6. First run, and carrying old records in
 
-One-way, re-runnable, in `tools/`:
+A new Firebase project is empty, and access comes only from a `members`
+document that only an ADMIN may write — a deliberate deadlock. `tools/
+bootstrap.mjs` breaks it once through the Admin SDK: the school document, the
+settings, and the first ADMIN. Everything after that happens in the app.
 
-1. Export from APEX SQL Workshop as JSON/CSV per table.
-2. `tools/import.mjs` maps rows to the documents above, preserving ids, in
-   dependency order: settings → classes → students → staff → members → subjects
-   → exams → results → holidays → feeHeads → feeStructure → discounts →
-   payments → expenses → salaryPayments.
-3. Re-running updates in place (`set` with merge on the same ids). Safe to run
-   repeatedly while the mirror is live.
-
-The seven Oracle objects with no DDL on disk (`school_settings`, the five
-finance tables, `v_fee_paid`) are **read** by the export, so the missing scripts
-do not block this — but generating that DDL is still worth doing before the
-school depends on two systems at once.
+Carrying records over from the old APEX app is **optional** and not part of how
+the app runs. If it is ever wanted: export per table from SQL Workshop with
+`tools/export-reference.sql`, then `tools/import.mjs`, which preserves ids and
+is safe to re-run (`set` with merge).
 
 ---
 
 ## 7. Build order
 
-1. **Foundation** — project scaffold, auth, `members`/`guardians`, rules + rules
-   tests, the mirror importer.
-2. **Attendance + QR** — the module that justifies a phone app: camera scanning,
-   offline queue, today's register, monthly view. Cut over from APEX.
-3. **Lookups and dashboards** — student 360, school totals. Read-only, no
-   migration risk.
-4. **Fees** — collection, receipt, dues. Cut over once the counter is moved.
-5. **Guardian portal** — my child's results, attendance, dues. Read-only.
-6. **The rest** — results and mark entry, exams, certificates, payroll,
-   expenses, until APEX is only a back office and then not needed.
+Each item is a module of the APEX app being rebuilt here. Done means: works on
+**both** web and Android, with rules tests where it writes.
+
+1. ~~**Foundation**~~ — scaffold, auth with sign-up, `members`/`guardians`,
+   rules + 32 rules tests. *Done.*
+2. ~~**Attendance + QR**~~ — camera scanning at the gate, offline queue,
+   today's register. *Done.*
+3. ~~**Lookups and dashboards**~~ — student search, student page, school
+   totals, guardian portal. *Done.*
+4. ~~**People**~~ — school setup, classes, students, staff, who may sign in.
+   *Done.*
+5. ~~**Fees**~~ — fee heads and rate card, collect a payment, printable
+   receipt, dues, daily collection, and the fee position on the student page.
+   *Done.* Two rules learned here and enforced in both clients: a **discount
+   settles its share** (500 billed, 100 allowed, 400 taken leaves nothing
+   owing), and **monthly heads are only expected up to the current month**, so
+   nobody is billed in March for December. Exam fees are never predicted —
+   there is no exam module yet, so they are collected as a named line.
+6. **Exams and results** — exam setup, mark entry, tabulation, progress report.
+   APEX pages 39–43. This is what makes the exam fee predictable, and what
+   fills the "Results and documents" box on the student page.
+7. **Certificates and ID cards** — testimonial, transfer, character; the QR ID
+   card the scanner already reads. APEX pages 45, 46.
+8. **Payroll** — staff salary structure, pay salary, salary register, payslip.
+   APEX pages 47–51.
+9. **Expenses and reports** — expense heads, vouchers, income vs expense.
+   APEX pages 53, 54, 1.

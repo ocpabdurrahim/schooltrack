@@ -6,14 +6,14 @@ import {
   type AttendanceSummary, type StudentDetail,
   attendanceFor, getStudent, startOfMonth, startOfYear,
 } from '../data/people';
+import { type StudentFees, currentYear, money, studentFees } from '../data/fees';
 
 /**
  * One student, everything SchoolTrack knows.
  *
- * Attendance is here because this app owns it. Fees, results and certificates
- * are still recorded in the APEX app, and this page says so rather than
- * showing an empty box that looks like "nothing owed" or "no marks"
- * (data-model.md §0).
+ * Attendance is here because that module is built. Fees, results and
+ * certificates are not yet, and this page says so rather than showing an empty
+ * box that looks like "nothing owed" or "no marks".
  */
 export default function Student() {
   const { studentId = '' } = useParams();
@@ -24,6 +24,7 @@ export default function Student() {
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [year, setYear] = useState<AttendanceSummary | null>(null);
   const [month, setMonth] = useState<AttendanceSummary | null>(null);
+  const [fees, setFees] = useState<StudentFees | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error' | 'forbidden'>('loading');
 
   useEffect(() => {
@@ -39,6 +40,11 @@ export default function Student() {
         ]);
         setYear(y); setMonth(m);
         setState('ready');
+
+        // Fees are fetched after the page is usable and never allowed to fail
+        // it: a teacher may read neither receipts nor the rate card, and a
+        // guardian may read receipts but not the rate card.
+        setFees(await studentFees(s, currentYear()).catch(() => null));
       } catch (e) {
         console.error('student page failed:', e);
         setState('error');
@@ -86,6 +92,9 @@ export default function Student() {
           {student.className} - {student.section} · Roll {student.rollNo}
           {student.status === 'I' && <> · <span className="pill none">left the school</span></>}
           {' · '}<Link to="/students">all students</Link>
+          {access.kind === 'staff' && (access.role === 'ADMIN' || access.role === 'OFFICE') && (
+            <> · <Link to={`/students/${student.studentId}/edit`}>edit</Link></>
+          )}
         </h2>
         {bio.filter(([, v]) => v).map(([k, v]) => (
           <div className="row" key={k}><span>{k}</span><span>{v}</span></div>
@@ -124,13 +133,65 @@ export default function Student() {
         </div>
       )}
 
+      {fees && (fees.receipts !== null || fees.expected !== null) && (
+        <div className="card">
+          <h2>Fees · {currentYear()}</h2>
+          <div className="tiles">
+            {fees.expected !== null && (
+              <div className="tile">
+                <div className="tile-value">{money(fees.expected)}</div>
+                <div className="tile-label">charged so far</div>
+              </div>
+            )}
+            <div className="tile">
+              <div className="tile-value">{money(fees.paid)}</div>
+              <div className="tile-label">paid</div>
+            </div>
+            {fees.discount > 0 && (
+              <div className="tile">
+                <div className="tile-value">{money(fees.discount)}</div>
+                <div className="tile-label">discount</div>
+              </div>
+            )}
+            {fees.due !== null && (
+              <div className="tile">
+                <div className="tile-value" style={{ color: fees.due > 0 ? 'var(--bad)' : 'var(--accent)' }}>
+                  {fees.due > 0 ? money(fees.due) : 'clear'}
+                </div>
+                <div className="tile-label">due</div>
+              </div>
+            )}
+          </div>
+
+          {(fees.receipts ?? []).length > 0 && (
+            <>
+              <h2 style={{ marginTop: 18 }}>Receipts</h2>
+              {fees.receipts!.map((p) => (
+                <div className="row" key={p.receiptNo}>
+                  <span style={{ color: 'var(--ink)' }}>
+                    {access.kind === 'staff'
+                      ? <Link to={`/fees/receipts/${p.receiptNo}`}>{p.receiptNo}</Link>
+                      : p.receiptNo}
+                    <span style={{ color: 'var(--muted)', marginLeft: 10 }}>{p.paymentDate}</span>
+                  </span>
+                  <span>{money(p.totalAmount)}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {(fees.receipts ?? []).length === 0 && (
+            <p style={{ color: 'var(--muted)', margin: 0 }}>Nothing has been collected yet.</p>
+          )}
+        </div>
+      )}
+
       <div className="card">
-        <h2>Fees, results and documents</h2>
+        <h2>Results and documents</h2>
         <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>
-          Still recorded in the APEX app, which remains the authority for them.
-          They will appear here when those modules move across — showing an
-          empty box now would read as “nothing owed” or “no marks”, which is
-          worse than saying nothing.
+          Not built yet. They will appear here as each module is added —
+          an empty box now would read as “no marks”, which is worse than
+          saying nothing.
         </p>
       </div>
     </div>

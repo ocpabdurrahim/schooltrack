@@ -43,6 +43,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun StudentsScreen(
     onOpen: (String) -> Unit,
+    onAdd: (() -> Unit)?,
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
     attendance: AttendanceRepository = remember { AttendanceRepository() },
@@ -81,6 +82,7 @@ fun StudentsScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Students", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.weight(1f))
+            if (onAdd != null) TextButton(onClick = onAdd) { Text("Add") }
             TextButton(onClick = onBack) { Text("Back") }
         }
 

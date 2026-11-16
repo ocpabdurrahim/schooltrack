@@ -11,6 +11,7 @@
  * can never be pointed at the real project by accident.
  *
  * Test accounts it creates (dev only, emulator only):
+ *   admin@test.local   / test-pass-1  ADMIN — the setup, classes and users screens
  *   teacher@test.local / test-pass-1  TEACHER
  *   parent@test.local  / test-pass-1  guardian of student 76
  */
@@ -54,16 +55,14 @@ async function user(email, uid) {
 
 await school.set({ name: 'Matkhola ML High School (emulator)', active: true });
 
-// attendance belongs to the APP here so the module can be exercised; every
-// other module stays with Oracle, which is also what production starts as.
-await school.collection('settings').doc('ownership').set({
-  attendance: 'APP', fees: 'ORACLE', people: 'ORACLE',
-  results: 'ORACLE', payroll: 'ORACLE', expenses: 'ORACLE', updatedAt: now,
-});
-
 await school.collection('settings').doc('school').set({
   instituteName: 'Matkhola ML High School', sessionLabel: '2025-26',
   weekendDays: ['FRI', 'SAT'], updatedAt: now,
+});
+
+await school.collection('members').doc('admin@test.local').set({
+  email: 'admin@test.local', name: 'Test Admin', role: 'ADMIN',
+  active: true, deleted: false, updatedAt: now,
 });
 
 await school.collection('members').doc('teacher@test.local').set({
@@ -90,9 +89,16 @@ for (const s of STUDENTS) {
   });
 }
 
+// Where the app's own numbering carries on from. The seeded students were
+// given Oracle's ids, so the counter starts past them: a student added in the
+// app must not be handed a number that is already on somebody's ID card.
+await school.collection('counters').doc('students').set({ next: 93 });
+await school.collection('counters').doc('staff').set({ next: 1 });
+
+await user('admin@test.local', 'uid-admin');
 await user('teacher@test.local', 'uid-teacher');
 await user('parent@test.local', 'uid-parent');
 
-console.log(`Seeded ${CLASSES.length} classes, ${STUDENTS.length} students, 2 accounts.`);
-console.log('Sign in as teacher@test.local — password is in this file.');
+console.log(`Seeded ${CLASSES.length} classes, ${STUDENTS.length} students, 3 accounts.`);
+console.log('Sign in as admin@test.local — password is in this file.');
 process.exit(0);

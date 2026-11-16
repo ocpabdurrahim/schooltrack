@@ -1,4 +1,4 @@
-package io.github.ocpabdurrahim.schooltrack.ui
+﻿package io.github.ocpabdurrahim.schooltrack.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,8 +32,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.Access
+import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.SchoolStats
+import io.github.ocpabdurrahim.schooltrack.data.canCollectFees
+import io.github.ocpabdurrahim.schooltrack.data.isAdmin
 import kotlinx.coroutines.launch
 
 @Composable
@@ -45,19 +49,27 @@ fun LoadingScreen() {
 }
 
 @Composable
-fun SignInScreen(onSignIn: suspend (String, String) -> Unit) {
+fun SignInScreen(
+    onSignIn: suspend (String, String) -> Boolean,
+    onSignUp: suspend (String, String) -> Unit,
+) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var signingUp by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text("SchoolTrack", style = MaterialTheme.typography.headlineMedium)
-        Text("Matkhola ML High School", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            if (signingUp) "Create your account" else "Sign in to continue",
+            style = MaterialTheme.typography.bodyMedium,
+        )
 
         OutlinedTextField(
             value = email,
@@ -88,24 +100,65 @@ fun SignInScreen(onSignIn: suspend (String, String) -> Unit) {
             onClick = {
                 busy = true
                 error = ""
+                note = ""
                 scope.launch {
                     try {
-                        onSignIn(email, password)
+                        if (signingUp) {
+                            onSignUp(email, password)
+                            signingUp = false
+                            note = "Account created. Confirm your email address using the " +
+                                "link we just sent, then sign in. An administrator still has " +
+                                "to grant you access before you can see anything."
+                            busy = false
+                        } else if (!onSignIn(email, password)) {
+                            note = "Confirm your email address first â€” check your inbox " +
+                                "for the link, then sign in again."
+                            busy = false
+                        }
                     } catch (_: Exception) {
-                        // One message for every failure: naming the reason
+                        // One message for every sign-in failure: naming the reason
                         // would tell a stranger which addresses exist.
-                        error = "That email and password did not match."
+                        error = if (signingUp) {
+                            "That account could not be created. It may already exist, " +
+                                "or the password may be too short."
+                        } else {
+                            "That email and password did not match."
+                        }
                         busy = false
                     }
                 }
             },
             modifier = Modifier.padding(top = 16.dp),
-        ) { Text(if (busy) "Signing in..." else "Sign in") }
+        ) {
+            Text(
+                when {
+                    busy && signingUp -> "Creatingâ€¦"
+                    busy -> "Signing inâ€¦"
+                    signingUp -> "Create account"
+                    else -> "Sign in"
+                },
+            )
+        }
+
+        TextButton(
+            onClick = { signingUp = !signingUp; error = ""; note = "" },
+            modifier = Modifier.padding(top = 4.dp),
+        ) {
+            Text(if (signingUp) "I already have an account" else "First time here? Create an account")
+        }
 
         if (error.isNotEmpty()) {
             Text(
                 error,
                 color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+        if (note.isNotEmpty()) {
+            Text(
+                note,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 12.dp),
             )
         }
@@ -119,12 +172,18 @@ fun HomeScreen(
     onOpenScan: () -> Unit,
     onOpenStudents: () -> Unit,
     onOpenChildren: () -> Unit,
+    onOpen: (Screen) -> Unit,
     onSignOut: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
+    admin: AdminRepository = remember { AdminRepository() },
 ) {
     var stats by remember { mutableStateOf<SchoolStats?>(null) }
+    var schoolName by remember { mutableStateOf("") }
 
     LaunchedEffect(access) {
+        // The name comes from settings/school, which an administrator edits in
+        // the app. Nothing is hardcoded: this app is no longer tied to one school.
+        schoolName = admin.getSettings()?.instituteName.orEmpty()
         if (access is Access.Staff) {
             stats = try {
                 people.schoolStats()
@@ -138,11 +197,13 @@ fun HomeScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
     ) {
         Text("SchoolTrack", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Matkhola ML High School",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (schoolName.isNotEmpty()) {
+            Text(
+                schoolName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Card(Modifier.fillMaxWidth().padding(top = 16.dp)) {
             Column(Modifier.padding(16.dp)) {
@@ -195,6 +256,58 @@ fun HomeScreen(
                     ) { Text("My children") }
                 }
 
+                if (access.canCollectFees) {
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Fees",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    Button(
+                        onClick = { onOpen(Screen.Collect) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Collect fee") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Receipts) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Receipts and collection") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Dues) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Dues") }
+                    if (access.isAdmin) {
+                        OutlinedButton(
+                            onClick = { onOpen(Screen.FeeSetup) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        ) { Text("Fee setup") }
+                    }
+                }
+
+                if (access.isAdmin) {
+                    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Text(
+                        "Setting up the school",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Classes) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Classes and sections") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.StaffAdmin) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Staff") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Users) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("Who can sign in") }
+                    OutlinedButton(
+                        onClick = { onOpen(Screen.Setup) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) { Text("School setup") }
+                }
+
                 TextButton(
                     onClick = onSignOut,
                     modifier = Modifier.padding(top = 8.dp),
@@ -207,8 +320,7 @@ fun HomeScreen(
         }
 
         Text(
-            "Fees, results, certificates and payroll are still kept in the APEX " +
-                "app. SchoolTrack owns attendance.",
+            "Fees, results, certificates and payroll are not built yet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),
@@ -228,11 +340,11 @@ private fun DashboardCard(stats: SchoolStats?) {
             Text("At a glance", style = MaterialTheme.typography.titleMedium)
 
             if (stats == null) {
-                Text("Loading…", modifier = Modifier.padding(top = 12.dp))
+                Text("Loadingâ€¦", modifier = Modifier.padding(top = 12.dp))
                 return@Column
             }
 
-            val n = { v: Int? -> v?.toString() ?: "–" }
+            val n = { v: Int? -> v?.toString() ?: "â€“" }
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -265,7 +377,7 @@ private fun DashboardCard(stats: SchoolStats?) {
                         ) {
                             (stats.presentToday * 100 / stats.markedToday).toString() + "%"
                         } else {
-                            "–"
+                            "â€“"
                         },
                         "of marked",
                     )

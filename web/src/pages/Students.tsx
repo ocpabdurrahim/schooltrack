@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../auth';
 import { type SchoolClass, listClasses } from '../data/attendance';
 import { type StudentDetail, findStudents } from '../data/people';
 
 export default function Students() {
+  const { access } = useAuth();
+  const mayEdit = access.kind === 'staff' && (access.role === 'ADMIN' || access.role === 'OFFICE');
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [classId, setClassId] = useState('');
   const [text, setText] = useState('');
@@ -52,6 +55,12 @@ export default function Students() {
                  onChange={(e) => setIncludeLeft(e.target.checked)} />
           Include students who have left
         </label>
+
+        {mayEdit && (
+          <p style={{ marginTop: 14, marginBottom: 0 }}>
+            <Link to="/students/new">Add a student</Link>
+          </p>
+        )}
       </div>
 
       {problem && <div className="card"><div className="err">{problem}</div></div>}

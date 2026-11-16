@@ -3,18 +3,16 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { SCHOOL_ID, db } from '../firebase';
+import { getSettings } from '../data/admin';
 import { todayInDhaka } from '../data/attendance';
 import { type SchoolStats, schoolStats } from '../data/people';
 import { type Child, myChildren } from '../data/guardian';
-
-type Ownership = Record<string, string>;
 
 export default function Home() {
   const { access, logout } = useAuth();
   const staff = access.kind === 'staff';
 
   const [school, setSchool] = useState('');
-  const [ownership, setOwnership] = useState<Ownership | null>(null);
   const [stats, setStats] = useState<SchoolStats | null>(null);
   const [children, setChildren] = useState<Child[] | null>(null);
   const [problem, setProblem] = useState('');
@@ -22,12 +20,14 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       try {
-        const s = await getDoc(doc(db, 'schools', SCHOOL_ID));
-        setSchool((s.data()?.name as string) ?? SCHOOL_ID);
-
-        const o = await getDoc(doc(db, 'schools', SCHOOL_ID, 'settings', 'ownership'));
-        setOwnership(o.exists() ? (o.data() as Ownership) : {});
-
+        // The name shown everywhere comes from settings/school, which an
+        // administrator can edit in the app. The school document itself is
+        // writable only by the app owner, so it is the fallback, not the source.
+        const [s, settings] = await Promise.all([
+          getDoc(doc(db, 'schools', SCHOOL_ID)),
+          getSettings(),
+        ]);
+        setSchool(settings?.instituteName ?? (s.data()?.name as string) ?? SCHOOL_ID);
       } catch {
         setProblem('Could not read the school record — your account may have no access yet.');
       }
@@ -42,8 +42,6 @@ export default function Home() {
       }
     })();
   }, [staff, access]);
-
-  const modules = ['attendance', 'fees', 'people', 'results', 'payroll', 'expenses'];
 
   return (
     <div className="wrap">
@@ -146,27 +144,6 @@ export default function Home() {
               </span>
             </div>
           ))}
-        </div>
-      )}
-
-      {ownership && access.kind === 'staff' && (
-        <div className="card">
-          <h2>Which system owns what</h2>
-          {modules.map((m) => {
-            const owner = ownership[m] ?? 'ORACLE';
-            return (
-              <div className="row" key={m}>
-                <span style={{ textTransform: 'capitalize' }}>{m}</span>
-                <span className={owner === 'APP' ? 'pill' : 'pill none'}>
-                  {owner === 'APP' ? 'SchoolTrack' : 'APEX (read-only here)'}
-                </span>
-              </div>
-            );
-          })}
-          <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 0, marginTop: 14 }}>
-            A module marked APEX is still recorded in the old system. SchoolTrack
-            can show it, but cannot change it — the rules refuse the write.
-          </p>
         </div>
       )}
 

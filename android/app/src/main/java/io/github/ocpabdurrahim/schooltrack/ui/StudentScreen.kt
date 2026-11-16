@@ -1,4 +1,4 @@
-package io.github.ocpabdurrahim.schooltrack.ui
+﻿package io.github.ocpabdurrahim.schooltrack.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +36,7 @@ import io.github.ocpabdurrahim.schooltrack.data.label
 @Composable
 fun StudentScreen(
     studentId: String,
+    onEdit: (() -> Unit)?,
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
 ) {
@@ -65,7 +66,7 @@ fun StudentScreen(
                 if (thisMonth) people.startOfMonth() else people.startOfYear(),
             )
         } catch (_: Exception) {
-            // The bio is still worth showing without the attendance — the same
+            // The bio is still worth showing without the attendance â€” the same
             // rule as the dashboard: one refusal must not empty the screen.
         }
     }
@@ -74,10 +75,11 @@ fun StudentScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Student", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.weight(1f))
+            if (onEdit != null) TextButton(onClick = onEdit) { Text("Edit") }
             TextButton(onClick = onBack) { Text("Back") }
         }
 
-        if (busy) Text("Loading…", modifier = Modifier.padding(top = 16.dp))
+        if (busy) Text("Loadingâ€¦", modifier = Modifier.padding(top = 16.dp))
         if (problem.isNotEmpty()) {
             Text(
                 problem,
@@ -91,8 +93,8 @@ fun StudentScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text(s.fullName, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        s.className + " " + s.section + "  ·  Roll " + s.rollNo +
-                            (s.groupName?.let { "  ·  " + it } ?: ""),
+                        s.className + " " + s.section + "  Â·  Roll " + s.rollNo +
+                            (s.groupName?.let { "  Â·  " + it } ?: ""),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -150,7 +152,7 @@ fun StudentScreen(
 
                     val sum = summary
                     if (sum == null) {
-                        Text("Loading…", modifier = Modifier.padding(top = 12.dp))
+                        Text("Loadingâ€¦", modifier = Modifier.padding(top = 12.dp))
                     } else if (sum.marked == 0) {
                         Text(
                             "No attendance has been recorded in this period.",
@@ -162,7 +164,7 @@ fun StudentScreen(
                             Modifier.fillMaxWidth().padding(top = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Stat((sum.percent?.toString() ?: "–") + "%", "present")
+                            Stat((sum.percent?.toString() ?: "â€“") + "%", "present")
                             Stat(sum.present.toString(), "days present")
                             Stat(sum.marked.toString(), "days marked")
                         }
@@ -194,8 +196,7 @@ fun StudentScreen(
             }
 
             Text(
-                "Fees, results and certificates for this student are still kept in " +
-                    "the APEX app. This page shows only what SchoolTrack owns.",
+                "Fees, results and certificates are not built yet.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp, bottom = 24.dp),

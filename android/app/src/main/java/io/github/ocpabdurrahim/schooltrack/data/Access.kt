@@ -45,6 +45,19 @@ sealed interface Access {
 val Access.canMarkAttendance: Boolean
     get() = this is Access.Staff && (role == "ADMIN" || role == "TEACHER")
 
+val Access.isAdmin: Boolean
+    get() = this is Access.Staff && role == "ADMIN"
+
+/** Student records are the office's work as much as the head's — the rules
+ *  allow ADMIN and OFFICE to write them, and these screens follow. */
+val Access.canEditStudents: Boolean
+    get() = this is Access.Staff && (role == "ADMIN" || role == "OFFICE")
+
+/** Money is the head's and the accounts user's. A teacher cannot read a
+ *  payment at all, so showing them the screen would only produce a refusal. */
+val Access.canCollectFees: Boolean
+    get() = this is Access.Staff && (role == "ADMIN" || role == "ACCOUNTS")
+
 /** Minimal Task -> coroutine bridge, so no extra dependency is needed for it. */
 suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->
     addOnSuccessListener { cont.resume(it) }
@@ -100,8 +113,30 @@ class AccessRepository(
         return Access.None(email)
     }
 
-    suspend fun signIn(email: String, password: String) {
-        auth.signInWithEmailAndPassword(email.trim().lowercase(), password).await()
+    /**
+     * Returns false when the account exists but its address was never
+     * confirmed. The rules require a verified address, so staying signed in
+     * would land on "no access" with nothing to explain why — better to sign
+     * straight back out and say what is missing.
+     */
+    suspend fun signIn(email: String, password: String): Boolean {
+        val cred = auth.signInWithEmailAndPassword(email.trim().lowercase(), password).await()
+        if (cred.user?.isEmailVerified != true) {
+            auth.signOut()
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Creates the account and sends the confirmation email, then signs out:
+     * a new account has no access record yet, and an administrator still has
+     * to grant it. Nothing here grants anything.
+     */
+    suspend fun signUp(email: String, password: String) {
+        val cred = auth.createUserWithEmailAndPassword(email.trim().lowercase(), password).await()
+        cred.user?.sendEmailVerification()?.await()
+        auth.signOut()
     }
 
     fun signOut() = auth.signOut()

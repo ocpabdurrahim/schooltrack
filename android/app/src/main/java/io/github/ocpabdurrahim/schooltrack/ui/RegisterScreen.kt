@@ -1,4 +1,4 @@
-package io.github.ocpabdurrahim.schooltrack.ui
+﻿package io.github.ocpabdurrahim.schooltrack.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -89,7 +89,7 @@ fun RegisterScreen(
                 repo.mark(row.student, today, status, "MANUAL", email)
             } catch (_: Exception) {
                 rows = before
-                problem = "That change was refused — attendance may still belong to the APEX app."
+                problem = "That change was refused. Your account may not mark attendance."
             }
         }
     }
@@ -103,7 +103,7 @@ fun RegisterScreen(
             TextButton(onClick = onBack) { Text("Back") }
         }
         Text(
-            today + "  ·  " + present + " of " + rows.size + " present",
+            today + "  Â·  " + present + " of " + rows.size + " present",
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -140,7 +140,7 @@ fun RegisterScreen(
         }
 
         if (busy) {
-            Text("Loading…", modifier = Modifier.padding(top = 16.dp))
+            Text("Loadingâ€¦", modifier = Modifier.padding(top = 16.dp))
         }
 
         LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp)) {

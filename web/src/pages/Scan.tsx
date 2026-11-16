@@ -1,4 +1,4 @@
-import { Html5Qrcode } from 'html5-qrcode';
+﻿import { Html5Qrcode } from 'html5-qrcode';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
@@ -8,7 +8,7 @@ import {
 } from '../data/attendance';
 
 /**
- * Gate scanning. Two input paths, as on the APEX page:
+ * Gate scanning. Two input paths:
  *   - a handheld scanner is a keyboard: it types the code and presses Enter
  *   - or the camera, for a phone
  * Both end in the same scan() call.
@@ -57,7 +57,7 @@ export default function Scan() {
       beep(result.ok);
       if (result.ok && !result.already) void tally();
     } catch {
-      setLast({ ok: false, message: 'That was refused — attendance may still belong to the APEX app.' });
+      setLast({ ok: false, message: 'That was refused. Your account may not mark attendance.' });
       beep(false);
     }
   }
@@ -108,8 +108,8 @@ export default function Scan() {
       <div className="card">
         <h1>Scan attendance</h1>
         <h2>
-          {counts.total ? `${counts.present} of ${counts.total} present` : ' '}
-          {' · '}
+          {counts.total ? `${counts.present} of ${counts.total} present` : 'Â '}
+          {' Â· '}
           <Link to="/attendance">mark by hand instead</Link>
         </h2>
 
@@ -117,7 +117,7 @@ export default function Scan() {
           <div style={{ flex: '1 1 200px' }}>
             <label htmlFor="cls">Section</label>
             <select id="cls" value={classId} onChange={(e) => setClassId(e.target.value)}>
-              <option value="">— Whole school (gate) —</option>
+              <option value="">â€” Whole school (gate) â€”</option>
               {classes.map((c) => (
                 <option key={c.classId} value={c.classId}>{c.displayName}</option>
               ))}
@@ -180,5 +180,5 @@ function beep(ok: boolean) {
     gain.gain.value = 0.08;
     osc.start();
     setTimeout(() => { osc.stop(); void ctx.close(); }, ok ? 110 : 320);
-  } catch { /* no audio on this device — the colour still shows */ }
+  } catch { /* no audio on this device â€” the colour still shows */ }
 }
