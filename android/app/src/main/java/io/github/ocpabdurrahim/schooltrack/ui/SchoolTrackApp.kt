@@ -254,7 +254,12 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpenScan = { screen = Screen.Scan },
                     onOpenStudents = { screen = Screen.Students },
                     onOpenChildren = { screen = Screen.Children },
-                    onOpen = { screen = it },
+                    onOpen = { target ->
+                        // "Add a student" in the menu is always a NEW one: without
+                        // this it would reopen whoever was edited last.
+                        if (target == Screen.StudentEdit) editStudent = ""
+                        screen = target
+                    },
                     // the dashboard opens a child straight from its card
                     onOpenStudent = { openStudent = it; screen = Screen.Student },
                     onSignOut = {

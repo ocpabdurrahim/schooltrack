@@ -23,20 +23,32 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -64,6 +76,7 @@ import io.github.ocpabdurrahim.schooltrack.data.longMonth
 import io.github.ocpabdurrahim.schooltrack.data.money
 import io.github.ocpabdurrahim.schooltrack.data.percentOf
 import io.github.ocpabdurrahim.schooltrack.data.trendSummary
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -76,6 +89,7 @@ import kotlin.math.roundToInt
  * dashboard is a claim ("nothing was collected today"), and making that claim
  * because the read was refused is worse than showing nothing at all.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     access: Access,
@@ -131,10 +145,67 @@ fun HomeScreen(
     val admins = access.isAdmin
     val staff = access is Access.Staff
 
+    val groups = menuFor(access)
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        // A guardian has no menu at all, and a drawer that opens empty when the
+        // screen is swiped is just a puzzle.
+        gesturesEnabled = groups.isNotEmpty(),
+        drawerContent = {
+            MenuSheet(
+                groups = groups,
+                school = schoolName,
+                onPick = { target ->
+                    scope.launch { drawer.close() }
+                    onOpen(target)
+                },
+            )
+        },
+    ) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("SchoolTrack", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    if (groups.isNotEmpty()) {
+                        IconButton(onClick = { scope.launch { drawer.open() } }) {
+                            Column(
+                                Modifier.size(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                repeat(3) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(2.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(InkSoft),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onSignOut) {
+                        Text("Sign out", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White,
+                    titleContentColor = Ink,
+                ),
+            )
+        },
+    ) { bars ->
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .padding(bars)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -144,7 +215,6 @@ fun HomeScreen(
             session = session,
             today = today,
             access = access,
-            onSignOut = onSignOut,
         )
 
         if (access is Access.None) {
@@ -249,9 +319,9 @@ fun HomeScreen(
             }
         }
 
-        if (staff) EverythingElse(access, onOpenStudents, onOpen)
-
         Spacer(Modifier.height(16.dp))
+    }
+    }
     }
 }
 
@@ -265,7 +335,6 @@ private fun Hero(
     session: String,
     today: String,
     access: Access,
-    onSignOut: () -> Unit,
 ) {
     Box(
         Modifier
@@ -338,14 +407,12 @@ private fun Hero(
                     is Access.None -> access.email
                     else -> ""
                 }
+                // Sign out is in the bar above, on this screen and every other
                 Text(
                     who,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.85f),
                 )
-                TextButton(onClick = onSignOut) {
-                    Text("Sign out", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
             }
         }
     }
@@ -766,82 +833,93 @@ private fun MoneyLine(label: String, amount: Double, scale: Double, colour: Colo
    the rest of the app
    ------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------
+   the menu
+   ------------------------------------------------------------------------- */
+
+/**
+ * The drawer: the same six groups the web shows as a menubar, one open at a
+ * time. Material's drawer, not a hand-rolled panel, so the back gesture and
+ * the scrim behave the way every other app on the handset behaves.
+ */
 @Composable
-private fun EverythingElse(
-    access: Access,
-    onOpenStudents: () -> Unit,
-    onOpen: (Screen) -> Unit,
-) {
-    val money = access.canCollectFees
-    val records = access.canEditStudents
-    val admins = access.isAdmin
+private fun MenuSheet(groups: List<MenuGroup>, school: String, onPick: (Screen) -> Unit) {
+    var open by remember { mutableStateOf<String?>(null) }
 
-    SectionCard("PEOPLE AND ATTENDANCE") {
-        ButtonGrid(
-            buildList {
-                add("Students" to onOpenStudents)
-                add("Monthly sheet" to { onOpen(Screen.MonthlySheet) })
-                add("Low attendance" to { onOpen(Screen.LowAttendance) })
-                if (admins) add("Holidays" to { onOpen(Screen.HolidayCalendar) })
-            },
-        )
-    }
+    ModalDrawerSheet(drawerContainerColor = Color.White) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 14.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Brush.linearGradient(listOf(GreenDeep, GreenBright))),
+                )
+                Spacer(Modifier.width(11.dp))
+                Column {
+                    Text(
+                        "SchoolTrack",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (school.isNotEmpty()) {
+                        Text(school, style = MaterialTheme.typography.bodySmall, color = Muted)
+                    }
+                }
+            }
 
-    SectionCard("EXAMS") {
-        ButtonGrid(
-            buildList {
-                add("Mark entry" to { onOpen(Screen.MarkEntry) })
-                add("Result sheet" to { onOpen(Screen.Results) })
-                add("Seat plan" to { onOpen(Screen.SeatPlan) })
-                if (records) add("Admit cards" to { onOpen(Screen.AdmitCards) })
-                if (admins) add("Exam routine" to { onOpen(Screen.Routine) })
-                if (admins) add("Exams and subjects" to { onOpen(Screen.ExamSetup) })
-            },
-        )
-    }
+            HorizontalDivider(Modifier.padding(top = 12.dp, bottom = 6.dp), color = Line)
 
-    if (records) {
-        SectionCard("DOCUMENTS") {
-            ButtonGrid(listOf("Certificates" to { onOpen(Screen.Certificates) }))
+            groups.forEach { group ->
+                val isOpen = open == group.label
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { open = if (isOpen) null else group.label }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        group.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isOpen) GreenDeep else Ink,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Chevron(isOpen)
+                }
+
+                if (isOpen) {
+                    group.items.forEach { item ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(item.screen) }
+                                .padding(start = 34.dp, end = 20.dp, top = 9.dp, bottom = 9.dp),
+                        ) {
+                            Text(item.label, style = MaterialTheme.typography.bodyMedium)
+                            item.hint?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = Muted)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
         }
     }
+}
 
-    if (money) {
-        SectionCard("FEES AND MONEY") {
-            ButtonGrid(
-                buildList {
-                    add("Collect fee" to { onOpen(Screen.Collect) })
-                    add("Receipts" to { onOpen(Screen.Receipts) })
-                    add("Dues" to { onOpen(Screen.Dues) })
-                    add("Expenses" to { onOpen(Screen.Expenses) })
-                    add("Income and expense" to { onOpen(Screen.IncomeExpense) })
-                    if (admins) add("Fee setup" to { onOpen(Screen.FeeSetup) })
-                },
-            )
-        }
-    }
-
-    if (admins) {
-        SectionCard("PAYROLL") {
-            ButtonGrid(
-                listOf(
-                    "Pay salary" to { onOpen(Screen.PaySalary) },
-                    "Salary register" to { onOpen(Screen.SalaryRegister) },
-                    "Salary structure" to { onOpen(Screen.Payroll) },
-                ),
-            )
-        }
-
-        SectionCard("SETTING UP THE SCHOOL") {
-            ButtonGrid(
-                listOf(
-                    "Classes and sections" to { onOpen(Screen.Classes) },
-                    "Staff" to { onOpen(Screen.StaffAdmin) },
-                    "Who can sign in" to { onOpen(Screen.Users) },
-                    "School setup" to { onOpen(Screen.Setup) },
-                ),
-            )
-        }
+@Composable
+private fun Chevron(open: Boolean) {
+    Canvas(Modifier.size(15.dp).rotate(if (open) 180f else 0f)) {
+        val s = size.minDimension
+        val stroke = 1.9.dp.toPx()
+        drawLine(Muted, Offset(s * 0.24f, s * 0.4f), Offset(s * 0.5f, s * 0.66f), stroke, StrokeCap.Round)
+        drawLine(Muted, Offset(s * 0.5f, s * 0.66f), Offset(s * 0.76f, s * 0.4f), stroke, StrokeCap.Round)
     }
 }
 
