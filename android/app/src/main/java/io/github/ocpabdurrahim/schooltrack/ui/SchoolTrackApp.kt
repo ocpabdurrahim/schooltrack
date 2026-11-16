@@ -22,7 +22,7 @@ enum class Screen {
     Setup, Classes, StaffAdmin, Users, StudentEdit,
     ExamSetup, MarkEntry, Results, ReportCard,
     Routine, SeatPlan, AdmitCards,
-    MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance,
+    MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance, StudentResults,
     Certificates, Certificate, IdCard,
     Payroll, PaySalary, SalaryRegister, Payslip,
     Expenses, IncomeExpense,
@@ -122,6 +122,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpenReport = { openExam = it; go(Screen.ReportCard) },
                     onOpenCard = { go(Screen.IdCard) },
                     onOpenAttendance = { go(Screen.StudentAttendance) },
+                    onOpenResults = { go(Screen.StudentResults) },
                     isGuardian = current is Access.Guardian,
                     studentId = openStudent,
                     onEdit = if (current.canEditStudents) {
@@ -238,9 +239,16 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 screen == Screen.MonthlySheet && isStaff ->
                     MonthlySheetScreen(onBack = { back() })
 
-                // a parent opens this for their own child; staff for anyone
+                // a parent opens these for their own child; staff for anyone
                 screen == Screen.StudentAttendance && mayOpen(openStudent) ->
                     StudentAttendanceScreen(studentId = openStudent, onBack = { back() })
+
+                screen == Screen.StudentResults && mayOpen(openStudent) -> StudentResultsScreen(
+                    studentId = openStudent,
+                    isGuardian = current is Access.Guardian,
+                    onOpenReport = { openExam = it; go(Screen.ReportCard) },
+                    onBack = { back() },
+                )
 
                 screen == Screen.LowAttendance && isStaff -> LowAttendanceScreen(
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
@@ -282,6 +290,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     // the dashboard opens a child straight from its card
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
                     onOpenAttendance = { openStudent = it; go(Screen.StudentAttendance) },
+                    onOpenResults = { openStudent = it; go(Screen.StudentResults) },
                     onSignOut = {
                         repo.signOut()
                         home()

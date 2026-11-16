@@ -102,6 +102,7 @@ fun HomeScreen(
     onOpen: (Screen) -> Unit,
     onOpenStudent: (String) -> Unit,
     onOpenAttendance: (String) -> Unit,
+    onOpenResults: (String) -> Unit,
     onSignOut: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
     admin: AdminRepository = remember { AdminRepository() },
@@ -310,10 +311,17 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                             )
-                            TextButton(
-                                onClick = { onOpenStudent(student.studentId) },
-                                contentPadding = PaddingValues(0.dp),
-                            ) { Text("Student details") }
+                            Row {
+                                TextButton(
+                                    onClick = { onOpenResults(student.studentId) },
+                                    contentPadding = PaddingValues(0.dp),
+                                ) { Text("Results") }
+                                Spacer(Modifier.width(14.dp))
+                                TextButton(
+                                    onClick = { onOpenStudent(student.studentId) },
+                                    contentPadding = PaddingValues(0.dp),
+                                ) { Text("Student details") }
+                            }
                         }
                     }
                 }

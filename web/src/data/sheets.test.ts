@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type Exam,
   type StudentResult,
   type Subject,
   gradeDistribution,
   meritOrder,
+  resultLines,
   subjectStats,
   totalMarks,
 } from './exams';
@@ -120,5 +122,91 @@ describe('meritOrder', () => {
       result('2', 2, { Bangla: 10, English: 10, Maths: 10, Agri: 10 }),   // failed
     ];
     expect(meritOrder(rows).map((r) => r.student.rollNo)).toEqual([2, 1]);
+  });
+});
+
+describe('resultLines, the results a parent reads', () => {
+  const exam = (examId: string, examName: string, examYear: string, published = true): Exam => ({
+    examId, examName, examYear, published, periodLabel: `${examName}-${examYear}`.toUpperCase(),
+  });
+
+  const tabulationFor = (marks: Marks, absent: string[] = []) =>
+    tabulate(SUBJECTS.map((s) => ({
+      subjectId: s.subjectId,
+      subjectName: s.subjectName,
+      fullMarks: 100,
+      marks: marks[s.subjectId as keyof Marks] ?? null,
+      absent: absent.includes(s.subjectId),
+      isOptional: s.isOptional,
+    })));
+
+  it('runs oldest first, so progress reads forwards', () => {
+    const lines = resultLines([
+      { exam: exam('final-2026', 'Final', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 80, Maths: 80 }) },
+      { exam: exam('half-2025', 'Half yearly', '2025'), tabulation: tabulationFor({ Bangla: 60, English: 60, Maths: 60 }) },
+    ]);
+    expect(lines.map((l) => l.examYear)).toEqual(['2025', '2026']);
+  });
+
+  it('gives the marks out of the full marks of every subject sat', () => {
+    const [line] = resultLines([
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60, Agri: 90 }) },
+    ]);
+    expect(line.obtained).toBe(300);
+    expect(line.outOf).toBe(400);       // the optional subject counts here
+    expect(line.percent).toBe(75);
+    expect(line.letter).not.toBe('-');
+  });
+
+  it('withholds the total and the percentage while a mark is missing', () => {
+    // Half an exam shown as a percentage reads as a bad result rather than an
+    // unfinished one, and a parent cannot tell the difference.
+    const [line] = resultLines([
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70 }) },
+    ]);
+    expect(line.incomplete).toBe(true);
+    expect(line.obtained).toBeNull();
+    expect(line.percent).toBeNull();
+    expect(line.gpa).toBeNull();
+  });
+
+  it('still reports the marks when one compulsory subject failed the exam', () => {
+    const [line] = resultLines([
+      {
+        exam: exam('e', 'Exam', '2026'),
+        tabulation: tabulationFor({ Bangla: 80, English: 20, Maths: 70, Agri: 50 }),
+      },
+    ]);
+    expect(line.letter).toBe('F');
+    expect(line.gpa).toBe(0);
+    expect(line.failed).toEqual(['English']);
+    expect(line.obtained).toBe(220);    // the marks are all in, so they are shown
+    expect(line.percent).toBe(55);
+  });
+
+  it('withholds the total when the OPTIONAL mark is missing, but keeps the GPA', () => {
+    // The GPA ignores a missing optional subject on purpose -- the 4th subject
+    // only ever helps -- but a total that silently leaves one subject out would
+    // be a different total from the one on the result sheet. So the grade is
+    // shown and the marks are not, which is also what totalMarks() has always
+    // done for the staff sheet.
+    const [line] = resultLines([
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }) },
+    ]);
+    expect(line.incomplete).toBe(false);
+    expect(line.gpa).not.toBeNull();
+    expect(line.obtained).toBeNull();
+    expect(line.percent).toBeNull();
+  });
+
+  it('carries whether the exam is published, which is what a parent may see', () => {
+    const lines = resultLines([
+      { exam: exam('e', 'Exam', '2026', false), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }) },
+    ]);
+    expect(lines[0].published).toBe(false);
+  });
+
+  it('is empty for a student with no results at all', () => {
+    expect(resultLines([])).toEqual([]);
   });
 });

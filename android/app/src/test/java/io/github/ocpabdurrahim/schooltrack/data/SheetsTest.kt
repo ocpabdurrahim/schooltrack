@@ -135,4 +135,117 @@ class SheetsTest {
         )
         assertEquals(listOf(2L, 1L), meritOrder(rows).map { it.student.rollNo })
     }
+
+    // ---- the results a parent reads ---------------------------------------
+    // The same cases as the web's resultLines block.
+
+    private fun exam(examId: String, examName: String, examYear: String, published: Boolean = true) =
+        Exam(
+            examId = examId,
+            examName = examName,
+            examYear = examYear,
+            periodLabel = "$examName-$examYear".uppercase(),
+            published = published,
+        )
+
+    private fun tabulationFor(marks: Map<String, Double>, absent: List<String> = emptyList()) =
+        tabulate(
+            subjects.map { s ->
+                SubjectMark(
+                    subjectId = s.subjectId,
+                    subjectName = s.subjectName,
+                    fullMarks = 100.0,
+                    marks = marks[s.subjectId],
+                    absent = absent.contains(s.subjectId),
+                    isOptional = s.isOptional,
+                )
+            },
+        )
+
+    @Test
+    fun `the results run oldest first, so progress reads forwards`() {
+        val lines = resultLines(
+            listOf(
+                exam("final-2026", "Final", "2026") to
+                    tabulationFor(mapOf("Bangla" to 80.0, "English" to 80.0, "Maths" to 80.0)),
+                exam("half-2025", "Half yearly", "2025") to
+                    tabulationFor(mapOf("Bangla" to 60.0, "English" to 60.0, "Maths" to 60.0)),
+            ),
+        )
+        assertEquals(listOf("2025", "2026"), lines.map { it.examYear })
+    }
+
+    @Test
+    fun `the marks are out of the full marks of every subject sat`() {
+        val line = resultLines(
+            listOf(
+                exam("e", "Exam", "2026") to tabulationFor(
+                    mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0, "Agri" to 90.0),
+                ),
+            ),
+        ).first()
+        assertEquals(300.0, line.obtained!!, 0.001)
+        assertEquals(400.0, line.outOf, 0.001)   // the optional subject counts here
+        assertEquals(75.0, line.percent!!, 0.001)
+    }
+
+    @Test
+    fun `the total and the percentage are withheld while a mark is missing`() {
+        val line = resultLines(
+            listOf(exam("e", "Exam", "2026") to tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0))),
+        ).first()
+        assertEquals(true, line.incomplete)
+        assertNull(line.obtained)
+        assertNull(line.percent)
+        assertNull(line.gpa)
+    }
+
+    @Test
+    fun `the marks still show when one compulsory subject failed the exam`() {
+        val line = resultLines(
+            listOf(
+                exam("e", "Exam", "2026") to tabulationFor(
+                    mapOf("Bangla" to 80.0, "English" to 20.0, "Maths" to 70.0, "Agri" to 50.0),
+                ),
+            ),
+        ).first()
+        assertEquals("F", line.letter)
+        assertEquals(0.0, line.gpa!!, 0.001)
+        assertEquals(listOf("English"), line.failed)
+        assertEquals(220.0, line.obtained!!, 0.001)
+        assertEquals(55.0, line.percent!!, 0.001)
+    }
+
+    @Test
+    fun `the total is withheld when the OPTIONAL mark is missing, but the GPA stays`() {
+        // The GPA ignores a missing optional subject on purpose — the 4th
+        // subject only ever helps — but a total that silently left one subject
+        // out would be a different total from the one on the result sheet.
+        val line = resultLines(
+            listOf(
+                exam("e", "Exam", "2026") to
+                    tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0)),
+            ),
+        ).first()
+        assertEquals(false, line.incomplete)
+        assertEquals(true, line.gpa != null)
+        assertNull(line.obtained)
+        assertNull(line.percent)
+    }
+
+    @Test
+    fun `whether the exam is published is carried, since that is what a parent may see`() {
+        val line = resultLines(
+            listOf(
+                exam("e", "Exam", "2026", published = false) to
+                    tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0)),
+            ),
+        ).first()
+        assertEquals(false, line.published)
+    }
+
+    @Test
+    fun `a student with no results at all has no lines`() {
+        assertEquals(emptyList<ResultLine>(), resultLines(emptyList()))
+    }
 }

@@ -4,6 +4,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import kotlin.math.roundToInt
 
 /**
  * Exams, subjects and marks — the Kotlin twin of web/src/data/exams.ts.
@@ -269,6 +270,58 @@ fun totalMarks(t: Tabulation): Double? {
     if (t.subjects.any { it.mark.marks == null && !it.mark.absent }) return null
     return t.subjects.sumOf { if (it.mark.absent) 0.0 else (it.mark.marks ?: 0.0) }
 }
+
+/**
+ * One line per exam: earliest YEAR first, then by exam id. The twin of
+ * resultLines() in web/src/data/exams.ts, with the same test cases.
+ *
+ * NOT chronological within a year, and nothing here pretends it is. An exam
+ * carries no date of its own, so "Annual" sorts before "Half yearly" in 2026;
+ * the screen labels the chart "GPA by exam" rather than "progress" for exactly
+ * that reason.
+ *
+ * The marks total and the percentage are withheld while any mark is missing. A
+ * part-entered exam shown as a percentage reads as a bad result rather than an
+ * unfinished one, and a parent cannot tell the difference.
+ */
+data class ResultLine(
+    val examId: String,
+    val examName: String,
+    val examYear: String,
+    val published: Boolean,
+    val gpa: Double?,
+    val letter: String,
+    val incomplete: Boolean,
+    val failed: List<String>,
+    val obtained: Double?,
+    val outOf: Double,
+    val percent: Double?,
+)
+
+fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
+    results
+        .sortedWith(compareBy({ it.first.examYear }, { it.first.examId }))
+        .map { (exam, tabulation) ->
+            val outOf = tabulation.subjects.sumOf { it.mark.fullMarks }
+            val obtained = totalMarks(tabulation)
+            ResultLine(
+                examId = exam.examId,
+                examName = exam.examName,
+                examYear = exam.examYear,
+                published = exam.published,
+                gpa = tabulation.gpa,
+                letter = tabulation.letter,
+                incomplete = tabulation.incomplete,
+                failed = tabulation.failed,
+                obtained = obtained,
+                outOf = outOf,
+                percent = if (obtained == null || outOf == 0.0) {
+                    null
+                } else {
+                    (obtained / outOf * 1000).roundToInt() / 10.0
+                },
+            )
+        }
 
 data class SubjectStat(
     val subjectId: String,

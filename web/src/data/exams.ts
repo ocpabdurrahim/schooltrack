@@ -291,6 +291,61 @@ export function totalMarks(t: Tabulation): number | null {
   return t.subjects.reduce((sum, s) => sum + (s.absent ? 0 : s.marks ?? 0), 0);
 }
 
+/**
+ * One line per exam: earliest YEAR first, then by exam id.
+ *
+ * NOT chronological within a year, and nothing here pretends it is. An exam
+ * carries no date of its own, so "Annual" sorts before "Half yearly" in 2026;
+ * the report labels the chart "GPA by exam" rather than "progress" for exactly
+ * that reason. A stable order that is honest beats a guessed one that reads as
+ * a rise or a fall the data does not know about.
+ *
+ * The marks total and the percentage are withheld while any compulsory mark is
+ * still missing. A part-entered exam shown as a percentage reads as a bad
+ * result rather than an unfinished one, and a parent cannot tell the difference.
+ */
+export type ResultLine = {
+  examId: string;
+  examName: string;
+  examYear: string;
+  published: boolean;
+  gpa: number | null;
+  letter: string;
+  incomplete: boolean;
+  failed: string[];
+  obtained: number | null;
+  outOf: number;
+  percent: number | null;
+};
+
+export function resultLines(
+  results: { exam: Exam; tabulation: Tabulation }[],
+): ResultLine[] {
+  return [...results]
+    .sort((a, b) =>
+      a.exam.examYear.localeCompare(b.exam.examYear) ||
+      a.exam.examId.localeCompare(b.exam.examId))
+    .map(({ exam, tabulation }) => {
+      const outOf = tabulation.subjects.reduce((t, s) => t + s.fullMarks, 0);
+      const obtained = totalMarks(tabulation);
+      return {
+        examId: exam.examId,
+        examName: exam.examName,
+        examYear: exam.examYear,
+        published: exam.published,
+        gpa: tabulation.gpa,
+        letter: tabulation.letter,
+        incomplete: tabulation.incomplete,
+        failed: tabulation.failed,
+        obtained,
+        outOf,
+        percent: obtained === null || outOf === 0
+          ? null
+          : Math.round((obtained / outOf) * 1000) / 10,
+      };
+    });
+}
+
 export type SubjectStat = {
   subjectId: string;
   subjectName: string;

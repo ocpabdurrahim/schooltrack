@@ -214,6 +214,10 @@ export default function Student() {
       {results !== null && results.length > 0 && (
         <div className="card">
           <h2>Results</h2>
+          <div className="row">
+            <span>Every exam</span>
+            <span><Link to={`/students/${studentId}/results`}>Results report →</Link></span>
+          </div>
           {results.map(({ exam, tabulation }) => (
             <div className="row" key={exam.examId}>
               <span style={{ color: 'var(--ink)' }}>

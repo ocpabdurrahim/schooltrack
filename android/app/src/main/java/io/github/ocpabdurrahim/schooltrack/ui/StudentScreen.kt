@@ -48,6 +48,7 @@ fun StudentScreen(
     onOpenReport: (String) -> Unit,
     onOpenCard: () -> Unit,
     onOpenAttendance: () -> Unit,
+    onOpenResults: () -> Unit,
     isGuardian: Boolean,
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
@@ -243,7 +244,11 @@ fun StudentScreen(
             if (results.isNotEmpty()) {
                 Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                     Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("Results", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = onOpenResults) { Text("Every exam") }
+                    }
                         results.forEach { (exam, t) ->
                             Row(
                                 Modifier.fillMaxWidth()

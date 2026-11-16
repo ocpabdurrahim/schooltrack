@@ -196,6 +196,8 @@ export default function Home() {
                         ? 'No days marked this month yet.'
                         : `${month.marked} day${month.marked === 1 ? '' : 's'} marked this month.`}
                       <br />
+                      <Link to={`/students/${student.studentId}/results`}>Results report →</Link>
+                      <br />
                       <Link to={`/students/${student.studentId}`}>Student details →</Link>
                     </p>
                   </div>

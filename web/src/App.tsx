@@ -35,6 +35,7 @@ import Staff from './pages/Staff';
 import Student from './pages/Student';
 import StudentEdit from './pages/StudentEdit';
 import StudentAttendance from './pages/StudentAttendance';
+import StudentResults from './pages/StudentResults';
 import Students from './pages/Students';
 import Users from './pages/Users';
 
@@ -86,6 +87,7 @@ export default function App() {
             rules both check that it is theirs */}
         <Route path="/students/:studentId" element={<Student />} />
         <Route path="/students/:studentId/attendance" element={<StudentAttendance />} />
+        <Route path="/students/:studentId/results" element={<StudentResults />} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
         <Route path="/attendance/monthly" element={staffOnly(<AttendanceMonthly />)} />
         <Route path="/attendance/low" element={staffOnly(<LowAttendance />)} />
