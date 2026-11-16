@@ -46,8 +46,13 @@ docs/        data-model.md  <- read this first
    — writes the school, its settings and the first administrator. A new project
    is otherwise a deadlock: access comes only from a `members` document that
    only an administrator may write.
-5. Open the app, **create an account** with that same address, confirm the
-   email, and sign in.
+5. `npm run web:deploy` — builds the web app and publishes it to hosting.
+6. Open the app, **create an account** with that same address, confirm the
+   email, and sign in. If the confirmation email never arrives, re-run step 4
+   with `--verify`: the rules require a confirmed address, and nothing outside
+   the console can repair that.
+
+This school's own deployment lives at **https://schooltrack-1941.web.app**.
 
 ## Security model in one paragraph
 

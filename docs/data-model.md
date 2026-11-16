@@ -374,9 +374,16 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
 Every module of the APEX app is now built on both clients. What is left is not
 a feature:
 
-- **Setup of the live project** — `tools/bootstrap.mjs` has never been run
-  against `schooltrack-1941`, which is still empty, and the web app has never
-  been deployed to hosting. Both need the school's own administrator email.
+- **The first sign-in** — the live project is set up (2026-11-16): the rules
+  and indexes are deployed, `tools/bootstrap.mjs` has written the school, its
+  settings and the first ADMIN, and the web app is live at
+  **https://schooltrack-1941.web.app**. What is left is the part a script must
+  not do: the administrator creates their own account in the app, with their
+  own password, and confirms the address. Until somebody signs in, the school
+  has no classes and no students. If the confirmation email never arrives,
+  `bootstrap.mjs --verify` marks the address confirmed through the Admin SDK —
+  the rules require a confirmed address and there is no other way to repair it
+  from outside the console.
 - **A real printed QR scanned by a real phone** — the card code is round-tripped
   in a test on both sides, but no one has yet held a printed card in front of a
   handset.
