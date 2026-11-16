@@ -35,6 +35,7 @@ import Staff from './pages/Staff';
 import Student from './pages/Student';
 import StudentEdit from './pages/StudentEdit';
 import StudentAttendance from './pages/StudentAttendance';
+import StudentFees from './pages/StudentFees';
 import StudentResults from './pages/StudentResults';
 import Students from './pages/Students';
 import Users from './pages/Users';
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="/students/:studentId" element={<Student />} />
         <Route path="/students/:studentId/attendance" element={<StudentAttendance />} />
         <Route path="/students/:studentId/results" element={<StudentResults />} />
+        <Route path="/students/:studentId/fees" element={<StudentFees />} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
         <Route path="/attendance/monthly" element={staffOnly(<AttendanceMonthly />)} />
         <Route path="/attendance/low" element={staffOnly(<LowAttendance />)} />

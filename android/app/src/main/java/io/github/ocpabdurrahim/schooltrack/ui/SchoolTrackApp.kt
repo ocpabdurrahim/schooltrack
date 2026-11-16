@@ -22,7 +22,7 @@ enum class Screen {
     Setup, Classes, StaffAdmin, Users, StudentEdit,
     ExamSetup, MarkEntry, Results, ReportCard,
     Routine, SeatPlan, AdmitCards,
-    MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance, StudentResults,
+    MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance, StudentResults, StudentFees,
     Certificates, Certificate, IdCard,
     Payroll, PaySalary, SalaryRegister, Payslip,
     Expenses, IncomeExpense,
@@ -123,6 +123,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpenCard = { go(Screen.IdCard) },
                     onOpenAttendance = { go(Screen.StudentAttendance) },
                     onOpenResults = { go(Screen.StudentResults) },
+                    onOpenFees = { go(Screen.StudentFees) },
                     isGuardian = current is Access.Guardian,
                     studentId = openStudent,
                     onEdit = if (current.canEditStudents) {
@@ -243,6 +244,9 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 screen == Screen.StudentAttendance && mayOpen(openStudent) ->
                     StudentAttendanceScreen(studentId = openStudent, onBack = { back() })
 
+                screen == Screen.StudentFees && mayOpen(openStudent) ->
+                    StudentFeesScreen(studentId = openStudent, onBack = { back() })
+
                 screen == Screen.StudentResults && mayOpen(openStudent) -> StudentResultsScreen(
                     studentId = openStudent,
                     isGuardian = current is Access.Guardian,
@@ -291,6 +295,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
                     onOpenAttendance = { openStudent = it; go(Screen.StudentAttendance) },
                     onOpenResults = { openStudent = it; go(Screen.StudentResults) },
+                    onOpenFees = { openStudent = it; go(Screen.StudentFees) },
                     onSignOut = {
                         repo.signOut()
                         home()

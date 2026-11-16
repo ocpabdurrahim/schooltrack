@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -91,7 +93,7 @@ import kotlin.math.roundToInt
  * dashboard is a claim ("nothing was collected today"), and making that claim
  * because the read was refused is worse than showing nothing at all.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     access: Access,
@@ -103,6 +105,7 @@ fun HomeScreen(
     onOpenStudent: (String) -> Unit,
     onOpenAttendance: (String) -> Unit,
     onOpenResults: (String) -> Unit,
+    onOpenFees: (String) -> Unit,
     onSignOut: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
     admin: AdminRepository = remember { AdminRepository() },
@@ -311,18 +314,25 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                             )
-                            Row {
-                                TextButton(
-                                    onClick = { onOpenResults(student.studentId) },
-                                    contentPadding = PaddingValues(0.dp),
-                                ) { Text("Results") }
-                                Spacer(Modifier.width(14.dp))
-                                TextButton(
-                                    onClick = { onOpenStudent(student.studentId) },
-                                    contentPadding = PaddingValues(0.dp),
-                                ) { Text("Student details") }
-                            }
+
                         }
+                    }
+
+                    // Below the ring, not beside it: three links in the narrow
+                    // column next to a 112dp ring ran off the side of the card.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        TextButton(
+                            onClick = { onOpenResults(student.studentId) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text("Results") }
+                        TextButton(
+                            onClick = { onOpenFees(student.studentId) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text("Fees") }
+                        TextButton(
+                            onClick = { onOpenStudent(student.studentId) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text("Student details") }
                     }
                 }
             }

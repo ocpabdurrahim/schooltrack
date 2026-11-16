@@ -434,27 +434,171 @@ export type StudentFees = {
  * the fee heads, so they can be shown what was paid but never a computed due.
  * Each part is fetched separately and a refusal just means that part is null.
  */
+// ---------------------------------------------------------------------------
+// one student's fees, head by head -- what a parent is shown
+
+export type FeeLine = {
+  feeHeadId: string;
+  headName: string;
+  frequency: Frequency | null;   // null = the head is gone from the rate card
+  rate: number | null;           // per period for this class; null = not set
+  periods: number;               // how many periods are counted so far
+  charged: number;
+  paid: number;
+  discount: number;
+  balance: number;
+};
+
+export type FeeStatement = {
+  sessionYear: string;
+  lines: FeeLine[];
+  charged: number;
+  paid: number;
+  discount: number;
+  outstanding: number;
+};
+
+/**
+ * What this student owes and has paid, head by head.
+ *
+ * Three rules carried from the dues screen, because a parent and the office
+ * must never be shown different arithmetic:
+ *
+ *   1. A MONTHLY fee is counted up to the month the school has reached, never
+ *      to the end of the year. Nobody owes December in August.
+ *   2. A ONE-TIME fee is counted once.
+ *   3. AN EXAM FEE IS NEVER PREDICTED. It is charged when the exam happens, so
+ *      it appears here only once something has actually been paid against it.
+ *
+ * A head that has payments but no rate for this class still gets a line — an
+ * exam fee, or a head since removed from the card — so every taka a parent has
+ * handed over is accounted for somewhere. The balance of such a line is 0:
+ * money paid against nothing owed is not a debt.
+ *
+ * Outstanding is the sum of the line balances, not charged minus paid: paying
+ * two months of tuition in advance does not settle an unpaid admission fee,
+ * and showing it as though it did would tell a parent they owe nothing.
+ */
+export function feeStatement(
+  heads: FeeHead[],
+  structure: StructureRow[],
+  receipts: Payment[],
+  className: string,
+  sessionYear: string,
+  monthsCounted: number,
+): FeeStatement {
+  const paidByHead = new Map<string, { headName: string; paid: number; discount: number }>();
+  for (const p of receipts) {
+    for (const l of p.lines ?? []) {
+      if (l.sessionYear !== sessionYear) continue;
+      const at = paidByHead.get(l.feeHeadId) ?? { headName: l.headName, paid: 0, discount: 0 };
+      at.paid += Number(l.amountPaid) || 0;
+      at.discount += Number(l.discountAmount) || 0;
+      paidByHead.set(l.feeHeadId, at);
+    }
+  }
+
+  const lines: FeeLine[] = [];
+
+  for (const head of heads.filter((h) => h.active !== false)) {
+    const row = structure.find(
+      (r) => r.feeHeadId === head.feeHeadId &&
+             r.className === className &&
+             r.sessionYear === sessionYear,
+    );
+    const money = paidByHead.get(head.feeHeadId);
+    paidByHead.delete(head.feeHeadId);
+    if (!row?.amount && !money) continue;   // not charged to this class, nothing paid
+
+    const rate = row?.amount ?? null;
+    const periods = rate === null ? 0
+      : head.frequency === 'MONTHLY' ? monthsCounted
+      : head.frequency === 'ONE_TIME' ? 1
+      : 0;                                   // EXAM: never predicted
+    const charged = rate === null ? 0 : rate * periods;
+    const paid = money?.paid ?? 0;
+    const discount = money?.discount ?? 0;
+
+    lines.push({
+      feeHeadId: head.feeHeadId,
+      headName: head.headName,
+      frequency: head.frequency,
+      rate,
+      periods,
+      charged,
+      paid,
+      discount,
+      balance: Math.max(0, charged - paid - discount),
+    });
+  }
+
+  // whatever was paid against a head that is no longer on the card
+  for (const [feeHeadId, money] of paidByHead) {
+    lines.push({
+      feeHeadId,
+      headName: money.headName || feeHeadId,
+      frequency: null,
+      rate: null,
+      periods: 0,
+      charged: 0,
+      paid: money.paid,
+      discount: money.discount,
+      balance: 0,
+    });
+  }
+
+  return {
+    sessionYear,
+    lines,
+    charged: lines.reduce((t, l) => t + l.charged, 0),
+    paid: lines.reduce((t, l) => t + l.paid, 0),
+    discount: lines.reduce((t, l) => t + l.discount, 0),
+    outstanding: lines.reduce((t, l) => t + l.balance, 0),
+  };
+}
+
+/** The months of the session counted so far: all twelve for a past year. */
+export const monthsCountedFor = (sessionYear: string) =>
+  (sessionYear === currentYear() ? currentMonthIndex() : 11) + 1;
+
+/** The rate card and the receipts a fees report is built from. */
+export async function feeReport(
+  student: StudentDetail,
+  sessionYear: string,
+): Promise<{ statement: FeeStatement; receipts: Payment[] } | null> {
+  try {
+    const [heads, structure, receipts] = await Promise.all([
+      listFeeHeads(),
+      listStructure(),
+      paymentsFor(student.studentId),
+    ]);
+    return {
+      statement: feeStatement(
+        heads, structure, receipts, student.className, sessionYear,
+        monthsCountedFor(sessionYear),
+      ),
+      receipts,
+    };
+  } catch {
+    return null;   // a teacher may read none of this; the page says so
+  }
+}
+
 export async function studentFees(
   student: StudentDetail,
   sessionYear: string,
 ): Promise<StudentFees> {
   const receipts = await paymentsFor(student.studentId).catch(() => null);
 
+  // The same arithmetic as the fees report, from the same function: the
+  // student page and a parent's statement must never disagree.
   let expected: number | null = null;
   try {
     const [heads, structure] = await Promise.all([listFeeHeads(), listStructure()]);
-    const months = (sessionYear === currentYear() ? currentMonthIndex() : 11) + 1;
-    expected = 0;
-    for (const head of heads.filter((h) => h.active !== false)) {
-      const row = structure.find(
-        (r) => r.feeHeadId === head.feeHeadId &&
-               r.className === student.className &&
-               r.sessionYear === sessionYear,
-      );
-      if (!row?.amount) continue;
-      if (head.frequency === 'MONTHLY') expected += row.amount * months;
-      else if (head.frequency === 'ONE_TIME') expected += row.amount;
-    }
+    expected = feeStatement(
+      heads, structure, receipts ?? [], student.className, sessionYear,
+      monthsCountedFor(sessionYear),
+    ).charged;
   } catch {
     expected = null;
   }

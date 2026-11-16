@@ -111,6 +111,16 @@ beforeEach(async () => {
 
     await setDoc(doc(db, p('counters', 'receipts')), { next: 2 });
 
+    await setDoc(doc(db, p('feeHeads', 'TUITION')), {
+      headCode: 'TUITION', headName: 'Tuition fee', frequency: 'MONTHLY',
+      active: true, sortOrder: 1, updatedAt: now,
+    });
+
+    await setDoc(doc(db, p('feeStructure', 'TUITION_Class 6_2026')), {
+      feeHeadId: 'TUITION', className: 'Class 6', sessionYear: '2026',
+      amount: 300, updatedAt: now,
+    });
+
     await setDoc(doc(db, p('holidays', '2026-12-16')), {
       date: '2026-12-16', name: 'Victory Day', source: 'SCHOOL', updatedAt: now,
     });
@@ -250,6 +260,31 @@ describe('guardians (§2)', () => {
     await assertFails(getDoc(doc(parent(), p('salaryPayments', 'x'))));
   });
 
+  it("reads their own child's receipt", async () => {
+    await assertSucceeds(getDoc(doc(parent(), p('payments', 'RCPT-000001'))));
+  });
+
+  // The fees report has to say what is OUTSTANDING, and a balance cannot be
+  // worked out without the rate card. A school publishes its fees anyway.
+  it('reads the rate card, so the fees report can show a balance', async () => {
+    await assertSucceeds(getDoc(doc(parent(), p('feeHeads', 'TUITION'))));
+    await assertSucceeds(getDoc(doc(parent(), p('feeStructure', 'TUITION_Class 6_2026'))));
+    await assertSucceeds(getDocs(collection(parent(), p('feeHeads'))));
+  });
+
+  it('cannot change the rate card', async () => {
+    await assertFails(
+      setDoc(doc(parent(), p('feeStructure', 'TUITION_Class 6_2026')), {
+        feeHeadId: 'TUITION', className: 'Class 6', sessionYear: '2026',
+        amount: 1, updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('still cannot read the per-student discounts', async () => {
+    await assertFails(getDoc(doc(parent(), p('discounts', 'x'))));
+  });
+
   // The UI also hides other children, but that is courtesy. These are the
   // checks that actually stop a determined parent with a URL bar.
   it('may query the attendance of their OWN child', async () => {
@@ -276,6 +311,13 @@ describe('guardians (§2)', () => {
 });
 
 describe('role boundaries', () => {
+  // Widening the rate card to guardians must not widen it to teachers: money
+  // is not a teacher's business here, and that was true before guardians were.
+  it('a TEACHER still cannot read the rate card', async () => {
+    await assertFails(getDoc(doc(teacher(), p('feeHeads', 'TUITION'))));
+    await assertFails(getDoc(doc(teacher(), p('feeStructure', 'TUITION_Class 6_2026'))));
+  });
+
   it('a TEACHER cannot read payments', async () => {
     await assertFails(getDoc(doc(teacher(), p('payments', 'RCPT-000001'))));
   });

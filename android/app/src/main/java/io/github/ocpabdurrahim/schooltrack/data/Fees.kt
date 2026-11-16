@@ -83,6 +83,124 @@ data class Collectable(
     val settled: Boolean get() = outstanding <= 0.0
 }
 
+// ---------------------------------------------------------------------------
+// one student's fees, head by head -- what a parent is shown
+
+data class FeeLine(
+    val feeHeadId: String,
+    val headName: String,
+    val frequency: Frequency?,   // null = the head is gone from the rate card
+    val rate: Double?,           // per period for this class; null = not set
+    val periods: Int,
+    val charged: Double,
+    val paid: Double,
+    val discount: Double,
+    val balance: Double,
+)
+
+data class FeeStatement(
+    val sessionYear: String,
+    val lines: List<FeeLine>,
+) {
+    val charged: Double get() = lines.sumOf { it.charged }
+    val paid: Double get() = lines.sumOf { it.paid }
+    val discount: Double get() = lines.sumOf { it.discount }
+    val outstanding: Double get() = lines.sumOf { it.balance }
+}
+
+/**
+ * What this student owes and has paid, head by head — the twin of
+ * feeStatement() in web/src/data/fees.ts, with the same test cases.
+ *
+ * Three rules carried from the dues screen, because a parent and the office
+ * must never be shown different arithmetic:
+ *
+ *   1. A MONTHLY fee is counted up to the month the school has reached, never
+ *      to the end of the year. Nobody owes December in August.
+ *   2. A ONE-TIME fee is counted once.
+ *   3. AN EXAM FEE IS NEVER PREDICTED. Its rate is shown, because a parent is
+ *      entitled to know it, but nothing is charged until the exam happens.
+ *
+ * A head that has payments but no rate for this class still gets a line, so
+ * every taka a parent has handed over is accounted for somewhere; its balance
+ * is 0, because money paid against nothing owed is not a debt.
+ *
+ * Outstanding is the sum of the line balances, not charged minus paid: paying
+ * two months of tuition in advance does not settle an unpaid admission fee.
+ */
+fun feeStatement(
+    heads: List<FeeHead>,
+    structure: List<StructureRow>,
+    receipts: List<Payment>,
+    className: String,
+    sessionYear: String,
+    monthsCounted: Int,
+): FeeStatement {
+    data class Money(var headName: String, var paid: Double, var discount: Double)
+
+    val paidByHead = linkedMapOf<String, Money>()
+    for (p in receipts) {
+        for (l in p.lines) {
+            if (l.sessionYear != sessionYear) continue
+            val at = paidByHead.getOrPut(l.feeHeadId) { Money(l.headName, 0.0, 0.0) }
+            at.paid += l.amountPaid
+            at.discount += l.discountAmount
+        }
+    }
+
+    val lines = mutableListOf<FeeLine>()
+
+    for (head in heads.filter { it.active }) {
+        val row = structure.firstOrNull {
+            it.feeHeadId == head.feeHeadId &&
+                it.className == className &&
+                it.sessionYear == sessionYear
+        }
+        val money = paidByHead.remove(head.feeHeadId)
+        if (row?.amount == null && money == null) continue
+
+        val rate = row?.amount
+        val periods = when {
+            rate == null -> 0
+            head.frequency == Frequency.MONTHLY -> monthsCounted
+            head.frequency == Frequency.ONE_TIME -> 1
+            else -> 0                                  // EXAM: never predicted
+        }
+        val charged = (rate ?: 0.0) * periods
+        val paid = money?.paid ?: 0.0
+        val discount = money?.discount ?: 0.0
+
+        lines += FeeLine(
+            feeHeadId = head.feeHeadId,
+            headName = head.headName,
+            frequency = head.frequency,
+            rate = rate,
+            periods = periods,
+            charged = charged,
+            paid = paid,
+            discount = discount,
+            balance = (charged - paid - discount).coerceAtLeast(0.0),
+        )
+    }
+
+    // whatever was paid against a head that is no longer on the card
+    for ((feeHeadId, money) in paidByHead) {
+        lines += FeeLine(
+            feeHeadId = feeHeadId,
+            headName = money.headName.ifBlank { feeHeadId },
+            frequency = null,
+            rate = null,
+            periods = 0,
+            charged = 0.0,
+            paid = money.paid,
+            discount = money.discount,
+            balance = 0.0,
+        )
+    }
+
+    return FeeStatement(sessionYear, lines)
+}
+
 data class Dues(
     val student: StudentDetail,
     val expected: Double,
@@ -342,6 +460,28 @@ class FeesRepository(
             .whereLessThanOrEqualTo("paymentDate", to)
             .orderBy("paymentDate", Query.Direction.DESCENDING)
             .get().await().documents.map(::toPayment)
+
+    /** The months of the session counted so far: all twelve for a past year. */
+    fun monthsCountedFor(sessionYear: String): Int =
+        (if (sessionYear == currentYear()) currentMonthIndex() else 11) + 1
+
+    /** The rate card and the receipts a fees report is built from. Returns null
+     *  when the role may read none of it — a teacher — so the screen can say so
+     *  rather than showing a report full of zeroes. */
+    suspend fun feeReport(
+        student: StudentDetail,
+        sessionYear: String,
+    ): Pair<FeeStatement, List<Payment>>? = try {
+        val heads = listFeeHeads()
+        val structure = listStructure()
+        val receipts = paymentsForStudent(student.studentId)
+        feeStatement(
+            heads, structure, receipts, student.className, sessionYear,
+            monthsCountedFor(sessionYear),
+        ) to receipts
+    } catch (_: Exception) {
+        null
+    }
 
     suspend fun paymentsForStudent(studentId: String): List<Payment> =
         school().collection("payments")

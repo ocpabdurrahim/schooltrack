@@ -198,6 +198,8 @@ export default function Home() {
                       <br />
                       <Link to={`/students/${student.studentId}/results`}>Results report →</Link>
                       <br />
+                      <Link to={`/students/${student.studentId}/fees`}>Fees report →</Link>
+                      <br />
                       <Link to={`/students/${student.studentId}`}>Student details →</Link>
                     </p>
                   </div>

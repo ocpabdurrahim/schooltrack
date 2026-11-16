@@ -191,13 +191,19 @@ service cloud.firestore {
 
       // ---- fees ------------------------------------------------------------
 
+      // The rate card. A GUARDIAN MAY READ IT, so their fees report can say
+      // what is outstanding rather than only what has been paid -- a balance
+      // cannot be worked out without knowing what was charged, and a school
+      // publishes its fees anyway. A TEACHER still may not: money is not a
+      // teacher's business here, and that was true before this line.
+      // Per-student discounts stay in /discounts, which no guardian can read.
       match /feeHeads/{id} {
-        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']) || isGuardian(s);
         allow write: if isAdmin(s) && stamped();
       }
 
       match /feeStructure/{id} {
-        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
+        allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']) || isGuardian(s);
         allow write: if isAdmin(s) && stamped();
       }
 

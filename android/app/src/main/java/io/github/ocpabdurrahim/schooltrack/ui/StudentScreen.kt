@@ -49,6 +49,7 @@ fun StudentScreen(
     onOpenCard: () -> Unit,
     onOpenAttendance: () -> Unit,
     onOpenResults: () -> Unit,
+    onOpenFees: () -> Unit,
     isGuardian: Boolean,
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
@@ -248,6 +249,7 @@ fun StudentScreen(
                         Text("Results", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = onOpenResults) { Text("Every exam") }
+                        TextButton(onClick = onOpenFees) { Text("Fees") }
                     }
                         results.forEach { (exam, t) ->
                             Row(

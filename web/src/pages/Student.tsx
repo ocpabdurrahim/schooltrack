@@ -161,6 +161,10 @@ export default function Student() {
       {fees && (fees.receipts !== null || fees.expected !== null) && (
         <div className="card">
           <h2>Fees · {currentYear()}</h2>
+          <div className="row">
+            <span>Head by head</span>
+            <span><Link to={`/students/${studentId}/fees`}>Fees report →</Link></span>
+          </div>
           <div className="tiles">
             {fees.expected !== null && (
               <div className="tile">
