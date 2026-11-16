@@ -1,8 +1,10 @@
 package io.github.ocpabdurrahim.schooltrack.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,7 +36,18 @@ enum class Screen {
 @Composable
 fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
     var access by remember { mutableStateOf<Access>(Access.Loading) }
-    var screen by remember { mutableStateOf(Screen.Home) }
+    // A REAL BACK STACK, so the handset's Back button goes back instead of
+    // closing the app. Every screen is pushed when it opens and popped when it
+    // closes. Home is the floor: there the BackHandler is off and Back belongs
+    // to Android again, which leaves the app — what a home screen should do.
+    val history = remember { mutableStateListOf(Screen.Home) }
+    val screen = history.last()
+    fun go(target: Screen) { if (history.last() != target) history.add(target) }
+    // A few steps REPLACE the screen they came from: going back from a receipt
+    // must not land on the collection form that has already been spent.
+    fun replaceWith(target: Screen) { history[history.lastIndex] = target }
+    fun back() { if (history.size > 1) history.removeAt(history.lastIndex) }
+    fun home() { history.clear(); history.add(Screen.Home) }
     var openStudent by remember { mutableStateOf("") }
     var editStudent by remember { mutableStateOf("") }
     var openReceipt by remember { mutableStateOf("") }
@@ -62,6 +75,11 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
             onSignUp = { email, password -> repo.signUp(email, password) },
         )
         else -> {
+            // Back goes BACK. Without this the Activity closed instead, which is
+            // what "the back button exits the app" meant. On Home it stays off,
+            // so Back there leaves the app, as it should.
+            BackHandler(enabled = history.size > 1) { back() }
+
             // Every screen is gated on the access record, not on the previous
             // screen. A guardian may reach only their own children's pages —
             // the rules enforce that server-side as well, but a refused read
@@ -75,196 +93,192 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
             when {
                 screen == Screen.Scan && current is Access.Staff -> ScanScreen(
                     email = current.email,
-                    onBack = { screen = Screen.Home },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Register && current is Access.Staff -> RegisterScreen(
                     email = current.email,
                     canMark = current.canMarkAttendance,
-                    onBack = { screen = Screen.Home },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Students && isStaff -> StudentsScreen(
-                    onOpen = { openStudent = it; screen = Screen.Student },
+                    onOpen = { openStudent = it; go(Screen.Student) },
                     onAdd = if (current.canEditStudents) {
-                        { editStudent = ""; screen = Screen.StudentEdit }
+                        { editStudent = ""; go(Screen.StudentEdit) }
                     } else {
                         null
                     },
-                    onBack = { screen = Screen.Home },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Children && current is Access.Guardian -> ChildrenScreen(
                     studentIds = current.studentIds,
-                    onOpen = { openStudent = it; screen = Screen.Student },
-                    onBack = { screen = Screen.Home },
+                    onOpen = { openStudent = it; go(Screen.Student) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Student && mayOpen(openStudent) -> StudentScreen(
-                    onOpenReport = { openExam = it; screen = Screen.ReportCard },
-                    onOpenCard = { screen = Screen.IdCard },
+                    onOpenReport = { openExam = it; go(Screen.ReportCard) },
+                    onOpenCard = { go(Screen.IdCard) },
                     isGuardian = current is Access.Guardian,
                     studentId = openStudent,
                     onEdit = if (current.canEditStudents) {
-                        { editStudent = openStudent; screen = Screen.StudentEdit }
+                        { editStudent = openStudent; go(Screen.StudentEdit) }
                     } else {
                         null
                     },
-                    onBack = {
-                        screen = if (isStaff) Screen.Students else Screen.Children
-                    },
+                    onBack = { back() },
                 )
 
                 screen == Screen.StudentEdit && current.canEditStudents -> StudentEditScreen(
                     studentId = editStudent,
-                    onSaved = { id -> openStudent = id; screen = Screen.Student },
-                    onBack = {
-                        screen = if (editStudent.isEmpty()) Screen.Students else Screen.Student
-                    },
+                    onSaved = { id -> openStudent = id; replaceWith(Screen.Student) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Collect && current is Access.Staff &&
                     current.canCollectFees -> CollectScreen(
                     email = current.email,
-                    onCollected = { openReceipt = it; screen = Screen.Receipt },
-                    onBack = { screen = Screen.Home },
+                    onCollected = { openReceipt = it; replaceWith(Screen.Receipt) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Receipts && current.canCollectFees -> ReceiptsScreen(
-                    onOpen = { openReceipt = it; screen = Screen.Receipt },
-                    onBack = { screen = Screen.Home },
+                    onOpen = { openReceipt = it; go(Screen.Receipt) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Receipt && current.canCollectFees -> ReceiptScreen(
                     receiptNo = openReceipt,
-                    onBack = { screen = Screen.Receipts },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Dues && current.canCollectFees ->
-                    DuesScreen(onBack = { screen = Screen.Home })
+                    DuesScreen(onBack = { back() })
 
                 screen == Screen.MarkEntry && isStaff ->
-                    MarkEntryScreen(onBack = { screen = Screen.Home })
+                    MarkEntryScreen(onBack = { back() })
 
                 screen == Screen.Results && isStaff -> ResultsScreen(
                     isAdmin = current.isAdmin,
-                    onOpenStudent = { openStudent = it; screen = Screen.Student },
-                    onBack = { screen = Screen.Home },
+                    onOpenStudent = { openStudent = it; go(Screen.Student) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.ReportCard && mayOpen(openStudent) -> ReportCardScreen(
                     examId = openExam,
                     studentId = openStudent,
                     isGuardian = current is Access.Guardian,
-                    onBack = { screen = Screen.Student },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Certificates && current is Access.Staff &&
                     current.canEditStudents -> CertificatesScreen(
                     email = current.email,
-                    onOpen = { openDoc = it; screen = Screen.Certificate },
-                    onBack = { screen = Screen.Home },
+                    onOpen = { openDoc = it; go(Screen.Certificate) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Certificate && current.canEditStudents -> CertificateScreen(
                     serialNo = openDoc,
-                    onBack = { screen = Screen.Certificates },
+                    onBack = { back() },
                 )
 
                 screen == Screen.IdCard && mayOpen(openStudent) -> IdCardScreen(
                     studentId = openStudent,
-                    onBack = { screen = Screen.Student },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Expenses && current is Access.Staff &&
                     current.canCollectFees -> ExpensesScreen(
                     email = current.email,
                     isAdmin = current.isAdmin,
-                    onBack = { screen = Screen.Home },
+                    onBack = { back() },
                 )
 
                 screen == Screen.IncomeExpense && current.canCollectFees ->
-                    IncomeExpenseScreen(onBack = { screen = Screen.Home })
+                    IncomeExpenseScreen(onBack = { back() })
 
                 screen == Screen.Payroll && current.isAdmin ->
-                    SalaryStructureScreen(onBack = { screen = Screen.Home })
+                    SalaryStructureScreen(onBack = { back() })
 
                 screen == Screen.PaySalary && current is Access.Staff && current.isAdmin ->
                     PaySalaryScreen(
                         email = current.email,
-                        onPaid = { openMonth = it; screen = Screen.SalaryRegister },
-                        onBack = { screen = Screen.Home },
+                        onPaid = { openMonth = it; replaceWith(Screen.SalaryRegister) },
+                        onBack = { back() },
                     )
 
                 screen == Screen.SalaryRegister && current.isAdmin -> SalaryRegisterScreen(
                     month = openMonth,
-                    onOpenPayslip = { openSlip = it; screen = Screen.Payslip },
-                    onBack = { screen = Screen.Home },
+                    onOpenPayslip = { openSlip = it; go(Screen.Payslip) },
+                    onBack = { back() },
                 )
 
                 screen == Screen.Payslip && current.isAdmin -> PayslipScreen(
                     id = openSlip,
-                    onBack = { screen = Screen.SalaryRegister },
+                    onBack = { back() },
                 )
 
                 screen == Screen.ExamSetup && current.isAdmin ->
-                    ExamsScreen(onBack = { screen = Screen.Home })
+                    ExamsScreen(onBack = { back() })
 
                 screen == Screen.Routine && current.isAdmin ->
-                    RoutineScreen(onBack = { screen = Screen.Home })
+                    RoutineScreen(onBack = { back() })
 
                 // the plan is read by whoever is invigilating, not only the office
                 screen == Screen.SeatPlan && isStaff ->
-                    SeatPlanScreen(onBack = { screen = Screen.Home })
+                    SeatPlanScreen(onBack = { back() })
 
                 screen == Screen.AdmitCards && current.canEditStudents ->
-                    AdmitCardsScreen(onBack = { screen = Screen.Home })
+                    AdmitCardsScreen(onBack = { back() })
 
                 screen == Screen.MonthlySheet && isStaff ->
-                    MonthlySheetScreen(onBack = { screen = Screen.Home })
+                    MonthlySheetScreen(onBack = { back() })
 
                 screen == Screen.LowAttendance && isStaff -> LowAttendanceScreen(
-                    onOpenStudent = { openStudent = it; screen = Screen.Student },
-                    onBack = { screen = Screen.Home },
+                    onOpenStudent = { openStudent = it; go(Screen.Student) },
+                    onBack = { back() },
                 )
 
                 // the calendar and the weekend decide every percentage, so only
                 // the head may change them
                 screen == Screen.HolidayCalendar && current.isAdmin ->
-                    HolidaysScreen(onBack = { screen = Screen.Home })
+                    HolidaysScreen(onBack = { back() })
 
                 screen == Screen.FeeSetup && current.isAdmin ->
-                    FeeSetupScreen(onBack = { screen = Screen.Home })
+                    FeeSetupScreen(onBack = { back() })
 
                 screen == Screen.Setup && current.isAdmin ->
-                    SchoolSetupScreen(onBack = { screen = Screen.Home })
+                    SchoolSetupScreen(onBack = { back() })
 
                 screen == Screen.Classes && current.isAdmin ->
-                    ClassesScreen(onBack = { screen = Screen.Home })
+                    ClassesScreen(onBack = { back() })
 
                 screen == Screen.StaffAdmin && current.isAdmin ->
-                    StaffScreen(onBack = { screen = Screen.Home })
+                    StaffScreen(onBack = { back() })
 
                 screen == Screen.Users && current.isAdmin ->
-                    UsersScreen(onBack = { screen = Screen.Home })
+                    UsersScreen(onBack = { back() })
 
                 else -> HomeScreen(
                     access = current,
-                    onOpenRegister = { screen = Screen.Register },
-                    onOpenScan = { screen = Screen.Scan },
-                    onOpenStudents = { screen = Screen.Students },
-                    onOpenChildren = { screen = Screen.Children },
+                    onOpenRegister = { go(Screen.Register) },
+                    onOpenScan = { go(Screen.Scan) },
+                    onOpenStudents = { go(Screen.Students) },
+                    onOpenChildren = { go(Screen.Children) },
                     onOpen = { target ->
                         // "Add a student" in the menu is always a NEW one: without
                         // this it would reopen whoever was edited last.
                         if (target == Screen.StudentEdit) editStudent = ""
-                        screen = target
+                        go(target)
                     },
                     // the dashboard opens a child straight from its card
-                    onOpenStudent = { openStudent = it; screen = Screen.Student },
+                    onOpenStudent = { openStudent = it; go(Screen.Student) },
                     onSignOut = {
                         repo.signOut()
-                        screen = Screen.Home
+                        home()
                         scope.launch { refresh() }
                     },
                 )

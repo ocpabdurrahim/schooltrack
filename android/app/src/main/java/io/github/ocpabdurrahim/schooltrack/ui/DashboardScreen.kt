@@ -1,5 +1,6 @@
 package io.github.ocpabdurrahim.schooltrack.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -148,6 +149,12 @@ fun HomeScreen(
     val groups = menuFor(access)
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // Back closes the drawer. This version of ModalNavigationDrawer does not do
+    // it for us, so Back with the menu open left the app instead -- from the
+    // dashboard there is nothing behind it. Composed deeper than the app's own
+    // handler, so it wins while the drawer is open.
+    BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
 
     ModalNavigationDrawer(
         drawerState = drawer,
