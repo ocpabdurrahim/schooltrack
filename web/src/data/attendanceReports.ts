@@ -156,6 +156,88 @@ export function monthlySheet(
   });
 }
 
+// ---------------------------------------------------------------------------
+// one student's month -- what a parent is shown
+
+export type DayCell = {
+  date: string;
+  kind: DayKind;
+  holiday?: string;
+  status: Status | null;   // null = nothing was marked that day
+};
+
+export type StudentMonth = {
+  month: string;
+  days: DayCell[];
+  present: number;      // P and L both count as present, as everywhere here
+  late: number;         // and L is also counted on its own, for the parent
+  absent: number;
+  leave: number;
+  marked: number;
+  workingDays: number;
+  notMarked: number;    // working days the school recorded nothing at all
+  percent: number | null;
+};
+
+/**
+ * One student, one month, day by day.
+ *
+ * The percentage is of the days MARKED, the same rule as every other figure in
+ * this app. A fortnight nobody marked would otherwise read as a fortnight of
+ * truancy on a parent's screen, which is a serious thing to tell a parent
+ * wrongly. The days the school marked nothing are reported separately instead.
+ *
+ * A mark on a weekend or a holiday still counts as marked: if the school opened
+ * and took attendance, the child was either there or not, and hiding it would
+ * make the figures disagree with the register.
+ */
+export function studentMonth(
+  month: string,
+  marks: { date: string; status: Status }[],
+  weekendDays: string[],
+  holidays: Map<string, string>,
+): StudentMonth {
+  const byDay = new Map(marks.map((m) => [m.date, m.status]));
+
+  const days: DayCell[] = daysInMonth(month).map((date) => ({
+    date,
+    kind: kindOf(date, weekendDays, holidays),
+    holiday: holidays.get(date),
+    status: byDay.get(date) ?? null,
+  }));
+
+  const count = (...of: Status[]) => days.filter((d) => d.status !== null && of.includes(d.status)).length;
+  const marked = days.filter((d) => d.status !== null).length;
+  const present = count('P', 'L');
+
+  return {
+    month,
+    days,
+    present,
+    late: count('L'),
+    absent: count('A'),
+    leave: count('E'),
+    marked,
+    workingDays: days.filter((d) => d.kind === 'working').length,
+    notMarked: days.filter((d) => d.kind === 'working' && d.status === null).length,
+    percent: marked ? Math.round((present / marked) * 1000) / 10 : null,
+  };
+}
+
+/** One student's marks for a month. Ordered to match the index the per-student
+ *  history already uses (studentId, date DESC); the sheet sorts its own days. */
+export async function marksForStudentMonth(studentId: string, month: string) {
+  const days = daysInMonth(month);
+  const snap = await getDocs(query(
+    collection(school(), 'attendanceMarks'),
+    where('studentId', '==', studentId),
+    where('date', '>=', days[0]),
+    where('date', '<=', days[days.length - 1]),
+    orderBy('date', 'desc'),
+  ));
+  return snap.docs.map((d) => d.data() as { date: string; status: Status });
+}
+
 /** Everyone below the threshold, worst first. Students with nothing marked
  *  are left out: they are not absentees, they are unmarked. */
 export function belowThreshold(rows: MonthlyRow[], threshold: number) {

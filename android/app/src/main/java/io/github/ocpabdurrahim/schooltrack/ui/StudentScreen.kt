@@ -47,6 +47,7 @@ fun StudentScreen(
     onEdit: (() -> Unit)?,
     onOpenReport: (String) -> Unit,
     onOpenCard: () -> Unit,
+    onOpenAttendance: () -> Unit,
     isGuardian: Boolean,
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
@@ -173,7 +174,11 @@ fun StudentScreen(
 
             Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Attendance", style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Attendance", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = onOpenAttendance) { Text("Month by month") }
+                    }
 
                     SingleChoiceSegmentedButtonRow(
                         Modifier.fillMaxWidth().padding(top = 8.dp),

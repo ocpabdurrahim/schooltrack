@@ -178,7 +178,9 @@ export default function Home() {
               <section className="panel" key={student.studentId}>
                 <div className="panel-head">
                   <h2>{student.fullName}</h2>
-                  <Link className="panel-link" to={`/students/${student.studentId}`}>Details →</Link>
+                  <Link className="panel-link" to={`/students/${student.studentId}/attendance`}>
+                    Attendance report →
+                  </Link>
                 </div>
                 <div className="ring-wrap">
                   <Ring percent={month.percent} />
@@ -193,6 +195,8 @@ export default function Home() {
                       {month.marked === 0
                         ? 'No days marked this month yet.'
                         : `${month.marked} day${month.marked === 1 ? '' : 's'} marked this month.`}
+                      <br />
+                      <Link to={`/students/${student.studentId}`}>Student details →</Link>
                     </p>
                   </div>
                 </div>

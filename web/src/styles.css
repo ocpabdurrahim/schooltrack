@@ -247,6 +247,51 @@ button[disabled], button[disabled]:hover { opacity: .55; cursor: default; backgr
 a { color: var(--accent); }
 
 /* ---------------------------------------------------------------------------
+   The attendance calendar a parent reads
+   --------------------------------------------------------------------------- */
+
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.cal-head { text-align: center; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; color: var(--muted); padding-bottom: 2px; }
+.cal-day {
+  border: 1px solid var(--line); border-radius: 9px;
+  min-height: 52px; padding: 5px 6px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: #fff;
+}
+.cal-num { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-mark { font-size: 16px; font-weight: 700; text-align: center; line-height: 1.1; }
+
+/* a day off looks like a day off, so a blank Tuesday cannot be read as truancy */
+.cal-day.weekend { background: var(--line-soft); border-color: var(--line-soft); }
+.cal-day.holiday { background: var(--warn-soft); border-color: #f3dcb4; }
+.cal-day.holiday .cal-mark { color: var(--warn); }
+
+.cal-day.s-P { background: var(--accent-soft); border-color: #cfe7db; }
+.cal-day.s-P .cal-mark { color: var(--accent-ink); }
+.cal-day.s-A { background: var(--bad-soft); border-color: #f3c7c1; }
+.cal-day.s-A .cal-mark { color: var(--bad); }
+.cal-day.s-L { background: var(--warn-soft); border-color: #f3dcb4; }
+.cal-day.s-L .cal-mark { color: var(--warn); }
+.cal-day.s-E { background: var(--info-soft); border-color: #cfe0f0; }
+.cal-day.s-E .cal-mark { color: var(--info); }
+
+.cal-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cal-legend i { width: 13px; height: 13px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+.cal-legend i.s-P { background: var(--accent-soft); }
+.cal-legend i.s-A { background: var(--bad-soft); }
+.cal-legend i.s-L { background: var(--warn-soft); }
+.cal-legend i.s-E { background: var(--info-soft); }
+.cal-legend i.holiday { background: var(--warn-soft); border-color: #f3dcb4; }
+.cal-legend i.weekend { background: var(--line-soft); }
+
+@media (max-width: 520px) {
+  .cal { gap: 3px; }
+  .cal-day { min-height: 44px; padding: 4px; border-radius: 7px; }
+  .cal-mark { font-size: 14px; }
+}
+
+/* ---------------------------------------------------------------------------
    The dashboard
    --------------------------------------------------------------------------- */
 

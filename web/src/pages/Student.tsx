@@ -129,6 +129,10 @@ export default function Student() {
           <span>{summarise(month)}</span>
         </div>
         <div className="row">
+          <span>Month by month</span>
+          <span><Link to={`/students/${studentId}/attendance`}>Attendance report →</Link></span>
+        </div>
+        <div className="row">
           <span>This year</span>
           <span>{summarise(year)}</span>
         </div>

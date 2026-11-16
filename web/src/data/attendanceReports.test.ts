@@ -5,6 +5,7 @@ import {
   daysInMonth,
   kindOf,
   monthlySheet,
+  studentMonth,
   weekdayOf,
   workingDays,
 } from './attendanceReports';
@@ -122,5 +123,67 @@ describe('belowThreshold', () => {
   it('does not list a student who is exactly on the threshold', () => {
     // student 1 is on 100%, which is not BELOW 100
     expect(belowThreshold(rows, 100).map((r) => r.studentId)).not.toContain('1');
+  });
+});
+
+describe("one student's month, as a parent is shown it", () => {
+  // November 2026: Fri 13 / Sat 14 are the weekend, and the 16th is a holiday
+  const holidays = new Map([['2026-11-16', 'Victory Day']]);
+  const marks = [
+    { date: '2026-11-10', status: 'P' as Status },
+    { date: '2026-11-11', status: 'A' as Status },
+    { date: '2026-11-12', status: 'L' as Status },
+    { date: '2026-11-17', status: 'E' as Status },
+  ];
+
+  const month = studentMonth('2026-11', marks, WEEKEND, holidays);
+
+  it('lays out every day of the month, in order', () => {
+    expect(month.days).toHaveLength(30);
+    expect(month.days[0].date).toBe('2026-11-01');
+    expect(month.days[29].date).toBe('2026-11-30');
+  });
+
+  it('counts a late as present, and also as late', () => {
+    expect(month.present).toBe(2);    // the P and the L
+    expect(month.late).toBe(1);
+    expect(month.absent).toBe(1);
+    expect(month.leave).toBe(1);
+    expect(month.marked).toBe(4);
+    expect(month.percent).toBe(50);   // 2 present of 4 marked
+  });
+
+  it('marks the weekend and names the holiday', () => {
+    const byDate = (d: string) => month.days.find((x) => x.date === d)!;
+    expect(byDate('2026-11-13').kind).toBe('weekend');
+    expect(byDate('2026-11-16').kind).toBe('holiday');
+    expect(byDate('2026-11-16').holiday).toBe('Victory Day');
+    expect(byDate('2026-11-17').kind).toBe('working');
+  });
+
+  it('reports the working days nobody marked instead of calling them absences', () => {
+    // 30 days, 8 weekend days, 1 holiday => 21 working days, 4 of them marked
+    expect(month.workingDays).toBe(21);
+    expect(month.notMarked).toBe(21 - 4);
+    expect(month.absent).toBe(1);
+  });
+
+  it('gives no percentage at all for a month with nothing marked', () => {
+    const empty = studentMonth('2026-11', [], WEEKEND, holidays);
+    expect(empty.percent).toBeNull();
+    expect(empty.marked).toBe(0);
+    expect(empty.notMarked).toBe(21);
+  });
+
+  it('still counts a mark made on a holiday — the register is the truth', () => {
+    const onHoliday = studentMonth(
+      '2026-11',
+      [{ date: '2026-11-16', status: 'P' as Status }],
+      WEEKEND,
+      holidays,
+    );
+    expect(onHoliday.marked).toBe(1);
+    expect(onHoliday.percent).toBe(100);
+    expect(onHoliday.workingDays).toBe(21);   // the holiday is still a holiday
   });
 });

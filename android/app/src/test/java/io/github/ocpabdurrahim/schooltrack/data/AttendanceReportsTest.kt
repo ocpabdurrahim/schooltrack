@@ -123,4 +123,68 @@ class AttendanceReportsTest {
     fun `a student exactly on the threshold is not listed`() {
         assertFalse(belowThreshold(twoMarks, 100.0).map { it.studentId }.contains("1"))
     }
+
+    // ---- one student's month, as a parent is shown it ----------------------
+    // The same cases as the web's "one student's month" block.
+
+    private val novHolidays = mapOf("2026-11-16" to "Victory Day")
+    private val novMarks = listOf(
+        "2026-11-10" to Status.P,
+        "2026-11-11" to Status.A,
+        "2026-11-12" to Status.L,
+        "2026-11-17" to Status.E,
+    )
+
+    @Test
+    fun `the month is laid out day by day, in order`() {
+        val month = studentMonth("2026-11", novMarks, weekend, novHolidays)
+        assertEquals(30, month.days.size)
+        assertEquals("2026-11-01", month.days.first().date)
+        assertEquals("2026-11-30", month.days.last().date)
+    }
+
+    @Test
+    fun `a late counts as present, and also as late`() {
+        val month = studentMonth("2026-11", novMarks, weekend, novHolidays)
+        assertEquals(2, month.present)
+        assertEquals(1, month.late)
+        assertEquals(1, month.absent)
+        assertEquals(1, month.leave)
+        assertEquals(4, month.marked)
+        assertEquals(50.0, month.percent!!, 0.001)
+    }
+
+    @Test
+    fun `the weekend is marked and the holiday is named`() {
+        val month = studentMonth("2026-11", novMarks, weekend, novHolidays)
+        val byDate = month.days.associateBy { it.date }
+        assertEquals(DayKind.WEEKEND, byDate["2026-11-13"]!!.kind)
+        assertEquals(DayKind.HOLIDAY, byDate["2026-11-16"]!!.kind)
+        assertEquals("Victory Day", byDate["2026-11-16"]!!.holiday)
+        assertEquals(DayKind.WORKING, byDate["2026-11-17"]!!.kind)
+    }
+
+    @Test
+    fun `working days nobody marked are reported, not counted as absences`() {
+        val month = studentMonth("2026-11", novMarks, weekend, novHolidays)
+        assertEquals(21, month.workingDays)
+        assertEquals(21 - 4, month.notMarked)
+        assertEquals(1, month.absent)
+    }
+
+    @Test
+    fun `a month with nothing marked has no percentage at all`() {
+        val month = studentMonth("2026-11", emptyList(), weekend, novHolidays)
+        assertNull(month.percent)
+        assertEquals(0, month.marked)
+        assertEquals(21, month.notMarked)
+    }
+
+    @Test
+    fun `a mark made on a holiday still counts - the register is the truth`() {
+        val month = studentMonth("2026-11", listOf("2026-11-16" to Status.P), weekend, novHolidays)
+        assertEquals(1, month.marked)
+        assertEquals(100.0, month.percent!!, 0.001)
+        assertEquals(21, month.workingDays)
+    }
 }

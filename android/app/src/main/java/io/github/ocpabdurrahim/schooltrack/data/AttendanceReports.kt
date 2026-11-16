@@ -120,6 +120,75 @@ fun percentText(percent: Double?): String = when {
     else -> percent.toString() + "%"
 }
 
+// ---------------------------------------------------------------------------
+// one student's month -- what a parent is shown
+
+data class DayCell(
+    val date: String,
+    val kind: DayKind,
+    val holiday: String? = null,
+    val status: Status? = null,   // null = nothing was marked that day
+)
+
+data class StudentMonthReport(
+    val month: String,
+    val days: List<DayCell>,
+    val present: Int,      // P and L both count as present, as everywhere here
+    val late: Int,         // and L is also counted on its own, for the parent
+    val absent: Int,
+    val leave: Int,
+    val marked: Int,
+    val workingDays: Int,
+    val notMarked: Int,    // working days the school recorded nothing at all
+    val percent: Double?,
+)
+
+/**
+ * One student, one month, day by day.
+ *
+ * The percentage is of the days MARKED, the same rule as every other figure in
+ * this app. A fortnight nobody marked would otherwise read as a fortnight of
+ * truancy on a parent's screen, which is a serious thing to tell a parent
+ * wrongly. The days the school marked nothing are reported separately instead.
+ *
+ * A mark made on a weekend or a holiday still counts as marked: if the school
+ * opened and took attendance, the child was either there or not, and hiding it
+ * would make the figures disagree with the register.
+ */
+fun studentMonth(
+    month: String,
+    marks: List<Pair<String, Status>>,
+    weekendDays: List<String>,
+    holidays: Map<String, String>,
+): StudentMonthReport {
+    val byDay = marks.toMap()
+    val days = daysInMonth(month).map { date ->
+        DayCell(
+            date = date,
+            kind = kindOf(date, weekendDays, holidays),
+            holiday = holidays[date],
+            status = byDay[date],
+        )
+    }
+
+    fun count(vararg of: Status) = days.count { it.status != null && it.status in of }
+    val marked = days.count { it.status != null }
+    val present = count(Status.P, Status.L)
+
+    return StudentMonthReport(
+        month = month,
+        days = days,
+        present = present,
+        late = count(Status.L),
+        absent = count(Status.A),
+        leave = count(Status.E),
+        marked = marked,
+        workingDays = days.count { it.kind == DayKind.WORKING },
+        notMarked = days.count { it.kind == DayKind.WORKING && it.status == null },
+        percent = if (marked > 0) (present * 1000.0 / marked).roundToInt() / 10.0 else null,
+    )
+}
+
 /** Everyone below the threshold, worst first. Students with nothing marked
  *  are left out: they are not absentees, they are unmarked. */
 fun belowThreshold(rows: List<MonthlyRow>, threshold: Double): List<MonthlyRow> =
@@ -166,6 +235,24 @@ class AttendanceReportsRepository(
      *  record. The rules allow delete for an ADMIN outside the stamp guard. */
     suspend fun removeHoliday(date: String) {
         school().collection("holidays").document(date).delete().await()
+    }
+
+    /** One student's marks for a month. Ordered to match the index the
+     *  per-student history already uses (studentId, date DESC). */
+    suspend fun marksForStudentMonth(studentId: String, month: String): List<Pair<String, Status>> {
+        val days = daysInMonth(month)
+        return school().collection("attendanceMarks")
+            .whereEqualTo("studentId", studentId)
+            .whereGreaterThanOrEqualTo("date", days.first())
+            .whereLessThanOrEqualTo("date", days.last())
+            .orderBy("date", Query.Direction.DESCENDING)
+            .get().await().documents.mapNotNull { d ->
+                val date = d.getString("date") ?: return@mapNotNull null
+                val status = d.getString("status")?.let {
+                    runCatching { Status.valueOf(it) }.getOrNull()
+                } ?: return@mapNotNull null
+                date to status
+            }
     }
 
     suspend fun marksForMonth(classId: String, month: String): List<MonthMark> {

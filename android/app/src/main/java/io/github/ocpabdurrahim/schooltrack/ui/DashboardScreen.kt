@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -100,6 +101,7 @@ fun HomeScreen(
     onOpenChildren: () -> Unit,
     onOpen: (Screen) -> Unit,
     onOpenStudent: (String) -> Unit,
+    onOpenAttendance: (String) -> Unit,
     onSignOut: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
     admin: AdminRepository = remember { AdminRepository() },
@@ -279,7 +281,7 @@ fun HomeScreen(
                 SectionCard(
                     title = student.fullName.uppercase(),
                     action = {
-                        TextButton(onClick = { onOpenStudent(student.studentId) }) { Text("Details") }
+                        TextButton(onClick = { onOpenAttendance(student.studentId) }) { Text("Report") }
                     },
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -308,6 +310,10 @@ fun HomeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Muted,
                             )
+                            TextButton(
+                                onClick = { onOpenStudent(student.studentId) },
+                                contentPadding = PaddingValues(0.dp),
+                            ) { Text("Student details") }
                         }
                     }
                 }

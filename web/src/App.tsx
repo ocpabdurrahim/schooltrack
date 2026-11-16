@@ -34,6 +34,7 @@ import Setup from './pages/Setup';
 import Staff from './pages/Staff';
 import Student from './pages/Student';
 import StudentEdit from './pages/StudentEdit';
+import StudentAttendance from './pages/StudentAttendance';
 import Students from './pages/Students';
 import Users from './pages/Users';
 
@@ -81,9 +82,10 @@ export default function App() {
         <Route path="/students" element={staffOnly(<Students />)} />
         <Route path="/students/new" element={recordsOnly(<StudentEdit />)} />
         <Route path="/students/:studentId/edit" element={recordsOnly(<StudentEdit />)} />
-        {/* guardians reach this for their own children; the page and the
+        {/* guardians reach these for their own children; the page and the
             rules both check that it is theirs */}
         <Route path="/students/:studentId" element={<Student />} />
+        <Route path="/students/:studentId/attendance" element={<StudentAttendance />} />
         <Route path="/attendance" element={staffOnly(<Attendance />)} />
         <Route path="/attendance/monthly" element={staffOnly(<AttendanceMonthly />)} />
         <Route path="/attendance/low" element={staffOnly(<LowAttendance />)} />

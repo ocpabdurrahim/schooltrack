@@ -22,7 +22,7 @@ enum class Screen {
     Setup, Classes, StaffAdmin, Users, StudentEdit,
     ExamSetup, MarkEntry, Results, ReportCard,
     Routine, SeatPlan, AdmitCards,
-    MonthlySheet, LowAttendance, HolidayCalendar,
+    MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance,
     Certificates, Certificate, IdCard,
     Payroll, PaySalary, SalaryRegister, Payslip,
     Expenses, IncomeExpense,
@@ -121,6 +121,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 screen == Screen.Student && mayOpen(openStudent) -> StudentScreen(
                     onOpenReport = { openExam = it; go(Screen.ReportCard) },
                     onOpenCard = { go(Screen.IdCard) },
+                    onOpenAttendance = { go(Screen.StudentAttendance) },
                     isGuardian = current is Access.Guardian,
                     studentId = openStudent,
                     onEdit = if (current.canEditStudents) {
@@ -237,6 +238,10 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 screen == Screen.MonthlySheet && isStaff ->
                     MonthlySheetScreen(onBack = { back() })
 
+                // a parent opens this for their own child; staff for anyone
+                screen == Screen.StudentAttendance && mayOpen(openStudent) ->
+                    StudentAttendanceScreen(studentId = openStudent, onBack = { back() })
+
                 screen == Screen.LowAttendance && isStaff -> LowAttendanceScreen(
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
                     onBack = { back() },
@@ -276,6 +281,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     },
                     // the dashboard opens a child straight from its card
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
+                    onOpenAttendance = { openStudent = it; go(Screen.StudentAttendance) },
                     onSignOut = {
                         repo.signOut()
                         home()
