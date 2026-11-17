@@ -133,6 +133,39 @@ class BatchTest {
     }
 
     @Test
+    fun `ignores a column it has no home for, instead of giving up on the header`() {
+        // The school's own APEX export, header and all. Class, Section,
+        // Religion and StudentId have nowhere to go in this app; everything
+        // else must still land in the right place.
+        val rows = parseStudentRows(
+            "Roll,Name,Gender,Reg,Group,Class,Section,Religion,Status,StudentId\n" +
+                "1,Samia Putul,Female,123456,Science,Class 9,A,Islam,A,1",
+        )
+        assertEquals(1, rows.size)
+        assertEquals(1L, rows[0].rollNo)
+        assertEquals("Samia Putul", rows[0].fullName)
+        assertEquals("", rows[0].fatherName)
+        assertEquals("F", rows[0].gender)
+        assertEquals("123456", rows[0].regNo)
+        assertEquals("Science", rows[0].groupName)
+        assertEquals("", rows[0].problem)
+        assertEquals("", rows[0].note)
+    }
+
+    @Test
+    fun `still refuses a line with a roll number in it as a header`() {
+        // Two of these cells ARE column names, so the bare 1 is the only thing
+        // keeping the line out of the header. Without that guard the real first
+        // student would be swallowed and every name below would shift a column.
+        val rows = parseStudentRows("1,Name,Group\n2,Ayesha,Science")
+        assertEquals(2, rows.size)
+        assertEquals("Name", rows[0].fullName)
+        assertEquals("Group", rows[0].fatherName)
+        assertEquals("Ayesha", rows[1].fullName)
+        assertEquals("Science", rows[1].fatherName)
+    }
+
+    @Test
     fun `writes the group the way the picker spells it`() {
         val rows = parseStudentRows(
             "Roll,Name,Group\n1,Ayesha,commerce\n2,Bashir,SCI\n3,Chaity,Vocational",

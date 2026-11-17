@@ -93,13 +93,23 @@ function splitCells(line: string): Split {
 }
 
 /** The columns a header line names, or null if it is not a header line. */
-function headerOrder(cells: string[]): Field[] | null {
-  const named = cells.map((c) => HEADERS[letters(c)]);
+function headerOrder(cells: string[]): (Field | undefined)[] | null {
+  const named = cells.map((c) => HEADERS[letters(c)] as Field | undefined);
   if (named.filter(Boolean).length < 2) return null;
-  // Every filled cell must name a column. A data line never does: "1" and
-  // "Ayesha" are not column names, so real data is never eaten as a header.
-  if (cells.some((c, i) => c.trim() !== '' && !named[i])) return null;
-  return named as Field[];
+  // A column this app has no home for — Class, Religion and StudentId come out
+  // of the school's APEX export — is left undefined and skipped as the row is
+  // read. It does NOT disqualify the header. A school's own file always carries
+  // columns of its own, and throwing the whole header away over one of them
+  // drops the app back to reading columns by position, which sends every field
+  // one place to the left: the roll is read as the name and the name as the
+  // father. Ignoring a column is a small loss; shifting every column is silent
+  // corruption of the whole list.
+  //
+  // What still disqualifies a line is a bare number in it. No column is called
+  // "1", and a list with no header nearly always opens with a roll, so this is
+  // what keeps a line of real data from being eaten as the header.
+  if (cells.some((c) => /^\d+$/.test(c.trim()))) return null;
+  return named;
 }
 
 /**

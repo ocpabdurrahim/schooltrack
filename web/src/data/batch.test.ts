@@ -110,6 +110,37 @@ describe('reading a pasted list of students', () => {
     });
   });
 
+  it('ignores a column it has no home for, instead of giving up on the header', () => {
+    // The school's own APEX export, header and all. Class, Section, Religion
+    // and StudentId have nowhere to go in this app; everything else must still
+    // land in the right place.
+    const rows = parseStudentRows(
+      'Roll,Name,Gender,Reg,Group,Class,Section,Religion,Status,StudentId\n'
+      + '1,Samia Putul,Female,123456,Science,Class 9,A,Islam,A,1',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      rollNo: 1,
+      fullName: 'Samia Putul',
+      fatherName: '',
+      gender: 'F',
+      regNo: '123456',
+      groupName: 'Science',
+      problem: '',
+      note: '',
+    });
+  });
+
+  it('still refuses a line with a roll number in it as a header', () => {
+    // Two of these cells ARE column names, so the bare 1 is the only thing
+    // keeping the line out of the header. Without that guard the real first
+    // student would be swallowed and every name below would shift a column.
+    const rows = parseStudentRows('1,Name,Group\n2,Ayesha,Science');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ rollNo: 1, fullName: 'Name', fatherName: 'Group' });
+    expect(rows[1]).toMatchObject({ rollNo: 2, fullName: 'Ayesha', fatherName: 'Science' });
+  });
+
   it('writes the group the way the picker spells it', () => {
     const rows = parseStudentRows(
       'Roll,Name,Group\n1,Ayesha,commerce\n2,Bashir,SCI\n3,Chaity,Vocational',

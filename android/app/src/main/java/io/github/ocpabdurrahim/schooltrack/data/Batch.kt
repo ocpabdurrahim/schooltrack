@@ -99,8 +99,19 @@ private fun splitCells(line: String): Split = when {
 private fun headerOrder(cells: List<String>): List<Field?>? {
     val named = cells.map { HEADERS[letters(it)] }
     if (named.count { it != null } < 2) return null
-    // Every filled cell must name a column. A data line never does.
-    if (cells.indices.any { cells[it].isNotBlank() && named[it] == null }) return null
+    // A column this app has no home for — Class, Religion and StudentId come out
+    // of the school's APEX export — stays null and is skipped as the row is read.
+    // It does NOT disqualify the header. A school's own file always carries
+    // columns of its own, and throwing the whole header away over one of them
+    // drops the app back to reading columns by position, which sends every field
+    // one place to the left: the roll is read as the name and the name as the
+    // father. Ignoring a column is a small loss; shifting every column is silent
+    // corruption of the whole list.
+    //
+    // What still disqualifies a line is a bare number in it. No column is called
+    // "1", and a list with no header nearly always opens with a roll, so this is
+    // what keeps a line of real data from being eaten as the header.
+    if (cells.any { DIGITS.matches(it.trim()) }) return null
     return named
 }
 
