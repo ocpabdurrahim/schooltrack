@@ -65,6 +65,7 @@ import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.GROUPS
 import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
 import io.github.ocpabdurrahim.schooltrack.data.asSitter
+import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
 import kotlinx.coroutines.launch
@@ -875,7 +876,7 @@ fun ResultsScreen(
 
     val exam = exams.firstOrNull { it.examId == examId }
     val className = rows.firstOrNull()?.student?.className.orEmpty()
-    val columns = if (className.isBlank()) emptyList() else subjectsForClass(subjects, className)
+    val columns = if (className.isBlank()) emptyList() else sheetColumns(subjects, className)
     val complete = rows.count { !it.tabulation.incomplete }
     val passed = rows.count { (it.tabulation.gpa ?: 0.0) > 0 }
     val stats = subjectStats(rows, columns)

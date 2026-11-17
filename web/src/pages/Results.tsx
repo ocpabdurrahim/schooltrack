@@ -15,7 +15,7 @@ import {
   publishExam,
   sheetFor,
   subjectStats,
-  subjectsForClass,
+  sheetColumns,
   totalMarks,
 } from '../data/exams';
 import { gpaText } from '../data/grading';
@@ -85,7 +85,7 @@ export default function Results() {
   }, [examId, classId, subjects]);
 
   const className = rows[0]?.student.className ?? '';
-  const columns = className ? subjectsForClass(subjects, className) : [];
+  const columns = className ? sheetColumns(subjects, className) : [];
   const complete = rows.filter((r) => !r.tabulation.incomplete).length;
   const passed = rows.filter((r) => (r.tabulation.gpa ?? 0) > 0).length;
   const stats = subjectStats(rows, columns);
@@ -212,6 +212,9 @@ export default function Results() {
                     {columns.map((c) => (
                       <th key={c.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
                         {c.subjectName.slice(0, 10)}{c.isOptional ? '*' : ''}
+                        <span style={{ display: 'block', fontWeight: 400, color: 'var(--muted)' }}>
+                          /{c.fullMarks}
+                        </span>
                       </th>
                     ))}
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>

@@ -25,6 +25,7 @@ import {
   type Parts,
   type SubjectMark,
   type Tabulation,
+  combineUnits,
   tabulate,
 } from './grading';
 import { normalGroup } from './groups';
@@ -509,6 +510,20 @@ export function resultLines(
     });
 }
 
+/**
+ * The columns a tabulation sheet has for one class.
+ *
+ * NOT simply the class's subjects: papers that are graded together are ONE
+ * column, out of their combined total, because that is the subject the
+ * tabulation grades. Taking the raw subject list instead leaves every
+ * combined paper looking for a row the tabulation does not contain — the
+ * whole sheet comes out blank, which is exactly what happened to a school
+ * whose four subjects were two Bangla papers and two English ones.
+ */
+export function sheetColumns(subjects: Subject[], className: string): SubjectMark[] {
+  return combineUnits(subjectsForClass(subjects, className).map((s) => subjectMarkFor(s, null)));
+}
+
 export type SubjectStat = {
   subjectId: string;
   subjectName: string;
@@ -521,7 +536,10 @@ export type SubjectStat = {
 };
 
 /** Per-subject statistics for the foot of the tabulation sheet. */
-export function subjectStats(results: StudentResult[], subjects: Subject[]): SubjectStat[] {
+export function subjectStats(
+  results: StudentResult[],
+  subjects: Pick<Subject, 'subjectId' | 'subjectName'>[],
+): SubjectStat[] {
   return subjects.map((subject) => {
     const marks: number[] = [];
     let passed = 0;

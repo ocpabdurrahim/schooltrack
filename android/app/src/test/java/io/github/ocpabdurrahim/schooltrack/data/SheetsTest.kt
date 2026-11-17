@@ -81,7 +81,7 @@ class SheetsTest {
             result("2", 2, mapOf("Bangla" to 40.0, "English" to 30.0, "Maths" to 45.0, "Agri" to 50.0)),
             result("3", 3, mapOf("Bangla" to 60.0, "Maths" to 55.0, "Agri" to 55.0), listOf("English")),
         )
-        val bangla = subjectStats(rows, subjects).first { it.subjectId == "Bangla" }
+        val bangla = subjectStats(rows, subjects.map { subjectMarkFor(it, null) }).first { it.subjectId == "Bangla" }
         assertEquals(80.0, bangla.highest!!, 0.001)
         assertEquals(40.0, bangla.lowest!!, 0.001)
         assertEquals(60.0, bangla.average!!, 0.001)
@@ -96,7 +96,7 @@ class SheetsTest {
             result("2", 2, mapOf("Bangla" to 40.0, "English" to 30.0, "Maths" to 45.0, "Agri" to 50.0)),
             result("3", 3, mapOf("Bangla" to 60.0, "Maths" to 55.0, "Agri" to 55.0), listOf("English")),
         )
-        val english = subjectStats(rows, subjects).first { it.subjectId == "English" }
+        val english = subjectStats(rows, subjects.map { subjectMarkFor(it, null) }).first { it.subjectId == "English" }
         assertEquals(1, english.absent)
         assertEquals(2, english.failed)
         assertEquals(1, english.passed)

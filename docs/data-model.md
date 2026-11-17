@@ -396,3 +396,20 @@ a feature:
 - **Dependency advisories** — `npm audit` reports high-severity advisories in
   `firebase` (`@grpc/grpc-js`) and `react-router-dom` (`@remix-run/router`).
   They need a bump and a re-test, not a redesign.
+
+---
+
+## Hosting cache (why a deploy did not reach anybody)
+
+`firebase.json` sets `Cache-Control: no-cache` on `**` and only then the
+year-long `immutable` on `/assets/**`.
+
+The obvious rule — `no-cache` on `/index.html` — does **not** work. Header
+rules match the **request** path, not the file a rewrite ends up serving, so
+`https://schooltrack-1941.web.app/` and `/students/12` matched nothing and fell
+through to Firebase's own default of `max-age=3600`. A browser then kept
+running the previous build for up to an hour after a deploy, which looks
+exactly like the deploy having failed.
+
+The asset rule stays safe because every built file carries a content hash in
+its name: a new build is a new URL, so nothing stale can be reused.

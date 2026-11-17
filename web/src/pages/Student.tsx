@@ -97,6 +97,7 @@ export default function Student() {
     ['Class', `${student.className} - ${student.section}`],
     ['Registration', student.regNo],
     ['Group', student.groupName],
+    ['Religion', student.religion],
     ['Father', student.fatherName],
     ['Mother', student.motherName],
     ['Date of birth', student.dob],

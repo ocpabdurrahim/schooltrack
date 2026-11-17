@@ -498,6 +498,19 @@ fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
             )
         }
 
+/**
+ * The columns a tabulation sheet has for one class.
+ *
+ * NOT simply the class's subjects: papers that are graded together are ONE
+ * column, out of their combined total, because that is the subject the
+ * tabulation grades. Taking the raw subject list instead leaves every
+ * combined paper looking for a row the tabulation does not contain — the
+ * whole sheet comes out blank, which is exactly what happened to a school
+ * whose four subjects were two Bangla papers and two English ones.
+ */
+fun sheetColumns(subjects: List<Subject>, className: String): List<SubjectMark> =
+    combineUnits(subjectsForClass(subjects, className).map { subjectMarkFor(it, null) })
+
 data class SubjectStat(
     val subjectId: String,
     val subjectName: String,
@@ -510,7 +523,7 @@ data class SubjectStat(
 )
 
 /** Per-subject statistics for the foot of the tabulation sheet. */
-fun subjectStats(results: List<StudentResult>, subjects: List<Subject>): List<SubjectStat> =
+fun subjectStats(results: List<StudentResult>, subjects: List<SubjectMark>): List<SubjectStat> =
     subjects.map { subject ->
         val marks = mutableListOf<Double>()
         var passed = 0

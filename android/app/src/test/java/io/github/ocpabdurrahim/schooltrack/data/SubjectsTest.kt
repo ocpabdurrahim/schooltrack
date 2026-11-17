@@ -211,6 +211,81 @@ class SubjectsTest {
         assertNull(rows[0].tabulation.gpa)
     }
 
+    // ----------------------------------------------------------------------
+    // the columns of the sheet itself
+    //
+    // A real school's whole subject list was two Bangla papers and two English
+    // ones, every one of them graded in a pair. The sheet took its columns
+    // from the subject list and its values from the tabulation, which holds
+    // the merged units — so nothing ever matched and the entire sheet came out
+    // blank with the marks sitting safely in the database.
+
+    private val ban1 = bangla.copy(
+        subjectId = "BANGLA_1ST_PAPER", subjectName = "BANGLA 1ST PAPER", combineGroup = "BAN",
+    )
+    private val ban2 = bangla.copy(
+        subjectId = "BANGLA_2ND_PAPER", subjectName = "BANGLA 2ND PAPER", combineGroup = "BAN",
+        sortOrder = 2,
+    )
+    private val eng1 = bangla.copy(
+        subjectId = "ENGLISH_1ST_PAPER", subjectName = "ENGLISH 1ST PAPER", combineGroup = "ENG",
+        sortOrder = 3,
+    )
+    private val eng2 = bangla.copy(
+        subjectId = "ENGLISH_2ND_PAPER", subjectName = "ENGLISH 2ND PAPER", combineGroup = "ENG",
+        sortOrder = 4,
+    )
+    private val theirs = listOf(ban1, ban2, eng1, eng2)
+    private val pupil = student("s9", "Nusrat", 1, "", "")
+
+    @Test
+    fun isOneColumnPerGradedUnitNotOnePerPaper() {
+        val cols = sheetColumns(theirs, "Class 9")
+        assertEquals(listOf("UNIT_BAN", "UNIT_ENG"), cols.map { it.subjectId })
+        assertEquals(listOf("BANGLA", "ENGLISH"), cols.map { it.subjectName })
+        assertEquals(listOf(200.0, 200.0), cols.map { it.fullMarks })
+    }
+
+    @Test
+    fun matchesWhatTheTabulationHoldsSoTheMarksAppear() {
+        val rows = sheetFor(
+            listOf(pupil), theirs,
+            listOf(
+                mark("s9", "BANGLA_1ST_PAPER", 50.0),
+                mark("s9", "BANGLA_2ND_PAPER", 50.0),
+            ),
+            "ex1",
+        )
+        val cols = sheetColumns(theirs, "Class 9")
+        val banglaCell = rows[0].tabulation.subjects
+            .firstOrNull { it.mark.subjectId == cols[0].subjectId }
+        assertEquals(100.0, banglaCell!!.mark.marks!!, 0.001)   // the pair, out of 200
+    }
+
+    @Test
+    fun leavesAPaperThatStandsAloneAsItsOwnColumn() {
+        val maths = bangla.copy(subjectId = "MATH", subjectName = "Mathematics", sortOrder = 5)
+        assertEquals(
+            listOf("UNIT_BAN", "UNIT_ENG", "MATH"),
+            sheetColumns(theirs + maths, "Class 9").map { it.subjectId },
+        )
+    }
+
+    @Test
+    fun countsThePerSubjectStatisticsAgainstThoseSameColumns() {
+        val rows = sheetFor(
+            listOf(pupil), theirs,
+            listOf(
+                mark("s9", "BANGLA_1ST_PAPER", 50.0),
+                mark("s9", "BANGLA_2ND_PAPER", 50.0),
+            ),
+            "ex1",
+        )
+        val stats = subjectStats(rows, sheetColumns(theirs, "Class 9"))
+        assertEquals("BANGLA", stats[0].subjectName)
+        assertEquals(100.0, stats[0].highest!!, 0.001)
+    }
+
     @Test
     fun ranksStudentsOnTheirOwnPapersWhateverTheySat() {
         val rows = sheetFor(

@@ -158,6 +158,7 @@ fun StudentScreen(
                     Field("Mother", s.motherName)
                     Field("Date of birth", s.dob)
                     Field("Gender", s.gender)
+                    Field("Religion", s.religion)
                     Field("Blood group", s.bloodGroup)
                     Field("Mobile", s.mobileNo)
 

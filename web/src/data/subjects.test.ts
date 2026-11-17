@@ -3,8 +3,10 @@ import {
   type ResultRow,
   type Subject,
   excludedBy,
+  sheetColumns,
   sheetFor,
   sitsSubject,
+  subjectStats,
   subjectsForStudent,
 } from './exams';
 import type { StudentDetail } from './people';
@@ -209,5 +211,70 @@ describe('the result sheet', () => {
     );
     expect(rows.find((r) => r.student.studentId === 's2')?.position).toBe(1);
     expect(rows.find((r) => r.student.studentId === 's1')?.position).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the columns of the sheet itself
+//
+// A real school's whole subject list was two Bangla papers and two English
+// ones, every one of them graded in a pair. The sheet took its columns from
+// the subject list and its values from the tabulation, which holds the merged
+// units — so nothing ever matched and the entire sheet came out blank with the
+// marks sitting safely in the database.
+
+describe('sheetColumns', () => {
+  const ban1 = subject({
+    subjectId: 'BANGLA_1ST_PAPER', subjectName: 'BANGLA 1ST PAPER', combineGroup: 'BAN',
+  });
+  const ban2 = subject({
+    subjectId: 'BANGLA_2ND_PAPER', subjectName: 'BANGLA 2ND PAPER', combineGroup: 'BAN',
+    sortOrder: 2,
+  });
+  const eng1 = subject({
+    subjectId: 'ENGLISH_1ST_PAPER', subjectName: 'ENGLISH 1ST PAPER', combineGroup: 'ENG',
+    sortOrder: 3,
+  });
+  const eng2 = subject({
+    subjectId: 'ENGLISH_2ND_PAPER', subjectName: 'ENGLISH 2ND PAPER', combineGroup: 'ENG',
+    sortOrder: 4,
+  });
+  const theirs = [ban1, ban2, eng1, eng2];
+  const pupil = student({ studentId: 's9', fullName: 'Nusrat', rollNo: 1 });
+
+  it('is one column per graded unit, not one per paper', () => {
+    const cols = sheetColumns(theirs, 'Class 9');
+    expect(cols.map((c) => c.subjectId)).toEqual(['UNIT_BAN', 'UNIT_ENG']);
+    expect(cols.map((c) => c.subjectName)).toEqual(['BANGLA', 'ENGLISH']);
+    expect(cols.map((c) => c.fullMarks)).toEqual([200, 200]);
+  });
+
+  it('matches what the tabulation holds, so the marks appear', () => {
+    const rows = sheetFor(
+      [pupil], theirs,
+      [mark('s9', 'BANGLA_1ST_PAPER', 50), mark('s9', 'BANGLA_2ND_PAPER', 50)],
+      'ex1',
+    );
+    const cols = sheetColumns(theirs, 'Class 9');
+    const bangla = rows[0].tabulation.subjects.find((x) => x.subjectId === cols[0].subjectId);
+    expect(bangla).toBeDefined();
+    expect(bangla?.marks).toBe(100);          // the pair, out of 200
+  });
+
+  it('leaves a paper that stands alone as its own column', () => {
+    const maths = subject({ subjectId: 'MATH', subjectName: 'Mathematics', sortOrder: 5 });
+    expect(sheetColumns([...theirs, maths], 'Class 9').map((c) => c.subjectId))
+      .toEqual(['UNIT_BAN', 'UNIT_ENG', 'MATH']);
+  });
+
+  it('counts the per-subject statistics against those same columns', () => {
+    const rows = sheetFor(
+      [pupil], theirs,
+      [mark('s9', 'BANGLA_1ST_PAPER', 50), mark('s9', 'BANGLA_2ND_PAPER', 50)],
+      'ex1',
+    );
+    const stats = subjectStats(rows, sheetColumns(theirs, 'Class 9'));
+    expect(stats[0].subjectName).toBe('BANGLA');
+    expect(stats[0].highest).toBe(100);
   });
 });
