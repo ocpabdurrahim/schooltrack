@@ -274,6 +274,22 @@ class BatchTest {
     }
 
     @Test
+    fun `skips the heading line a spreadsheet brings with it`() {
+        val paste = parseMarkPaste("Roll\tName\tMarks\n1\tAyesha\t78\n2\tRakib\tA")
+        assertEquals(2, paste.rows.size)
+        assertTrue(paste.rows.all { it.problem.isEmpty() })
+        assertEquals(2, paste.rows[0].line)   // still pointing at the right line
+        val fill = applyMarkPaste(paste, section, 100L)
+        assertEquals("78", fill.entries["76"]!!.marks)
+        assertTrue(fill.entries["77"]!!.absent)
+    }
+
+    @Test
+    fun `does not mistake a single line for a heading`() {
+        assertTrue(parseMarkPaste("Marks").rows[0].problem.contains("not a mark"))
+    }
+
+    @Test
     fun `flags a line with no roll when the other lines have one`() {
         val paste = parseMarkPaste("1 78\n65")
         assertEquals(PasteKind.ROLLS, paste.kind)

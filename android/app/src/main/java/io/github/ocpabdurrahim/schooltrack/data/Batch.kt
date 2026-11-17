@@ -336,9 +336,14 @@ private fun markValue(tok: String): Pair<Double?, Boolean>? {
  * fill a bare column whose length does not match the section exactly.
  */
 fun parseMarkPaste(text: String): MarkPaste {
-    val lines = text.split(Regex("\r?\n"))
+    val all = text.split(Regex("\r?\n"))
         .mapIndexed { i, raw -> (i + 1) to raw }
         .filter { it.second.isNotBlank() }
+
+    // A heading line off a spreadsheet ("Roll  Name  Marks") carries no digit,
+    // and no line of marks is without one. Dropping it beats making the person
+    // delete it, and beats reporting it as a line that is not a mark.
+    val lines = if (all.size > 1 && !all[0].second.any { it.isDigit() }) all.drop(1) else all
 
     val rows = lines.map { (no, raw) ->
         val row = MarkRow(line = no)

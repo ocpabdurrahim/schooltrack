@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { type StudentRow, parseStudentRows, prepareStudentRows } from '../data/batch';
+import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
 import { findStudents } from '../data/people';
 
 type Shown = StudentRow & { state: 'ready' | 'stopped' | 'saved' | 'failed'; studentId?: string };
@@ -27,6 +28,7 @@ export default function StudentsBatch() {
   const [text, setText] = useState('');
   const [rows, setRows] = useState<Shown[] | null>(null);
   const [taken, setTaken] = useState<number[] | null>(null);
+  const [fromFile, setFromFile] = useState('');
   const [busy, setBusy] = useState(true);
   const [reading, setReading] = useState(false);
   const [problem, setProblem] = useState('');
@@ -44,6 +46,25 @@ export default function StudentsBatch() {
   }, []);
 
   const section = classes.find((c) => c.classId === classId);
+
+  /**
+   * A chosen file only fills the box. It is still read, shown and corrected
+   * like anything typed in — a file that saves itself is a file nobody checked.
+   */
+  async function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';           // so the same file can be chosen again
+    if (!file) return;
+    setProblem(''); setRows(null); setDone(false); setFromFile('');
+    try {
+      const loaded = await readSheetFile(file);
+      if (!loaded.trim()) { setProblem(`There is nothing in ${file.name}.`); return; }
+      setText(loaded);
+      setFromFile(file.name);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'That file could not be read.');
+    }
+  }
 
   async function read() {
     if (!classId) { setProblem('Pick a section first.'); return; }
@@ -135,14 +156,25 @@ export default function StudentsBatch() {
           ))}
         </select>
 
-        <label htmlFor="list">The list</label>
+        <label htmlFor="file">A file, if you have one</label>
+        <input id="file" type="file" accept={SHEET_ACCEPT} onChange={pickFile} />
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          An Excel file (.xlsx) or a CSV. The first sheet is read, into the box
+          below, where it can be corrected before anything is saved. An old .xls
+          has to be saved again as .xlsx or CSV first.
+        </p>
+
+        <label htmlFor="list">
+          The list
+          {fromFile && <span style={{ color: 'var(--accent)' }}> · read from {fromFile}</span>}
+        </label>
         <textarea
           id="list"
           className="mono"
           rows={10}
           value={text}
           placeholder={EXAMPLE}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => { setText(e.target.value); setFromFile(''); }}
         />
 
         <p style={{ color: 'var(--muted)', fontSize: 13, margin: '10px 0 0' }}>

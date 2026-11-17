@@ -236,6 +236,20 @@ describe('reading a pasted tally of marks', () => {
     expect(fill.entries['76'].marks).toBe('178');
   });
 
+  it('skips the heading line a spreadsheet brings with it', () => {
+    const paste = parseMarkPaste('Roll\tName\tMarks\n1\tAyesha\t78\n2\tRakib\tA');
+    expect(paste.rows).toHaveLength(2);
+    expect(paste.rows.every((r) => r.problem === '')).toBe(true);
+    expect(paste.rows[0].line).toBe(2);   // still pointing at the right line
+    const fill = applyMarkPaste(paste, section, 100);
+    expect(fill.entries['76'].marks).toBe('78');
+    expect(fill.entries['77'].absent).toBe(true);
+  });
+
+  it('does not mistake a single line for a heading', () => {
+    expect(parseMarkPaste('Marks').rows[0].problem).toContain('not a mark');
+  });
+
   it('flags a line with no roll when the other lines have one', () => {
     const paste = parseMarkPaste('1 78\n65');
     expect(paste.kind).toBe('ROLLS');

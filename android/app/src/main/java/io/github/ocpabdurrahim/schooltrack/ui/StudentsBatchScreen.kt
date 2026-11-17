@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,6 +68,7 @@ fun StudentsBatchScreen(
     var classes by remember { mutableStateOf<List<ClassRow>>(emptyList()) }
     var classId by remember { mutableStateOf("") }
     var text by remember { mutableStateOf("") }
+    var fromFile by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf<List<Shown>?>(null) }
     var taken by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(true) }
@@ -82,6 +84,13 @@ fun StudentsBatchScreen(
         }
         busy = false
     }
+
+    val pickFile = rememberSheetPicker(
+        onText = { name, loaded ->
+            text = loaded; fromFile = name; rows = null; done = false; problem = ""
+        },
+        onProblem = { problem = it; fromFile = "" },
+    )
 
     val section = classes.firstOrNull { it.classId == classId }
     val ready = rows?.count { it.state == RowState.READY } ?: 0
@@ -101,10 +110,17 @@ fun StudentsBatchScreen(
                     classId,
                 ) { classId = it; rows = null; done = false }
 
+                OutlinedButton(
+                    onClick = pickFile,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                ) { Text(if (fromFile.isBlank()) "Choose an Excel or CSV file" else "Choose another file") }
+
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
-                    label = { Text("The list") },
+                    onValueChange = { text = it; fromFile = "" },
+                    label = {
+                        Text(if (fromFile.isBlank()) "The list" else "The list · read from $fromFile")
+                    },
                     singleLine = false,
                     minLines = 6,
                     textStyle = MaterialTheme.typography.bodyMedium
@@ -117,7 +133,9 @@ fun StudentsBatchScreen(
                 )
 
                 Text(
-                    "Columns separated by tabs, by commas or by two spaces. Without a " +
+                    "An .xlsx or a CSV can be chosen above — the first sheet of it is read " +
+                        "into the box, where it can be corrected before anything is saved. " +
+                        "Columns separated by tabs, by commas or by two spaces. Without a " +
                         "heading line, a list that starts with a number is read as roll, " +
                         "name, father, mother, mobile, date of birth, and one that starts " +
                         "with a name as name, father, mother, mobile, date of birth — rolls " +

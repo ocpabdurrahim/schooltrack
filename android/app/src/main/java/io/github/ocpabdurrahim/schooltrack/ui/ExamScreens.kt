@@ -17,6 +17,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -286,6 +287,7 @@ fun MarkEntryScreen(
     var pasteOpen by remember { mutableStateOf(false) }
     var tally by remember { mutableStateOf("") }
     var pasted by remember { mutableStateOf<Pair<MarkPaste, MarkFill>?>(null) }
+    var fromFile by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         try {
@@ -299,6 +301,11 @@ fun MarkEntryScreen(
         }
         busy = false
     }
+
+    val pickFile = rememberSheetPicker(
+        onText = { name, loaded -> tally = loaded; fromFile = name; pasted = null; problem = "" },
+        onProblem = { problem = it; fromFile = "" },
+    )
 
     val exam = exams.firstOrNull { it.examId == examId }
     val className = students.firstOrNull()?.className.orEmpty()
@@ -390,10 +397,20 @@ fun MarkEntryScreen(
                         color = Muted,
                     )
                 } else {
+                    OutlinedButton(
+                        onClick = pickFile,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) { Text(if (fromFile.isBlank()) "Choose an Excel or CSV file" else "Choose another file") }
+
                     OutlinedTextField(
                         value = tally,
-                        onValueChange = { tally = it },
-                        label = { Text("Roll and mark, a line each") },
+                        onValueChange = { tally = it; fromFile = "" },
+                        label = {
+                            Text(
+                                if (fromFile.isBlank()) "Roll and mark, a line each"
+                                else "The marks · read from $fromFile",
+                            )
+                        },
                         singleLine = false,
                         minLines = 5,
                         textStyle = MaterialTheme.typography.bodyMedium
@@ -401,7 +418,8 @@ fun MarkEntryScreen(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                     Text(
-                        "A roll and its mark on each line — 1 78, 1=78, 1, Ayesha, 78 — or a " +
+                        "An .xlsx or a CSV, or typed in: a roll and its mark on each " +
+                            "line — 1 78, 1=78, 1, Ayesha, 78 — or a " +
                             "bare column of marks in roll order, which has to match this " +
                             "section exactly. Write A for absent and - to clear a mark.",
                         style = MaterialTheme.typography.bodySmall,

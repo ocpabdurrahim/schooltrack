@@ -304,9 +304,14 @@ function markValue(tok: string): { marks: number | null; absent: boolean } | nul
  * fill a bare column whose length does not match the section exactly.
  */
 export function parseMarkPaste(text: string): MarkPaste {
-  const lines = text.split(/\r?\n/)
+  const all = text.split(/\r?\n/)
     .map((raw, i) => ({ no: i + 1, raw }))
     .filter((l) => l.raw.trim() !== '');
+
+  // A heading line off a spreadsheet ("Roll  Name  Marks") carries no digit,
+  // and no line of marks is without one. Dropping it beats making the person
+  // delete it, and beats reporting it as a line that is not a mark.
+  const lines = all.length > 1 && !/\d/.test(all[0].raw) ? all.slice(1) : all;
 
   const rows: MarkRow[] = lines.map((l) => {
     const row: MarkRow = {

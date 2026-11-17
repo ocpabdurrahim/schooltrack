@@ -16,6 +16,7 @@ import {
   applyMarkPaste,
   parseMarkPaste,
 } from '../data/batch';
+import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
 import { gradeFor } from '../data/grading';
 import { type StudentDetail, findStudents } from '../data/people';
 
@@ -41,6 +42,7 @@ export default function MarkEntry() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [tally, setTally] = useState('');
   const [read, setRead] = useState<{ paste: MarkPaste; fill: MarkFill } | null>(null);
+  const [fromFile, setFromFile] = useState('');
 
   useEffect(() => {
     Promise.all([listExams(), listSubjects(), listClasses()])
@@ -100,6 +102,22 @@ export default function MarkEntry() {
       setSubjectId(classSubjects[0].subjectId);
     }
   }, [className, subjects]);
+
+  /** A chosen file only fills the box; the boxes are still filled by hand. */
+  async function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setRead(null); setProblem(''); setFromFile('');
+    try {
+      const loaded = await readSheetFile(file);
+      if (!loaded.trim()) { setProblem(`There is nothing in ${file.name}.`); return; }
+      setTally(loaded);
+      setFromFile(file.name);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'That file could not be read.');
+    }
+  }
 
   function fillFromTally() {
     const paste = parseMarkPaste(tally);
@@ -225,7 +243,14 @@ export default function MarkEntry() {
 
         {pasteOpen && (
           <>
+            <label htmlFor="mfile">A file, if you have one</label>
+            <input id="mfile" type="file" accept={SHEET_ACCEPT} onChange={pickFile} />
+            <label htmlFor="tally" style={{ marginTop: 12 }}>
+              The marks
+              {fromFile && <span style={{ color: 'var(--accent)' }}> · read from {fromFile}</span>}
+            </label>
             <textarea
+              id="tally"
               className="mono"
               rows={8}
               aria-label="pasted marks"
@@ -233,10 +258,11 @@ export default function MarkEntry() {
               placeholder={`1 78
 2 65
 3 abs`}
-              onChange={(e) => setTally(e.target.value)}
+              onChange={(e) => { setTally(e.target.value); setFromFile(''); }}
             />
             <p style={{ color: 'var(--muted)', fontSize: 13, margin: '10px 0 0' }}>
-              A roll and its mark on each line — <strong>1 78</strong>,{' '}
+              An Excel file (.xlsx) or a CSV, or typed in:
+              a roll and its mark on each line — <strong>1 78</strong>,{' '}
               <strong>1=78</strong>, <strong>1, Ayesha, 78</strong> — or a bare
               column of marks in roll order, which has to match this section
               exactly. Write <strong>A</strong> for absent and <strong>-</strong>{' '}
