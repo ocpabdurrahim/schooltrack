@@ -89,6 +89,33 @@ fun subjectTotal(m: SubjectMark): Double? {
     return total
 }
 
+/**
+ * What has been entered so far, when the subject is not finished.
+ *
+ * A subject with a missing part has no total — that is the rule the grading
+ * rests on. But "no total" and "nothing entered" are different things, and a
+ * sheet that prints the same dash for both tells a teacher who has just keyed
+ * in English First Paper that their work went nowhere. English First and
+ * Second are ONE subject out of 200: until the second paper is in, the
+ * subject has no mark, and this is how the sheet can still show that half of
+ * it has arrived.
+ *
+ * Null when the subject is finished (there is a real total to print) or when
+ * nothing has been entered at all.
+ */
+fun enteredSoFar(m: SubjectMark): Double? {
+    if (m.components.isEmpty() || subjectTotal(m) != null) return null
+    var any = false
+    var total = 0.0
+    for (c in m.components) {
+        val v = m.parts[c.name] ?: continue
+        if (v.isNaN()) continue
+        any = true
+        total += v
+    }
+    return if (any) total else null
+}
+
 /** The components that fall below their own pass mark, by name. */
 fun failedComponents(m: SubjectMark): List<String> {
     if (!m.partlyEntered()) return emptyList()

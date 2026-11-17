@@ -9,7 +9,7 @@ import {
   subjectTotal,
   tabulate,
   unitName,
-} from './grading';
+  enteredSoFar,} from './grading';
 
 /**
  * The SAME cases exist in android/app/src/test/.../GradingTest.kt. If a case
@@ -252,5 +252,55 @@ describe('unitName', () => {
   it('falls back to the group when the names share nothing', () => {
     expect(unitName(['Bangla', 'Sahitya'], 'BAN')).toBe('BAN');
     expect(unitName([], 'ENG')).toBe('ENG');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// half a subject
+//
+// From a real morning at the school: English First Paper was keyed in for a
+// whole section and the sheet showed a dash, exactly as it did before anyone
+// had typed anything. English First and Second are ONE subject out of 200, so
+// there genuinely was no mark yet — but the teacher had no way to tell that
+// from their work having been thrown away.
+
+describe('enteredSoFar', () => {
+  const english: SubjectMark = {
+    subjectId: 'UNIT_ENG',
+    subjectName: 'ENGLISH',
+    fullMarks: 200,
+    marks: null,
+    combineGroup: 'ENG',
+    components: [
+      { name: 'ENGLISH 1ST PAPER WRITTEN', max: 100, pass: 0 },
+      { name: 'ENGLISH 2ND PAPER WRITTEN', max: 100, pass: 0 },
+    ],
+  };
+
+  it('adds up the papers that ARE in, while the subject has no total', () => {
+    const half = { ...english, parts: { 'ENGLISH 1ST PAPER WRITTEN': 50,
+                                        'ENGLISH 2ND PAPER WRITTEN': null } };
+    expect(subjectTotal(half)).toBeNull();     // the subject still has no mark
+    expect(enteredSoFar(half)).toBe(50);       // but half of it has arrived
+  });
+
+  it('is null when the subject is finished — there is a real total to print', () => {
+    const whole = { ...english, parts: { 'ENGLISH 1ST PAPER WRITTEN': 50,
+                                         'ENGLISH 2ND PAPER WRITTEN': 60 } };
+    expect(subjectTotal(whole)).toBe(110);
+    expect(enteredSoFar(whole)).toBeNull();
+  });
+
+  it('is null when nothing has been entered at all', () => {
+    expect(enteredSoFar({ ...english, parts: { 'ENGLISH 1ST PAPER WRITTEN': null,
+                                               'ENGLISH 2ND PAPER WRITTEN': null } }))
+      .toBeNull();
+    expect(enteredSoFar({ ...english, parts: {} })).toBeNull();
+  });
+
+  it('says nothing about a paper marked as one mark', () => {
+    expect(enteredSoFar({
+      subjectId: 'REL', subjectName: 'Religion', fullMarks: 100, marks: null,
+    })).toBeNull();
   });
 });

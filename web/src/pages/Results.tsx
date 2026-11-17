@@ -18,7 +18,7 @@ import {
   sheetColumns,
   totalMarks,
 } from '../data/exams';
-import { gpaText } from '../data/grading';
+import { enteredSoFar, gpaText } from '../data/grading';
 import { findStudents } from '../data/people';
 
 type View = 'tabulation' | 'sheet';
@@ -245,12 +245,19 @@ export default function Results() {
                             }}>·</td>
                           );
                         }
+                        // A subject that is half in has no mark yet — Bangla
+                        // first and second paper are ONE subject out of 200 —
+                        // but it must not print the same dash as a subject
+                        // nobody has touched, or the teacher who just keyed in
+                        // one of the two papers thinks it went nowhere.
+                        const sofar = s.marks === null && !s.absent ? enteredSoFar(s) : null;
                         return (
                           <td key={c.subjectId} style={{
                             padding: '5px 4px', textAlign: 'center',
-                            color: s.letter === 'F' ? 'var(--bad)' : undefined,
+                            color: s.letter === 'F' ? 'var(--bad)'
+                              : sofar !== null ? 'var(--muted)' : undefined,
                           }}>
-                            {s.absent ? 'abs' : s.marks ?? '—'}
+                            {s.absent ? 'abs' : s.marks ?? (sofar !== null ? `(${sofar})` : '—')}
                             {!s.absent && s.marks !== null && (
                               <span style={{ color: 'var(--muted)' }}> {s.letter}</span>
                             )}
@@ -317,8 +324,11 @@ export default function Results() {
               <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
                 * optional subject — it adds to the total, and to the GPA only above 2.00.
                 A dash is a mark not entered; that student has no total, no GPA and no
-                position. Statistics ignore a mark that has not been entered, and count
-                an absence as a fail.
+                position. A number in brackets, like (50), means part of that subject is
+                in and part is not — the two Bangla papers are one subject out of 200, so
+                it has no mark of its own until both are entered. A dot is a paper that
+                student does not sit. Statistics ignore a mark that has not been entered,
+                and count an absence as a fail.
               </p>
             </div>
           )}

@@ -306,4 +306,67 @@ class GradingTest {
         assertEquals("BAN", unitName(listOf("Bangla", "Sahitya"), "BAN"))
         assertEquals("ENG", unitName(emptyList(), "ENG"))
     }
+
+    // ----------------------------------------------------------------------
+    // half a subject
+    //
+    // From a real morning at the school: English First Paper was keyed in for
+    // a whole section and the sheet showed a dash, exactly as it did before
+    // anyone had typed anything. English First and Second are ONE subject out
+    // of 200, so there genuinely was no mark yet — but the teacher had no way
+    // to tell that from their work having been thrown away.
+
+    private val english = SubjectMark(
+        subjectId = "UNIT_ENG",
+        subjectName = "ENGLISH",
+        fullMarks = 200.0,
+        marks = null,
+        combineGroup = "ENG",
+        components = listOf(
+            Component("ENGLISH 1ST PAPER WRITTEN", 100.0, 0.0),
+            Component("ENGLISH 2ND PAPER WRITTEN", 100.0, 0.0),
+        ),
+    )
+
+    @Test
+    fun addsUpThePapersThatAreInWhileTheSubjectHasNoTotal() {
+        val half = english.copy(
+            parts = mapOf("ENGLISH 1ST PAPER WRITTEN" to 50.0, "ENGLISH 2ND PAPER WRITTEN" to null),
+        )
+        assertNull(subjectTotal(half))              // the subject still has no mark
+        assertEquals(50.0, enteredSoFar(half)!!, 0.001)   // but half of it has arrived
+    }
+
+    @Test
+    fun isNullWhenTheSubjectIsFinished() {
+        val whole = english.copy(
+            parts = mapOf("ENGLISH 1ST PAPER WRITTEN" to 50.0, "ENGLISH 2ND PAPER WRITTEN" to 60.0),
+        )
+        assertEquals(110.0, subjectTotal(whole)!!, 0.001)
+        assertNull(enteredSoFar(whole))
+    }
+
+    @Test
+    fun isNullWhenNothingHasBeenEnteredAtAll() {
+        assertNull(
+            enteredSoFar(
+                english.copy(
+                    parts = mapOf(
+                        "ENGLISH 1ST PAPER WRITTEN" to null,
+                        "ENGLISH 2ND PAPER WRITTEN" to null,
+                    ),
+                ),
+            ),
+        )
+        assertNull(enteredSoFar(english.copy(parts = emptyMap())))
+    }
+
+    @Test
+    fun saysNothingAboutAPaperMarkedAsOneMark() {
+        assertNull(
+            enteredSoFar(
+                SubjectMark(subjectId = "REL", subjectName = "Religion", marks = null),
+            ),
+        )
+    }
 }

@@ -49,6 +49,7 @@ import io.github.ocpabdurrahim.schooltrack.data.StudentResult
 import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.applyMarkPaste
+import io.github.ocpabdurrahim.schooltrack.data.enteredSoFar
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
 import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
@@ -969,10 +970,15 @@ fun ResultsScreen(
                                                     // No entry at all means the student does
                                                     // not sit this paper — a Humanities row
                                                     // under Physics. "·" says "not theirs";
-                                                    // "—" says "theirs, still missing".
+                                                    // "—" says "theirs, still missing";
+                                                    // "(50)" says half of a combined subject
+                                                    // is in, which is neither of those.
                                                     s == null -> "·"
                                                     s.mark.absent -> "abs"
-                                                    s.mark.marks == null -> "—"
+                                                    s.mark.marks == null ->
+                                                        enteredSoFar(s.mark)
+                                                            ?.let { "(" + it.toInt() + ")" }
+                                                            ?: "—"
                                                     else -> s.mark.marks.toInt().toString() +
                                                         " " + s.grade.letter
                                                 } + "   ",
