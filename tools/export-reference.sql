@@ -130,10 +130,9 @@ SELECT TO_CHAR(c.subject_id)              AS "subjectId",
 --
 --  NOTE: the religion papers (ISL, HIN) are listed under every group here,
 --  because Oracle splits those by students_info.religion in
---  enroll_student_subjects, not by group. SchoolTrack has no religion on a
---  student yet, so after this import BOTH religion papers look compulsory
---  for everyone. Until that is built, give each religion paper the groups
---  by hand or leave those marks out of the tabulation.
+--  enroll_student_subjects, not by group. The importer applies that split
+--  itself, from the subject_code -- see RELIGION_PAPERS in tools/import.mjs --
+--  and students.csv above already carries each student's religion.
 -- ---------------------------------------------------------------------
 SELECT TO_CHAR(sg.subject_id)             AS "subjectId",
        g.group_name                       AS "groupName"

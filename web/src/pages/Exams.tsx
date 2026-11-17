@@ -11,6 +11,7 @@ import {
 } from '../data/exams';
 import { currentYear } from '../data/fees';
 import { GROUPS } from '../data/groups';
+import { RELIGIONS } from '../data/religions';
 import type { Component } from '../data/grading';
 
 const blankExam = { examName: '', examYear: currentYear(), published: false, sortOrder: 0 };
@@ -18,6 +19,7 @@ const blankSubject = {
   subjectName: '', subjectCode: '', classNames: [] as string[],
   fullMarks: 100, isOptional: false, sortOrder: 0,
   components: [] as Component[], combineGroup: '', groupNames: [] as string[],
+  religions: [] as string[],
 };
 
 /**
@@ -97,6 +99,7 @@ export default function Exams() {
       // so editing any subject with no combine tag looked like the admin had
       // lost their rights.
       const groups = subject.groupNames ?? [];
+      const religions = subject.religions ?? [];
       await saveSubject({
         ...subject,
         combineGroup: (subject.combineGroup ?? '').trim().toUpperCase() || null,
@@ -104,6 +107,7 @@ export default function Exams() {
         // class sits it — so it is stored the shorter way, and a group added
         // later is covered without anyone having to come back here.
         groupNames: groups.length === GROUPS.length ? [] : groups,
+        religions: religions.length === RELIGIONS.length ? [] : religions,
       });
       setSubject({ ...blankSubject, sortOrder: (subjects.at(-1)?.sortOrder ?? 0) + 1 });
       await load();
@@ -115,6 +119,14 @@ export default function Exams() {
       setBusy(false);
     }
   }
+
+  const toggleReligion = (name: string) =>
+    setSubject({
+      ...subject,
+      religions: subject.religions.includes(name)
+        ? subject.religions.filter((n) => n !== name)
+        : [...subject.religions, name],
+    });
 
   const toggleGroup = (name: string) =>
     setSubject({
@@ -218,6 +230,9 @@ export default function Exams() {
                 {s.groupNames?.length && s.groupNames.length < GROUPS.length
                   ? ` · ${s.groupNames.join(' and ')} only`
                   : ''}
+                {s.religions?.length && s.religions.length < RELIGIONS.length
+                  ? ` · ${s.religions.join(' and ')} only`
+                  : ''}
               </span>
               <button className="link" onClick={() => { setSubject(s as never); setProblem(''); }}>edit</button>
             </span>
@@ -272,6 +287,24 @@ export default function Exams() {
               'Business Studies.'
             : `Only ${subject.groupNames.join(' and ')} students will be asked for this ` +
               'mark, and only their results will wait for it.'}
+        </p>
+
+        <label style={{ marginTop: 12 }}>Religions that sit it</label>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {RELIGIONS.map((n) => (
+            <label key={n} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="checkbox" style={{ width: 'auto' }}
+                     checked={subject.religions.includes(n)}
+                     onChange={() => toggleReligion(n)} />
+              {n}
+            </label>
+          ))}
+        </div>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          {subject.religions.length === 0 || subject.religions.length === RELIGIONS.length
+            ? 'Only the two religion papers need this. Tick Islam on Islam & Moral Education ' +
+              'and Hindu on Hindu Religion; everything else is left alone.'
+            : `Only ${subject.religions.join(' and ')} students will be asked for this mark.`}
         </p>
 
         <label htmlFor="pat" style={{ marginTop: 12 }}>Marked in parts</label>

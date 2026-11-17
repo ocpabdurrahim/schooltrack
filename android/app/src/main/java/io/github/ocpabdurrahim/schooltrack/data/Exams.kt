@@ -54,6 +54,13 @@ data class Subject(
      * Oracle's `subject_group` records it. Empty means the whole class sits it.
      */
     val groupNames: List<String> = emptyList(),
+    /**
+     * Which religions sit this paper. Empty for all but the two religion
+     * papers, which Oracle splits in enroll_student_subjects rather than in a
+     * table: Islam & Moral Education for Islam, Hindu Religion for Hindu, and
+     * neither for a student recorded as Other.
+     */
+    val religions: List<String> = emptyList(),
 )
 
 data class ResultRow(
@@ -124,31 +131,75 @@ fun subjectsForClass(subjects: List<Subject>, className: String) =
     subjects.filter { className in it.classNames }
 
 /**
+ * Everything about a student that decides which papers they sit.
+ *
+ * A record rather than three arguments because the group and the religion are
+ * both plain strings: passing them the wrong way round would compile, run, and
+ * quietly give a whole class the wrong subjects.
+ */
+data class Sitter(
+    val className: String,
+    val groupName: String? = null,
+    val religion: String? = null,
+)
+
+/** A student, as the subject rule wants them. */
+fun StudentDetail.asSitter() = Sitter(className, groupName, religion)
+
+/**
  * Does this student sit this paper?
  *
- * Classes 9 and 10 stream into groups, and the groups sit different papers:
- * Physics is for Science, Accounting for Business Studies. A subject with no
- * group named is sat by the whole class — Bangla, English, Mathematics —
- * which is also how every subject behaved before groups were recorded here,
- * so nothing already set up changes meaning.
+ * Two things narrow a class's subject list. Classes 9 and 10 stream into
+ * GROUPS, and the groups sit different papers: Physics for Science,
+ * Accounting for Business Studies. And the two RELIGION papers go to the
+ * students of that religion — Oracle does this in enroll_student_subjects
+ * rather than in a table, which is why it is written out here.
  *
- * A student with NO group recorded sits everything the class sits. That looks
- * wrong until you consider the alternative: dropping the group papers from
- * their result would quietly produce a GPA out of seven subjects instead of
- * ten, and nobody would see it. Expecting every paper leaves the result openly
- * incomplete instead, which is what gets the missing group filled in.
+ * A subject naming neither is sat by the whole class — Bangla, English,
+ * Mathematics — which is how every subject behaved before either was recorded
+ * here, so nothing already set up changes meaning.
+ *
+ * A student with NOTHING recorded sits everything the class sits. That looks
+ * wrong until you consider the alternative: dropping those papers from their
+ * result would quietly produce a GPA out of seven subjects instead of ten, and
+ * nobody would see it. Expecting every paper leaves the result openly
+ * incomplete instead, which is what gets the missing record filled in. (Oracle
+ * cannot reach this case — religion is NOT NULL there — so nothing is being
+ * contradicted.) A student recorded as "Other" is a different matter: that is
+ * an answer, and it sits neither religion paper.
  */
-fun sitsSubject(s: Subject, className: String, groupName: String?): Boolean {
-    if (className !in s.classNames) return false
-    if (s.groupNames.isEmpty()) return true
-    val mine = normalGroup(groupName)
-    if (mine.isEmpty()) return true
-    return mine in s.groupNames
+fun sitsSubject(s: Subject, who: Sitter): Boolean = excludedBy(s, who) == null
+
+/** What shut a student out of a paper. */
+enum class Excluded { CLASS, GROUP, RELIGION }
+
+/**
+ * WHICH part of the rule shut this student out, or null if nothing did.
+ *
+ * sitsSubject is this function with the answer thrown away. Keeping the two
+ * together means a screen can say "Bashir Uddin is Hindu, which does not sit
+ * Islam & Moral Education" — naming the thing that actually decided it —
+ * without a second copy of the rule drifting out of step with the first.
+ */
+fun excludedBy(s: Subject, who: Sitter): Excluded? {
+    if (who.className !in s.classNames) return Excluded.CLASS
+
+    val myGroup = normalGroup(who.groupName)
+    if (s.groupNames.isNotEmpty() && myGroup.isNotEmpty() && myGroup !in s.groupNames) {
+        return Excluded.GROUP
+    }
+
+    val myReligion = normalReligion(who.religion)
+    if (s.religions.isNotEmpty() && myReligion.isNotEmpty() && myReligion !in s.religions) {
+        return Excluded.RELIGION
+    }
+
+    return null
 }
 
 /** The papers one student sits — the list every grade and GPA is built from. */
-fun subjectsForStudent(subjects: List<Subject>, className: String, groupName: String?) =
-    subjects.filter { sitsSubject(it, className, groupName) }
+fun subjectsForStudent(subjects: List<Subject>, who: Sitter) =
+    subjects.filter { sitsSubject(it, who) }
 
 class ExamsRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -219,6 +270,7 @@ class ExamsRepository(
                 components = readComponents(it.get("components")),
                 combineGroup = it.getString("combineGroup"),
                 groupNames = (it.get("groupNames") as? List<String>).orEmpty(),
+                religions = (it.get("religions") as? List<String>).orEmpty(),
             )
         }
 
@@ -254,6 +306,7 @@ class ExamsRepository(
                     },
                     "combineGroup" to s.combineGroup,
                     "groupNames" to s.groupNames,
+                    "religions" to s.religions,
                 ),
             ),
             SetOptions.merge(),
@@ -347,8 +400,7 @@ fun sheetFor(
 
     val rows = students.map { student ->
         val mine = byStudent[student.studentId].orEmpty()
-        val subjectMarks =
-            subjectsForStudent(subjects, student.className, student.groupName).map { s ->
+        val subjectMarks = subjectsForStudent(subjects, student.asSitter()).map { s ->
             subjectMarkFor(s, mine.firstOrNull { it.subjectId == s.subjectId })
         }
         StudentResult(student, tabulate(subjectMarks), null)

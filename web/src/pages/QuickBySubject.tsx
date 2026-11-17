@@ -3,6 +3,7 @@ import { type SchoolClass, listClasses } from '../data/attendance';
 import {
   type Exam,
   type Subject,
+  excludedBy,
   listExams,
   listSubjects,
   marksForExam,
@@ -127,6 +128,7 @@ export default function QuickBySubject() {
             fullName: st.fullName,
             className: st.className,
             groupName: st.groupName,
+            religion: st.religion,
           })),
           want,
           marks,
@@ -183,8 +185,12 @@ export default function QuickBySubject() {
     }
     if (got.kind === 'notTaken') {
       setOpen(null);
-      setProblem(`${got.row.fullName} is ${got.row.groupName || got.row.className}, which ` +
-        `does not sit ${subject?.subjectName ?? 'this subject'}.`);
+      const by = subject ? excludedBy(subject, got.row) : null;
+      const why = by === 'religion' ? got.row.religion
+        : by === 'group' ? got.row.groupName
+          : got.row.className;
+      setProblem(`${got.row.fullName} is ${why}, which does not sit ` +
+        `${subject?.subjectName ?? 'this subject'}.`);
       backToRoll();
       return;
     }
@@ -325,8 +331,9 @@ export default function QuickBySubject() {
               ? subject.components.map((c) => `${c.name} ${c.max} (pass ${c.pass})`).join(' · ')
               : `one mark out of ${subject.fullMarks}`}
             {subject.combineGroup ? ` · graded with ${subject.combineGroup}` : ''}
-            {subject.groupNames?.length
-              ? ` · ${subject.groupNames.join(' and ')} only`
+            {(subject.groupNames?.length || subject.religions?.length)
+              ? ` · ${[...(subject.groupNames ?? []), ...(subject.religions ?? [])]
+                  .join(' and ')} only`
               : ''}
             {' · '}<strong>{done.done} of {done.takes}</strong> entered
           </p>

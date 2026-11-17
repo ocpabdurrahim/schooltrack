@@ -21,6 +21,7 @@
  */
 
 import { normalGroup } from './groups';
+import { normalReligion } from './religions';
 
 // ---------------------------------------------------------------------------
 // students
@@ -33,6 +34,7 @@ export type StudentRow = {
   rollNo: number | null;
   regNo: string;
   groupName: string;
+  religion: string;
   gender: string;
   dob: string;
   fatherName: string;
@@ -63,6 +65,8 @@ const HEADERS: Record<string, Field> = {
   reg: 'regNo', regno: 'regNo', registration: 'regNo', registrationno: 'regNo',
   registrationnumber: 'regNo',
   group: 'groupName', groupname: 'groupName',
+  religion: 'religion', religionname: 'religion', relegion: 'religion',
+  faith: 'religion',
 };
 
 /** What a list without a header line is taken to be. */
@@ -151,6 +155,7 @@ function blankRow(line: number): StudentRow {
     rollNo: null,
     regNo: '',
     groupName: '',
+    religion: '',
     gender: '',
     dob: '',
     fatherName: '',
@@ -192,6 +197,11 @@ function assign(row: StudentRow, field: Field | undefined, cell: string) {
       // "sci" and "commerce" become the proper names, so the group picker on the
       // student's own page shows the group instead of an odd extra option.
       row.groupName = normalGroup(v);
+      break;
+    case 'religion':
+      // "muslim" becomes Islam, and Christian becomes Other, which is the only
+      // place the school's own table has for it.
+      row.religion = normalReligion(v);
       break;
     default:
       row[field] = v;

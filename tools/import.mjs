@@ -45,6 +45,21 @@ import { fileURLToPath } from 'node:url';
  */
 const GROUPS = ['Science', 'Humanities', 'Business Studies'];
 
+/**
+ * The two religion papers, by Oracle's own subject_code.
+ *
+ * This one mapping is not in any table over there: enroll_student_subjects
+ * names the codes in its WHERE clause --
+ *
+ *   AND NOT ( s.subject_code = 'ISL' AND v_relig <> 'Islam' )
+ *   AND NOT ( s.subject_code = 'HIN' AND v_relig <> 'Hindu' )
+ *
+ * -- so the rule is copied here rather than derived. Without it every student
+ * would be expected to sit BOTH religion papers after a mirror, because
+ * subject_group lists both under all three groups.
+ */
+const RELIGION_PAPERS = { ISL: ['Islam'], HIN: ['Hindu'] };
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(HERE, 'data');
 const SCHOOL_ID = 'matkhola';
@@ -158,6 +173,7 @@ const MAPPINGS = {
       // Bangla first and second paper carry the same tag and are graded as one
       // subject out of 200, the way the board counts them.
       combineGroup: str(r.combineGroup),
+      religions: RELIGION_PAPERS[str(r.subjectCode)?.toUpperCase()],
     }),
   },
 

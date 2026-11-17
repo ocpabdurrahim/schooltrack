@@ -13,6 +13,12 @@ data class StudentDetail(
     val className: String,
     val section: String,
     val groupName: String?,
+    /**
+     * Islam, Hindu or Other, as the school's own table has it. It decides
+     * which religion paper the student sits, so it is a marks field, not a
+     * detail.
+     */
+    val religion: String?,
     val gender: String?,
     val dob: String?,
     val fatherName: String?,
@@ -55,6 +61,7 @@ class PeopleRepository(
         className = d["className"] as? String ?: "",
         section = d["section"] as? String ?: "",
         groupName = d["groupName"] as? String,
+        religion = d["religion"] as? String,
         gender = d["gender"] as? String,
         dob = d["dob"] as? String,
         fatherName = d["fatherName"] as? String,

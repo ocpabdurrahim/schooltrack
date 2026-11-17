@@ -31,6 +31,7 @@ data class StudentRow(
     val rollNo: Long? = null,
     val regNo: String = "",
     val groupName: String = "",
+    val religion: String = "",
     val gender: String = "",
     val dob: String = "",
     val fatherName: String = "",
@@ -43,7 +44,9 @@ data class StudentRow(
     val note: String = "",
 )
 
-private enum class Field { ROLL, NAME, FATHER, MOTHER, MOBILE, DOB, GENDER, BLOOD, REG, GROUP }
+private enum class Field {
+    ROLL, NAME, FATHER, MOTHER, MOBILE, DOB, GENDER, BLOOD, REG, GROUP, RELIGION,
+}
 
 /** Header spellings, normalised to letters only. */
 private val HEADERS: Map<String, Field> = mapOf(
@@ -62,6 +65,8 @@ private val HEADERS: Map<String, Field> = mapOf(
     "reg" to Field.REG, "regno" to Field.REG, "registration" to Field.REG,
     "registrationno" to Field.REG, "registrationnumber" to Field.REG,
     "group" to Field.GROUP, "groupname" to Field.GROUP,
+    "religion" to Field.RELIGION, "religionname" to Field.RELIGION,
+    "relegion" to Field.RELIGION, "faith" to Field.RELIGION,
 )
 
 /** What a list without a header line is taken to be. */
@@ -201,6 +206,9 @@ private fun assign(row: StudentRow, field: Field?, cell: String): StudentRow {
         // "sci" and "commerce" become the proper names, so the group picker on
         // the student's own screen shows the group instead of an odd extra option.
         Field.GROUP -> row.copy(groupName = normalGroup(v))
+        // "muslim" becomes Islam, and Christian becomes Other, which is the
+        // only place the school's own table has for it.
+        Field.RELIGION -> row.copy(religion = normalReligion(v))
     }
 }
 

@@ -28,6 +28,7 @@ class SheetsTest {
     private fun student(id: String, roll: Long) = StudentDetail(
         studentId = id, fullName = "Student $id", rollNo = roll, regNo = null,
         classId = "61", className = "Class 6", section = "A", groupName = null,
+        religion = null,
         gender = null, dob = null, fatherName = null, motherName = null,
         bloodGroup = null, mobileNo = null, status = "A",
     )

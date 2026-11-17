@@ -28,6 +28,7 @@ import {
   tabulate,
 } from './grading';
 import { normalGroup } from './groups';
+import { normalReligion } from './religions';
 import type { StudentDetail } from './people';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -73,6 +74,13 @@ export type Subject = {
    * Oracle's `subject_group` records it. Empty means the whole class sits it.
    */
   groupNames?: string[];
+  /**
+   * Which religions sit this paper. Empty for all but the two religion
+   * papers, which Oracle splits in enroll_student_subjects rather than in a
+   * table: Islam & Moral Education for Islam, Hindu Religion for Hindu, and
+   * neither for a student recorded as Other.
+   */
+  religions?: string[];
 };
 
 export type ResultRow = {
@@ -162,6 +170,7 @@ export async function listSubjects(): Promise<Subject[]> {
     ...(d.data() as Omit<Subject, 'subjectId'>),
     classNames: (d.data().classNames ?? []) as string[],
     groupNames: (d.data().groupNames ?? []) as string[],
+    religions: (d.data().religions ?? []) as string[],
   }));
 }
 
@@ -179,6 +188,7 @@ export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: 
       components: s.components ?? [],
       combineGroup: s.combineGroup ?? null,
       groupNames: s.groupNames ?? [],
+      religions: s.religions ?? [],
     }),
     { merge: true },
   );
@@ -189,39 +199,75 @@ export const subjectsForClass = (subjects: Subject[], className: string) =>
   subjects.filter((s) => (s.classNames ?? []).includes(className));
 
 /**
+ * Everything about a student that decides which papers they sit.
+ *
+ * A record rather than three arguments because the group and the religion are
+ * both plain strings: passing them the wrong way round would compile, run, and
+ * quietly give a whole class the wrong subjects. StudentDetail already has
+ * these three fields, so a student can be passed straight in.
+ */
+export type Sitter = {
+  className: string;
+  groupName?: string | null;
+  religion?: string | null;
+};
+
+/**
  * Does this student sit this paper?
  *
- * Classes 9 and 10 stream into groups, and the groups sit different papers:
- * Physics is for Science, Accounting for Business Studies. A subject with no
- * group named is sat by the whole class — Bangla, English, Mathematics — which
- * is also how every subject behaved before groups were recorded here, so
- * nothing already set up changes meaning.
+ * Two things narrow a class's subject list. Classes 9 and 10 stream into
+ * GROUPS, and the groups sit different papers: Physics for Science,
+ * Accounting for Business Studies. And the two RELIGION papers go to the
+ * students of that religion — Oracle does this in enroll_student_subjects
+ * rather than in a table, which is why it is written out here.
  *
- * A student with NO group recorded sits everything the class sits. That looks
- * wrong until you consider the alternative: dropping the group papers from
- * their result would quietly produce a GPA out of seven subjects instead of
- * ten, and nobody would see it. Expecting every paper leaves the result openly
- * incomplete instead, which is what gets the missing group filled in.
+ * A subject naming neither is sat by the whole class — Bangla, English,
+ * Mathematics — which is how every subject behaved before either was recorded
+ * here, so nothing already set up changes meaning.
+ *
+ * A student with NOTHING recorded sits everything the class sits. That looks
+ * wrong until you consider the alternative: dropping those papers from their
+ * result would quietly produce a GPA out of seven subjects instead of ten, and
+ * nobody would see it. Expecting every paper leaves the result openly
+ * incomplete instead, which is what gets the missing record filled in. (Oracle
+ * cannot reach this case — religion is NOT NULL there — so nothing is being
+ * contradicted.) A student recorded as "Other" is a different matter: that is
+ * an answer, and it sits neither religion paper.
  */
-export function sitsSubject(
+export function sitsSubject(s: Subject, who: Sitter): boolean {
+  return excludedBy(s, who) === null;
+}
+
+/**
+ * WHICH part of the rule shut this student out, or null if nothing did.
+ *
+ * sitsSubject is this function with the answer thrown away. Keeping the two
+ * together means a screen can say "Bashir Uddin is Hindu, which does not sit
+ * Islam & Moral Education" — naming the thing that actually decided it —
+ * without a second copy of the rule drifting out of step with the first.
+ */
+export function excludedBy(
   s: Subject,
-  className: string,
-  groupName?: string | null,
-): boolean {
-  if (!(s.classNames ?? []).includes(className)) return false;
+  who: Sitter,
+): 'class' | 'group' | 'religion' | null {
+  if (!(s.classNames ?? []).includes(who.className)) return 'class';
+
   const groups = s.groupNames ?? [];
-  if (groups.length === 0) return true;
-  const mine = normalGroup(groupName);
-  if (mine === '') return true;
-  return groups.includes(mine);
+  const myGroup = normalGroup(who.groupName);
+  if (groups.length > 0 && myGroup !== '' && !groups.includes(myGroup)) return 'group';
+
+  const religions = s.religions ?? [];
+  const myReligion = normalReligion(who.religion);
+  if (religions.length > 0 && myReligion !== '' && !religions.includes(myReligion)) {
+    return 'religion';
+  }
+
+  return null;
 }
 
 /** The papers one student sits — the list every grade and GPA is built from. */
-export const subjectsForStudent = (
-  subjects: Subject[],
-  className: string,
-  groupName?: string | null,
-) => subjects.filter((s) => sitsSubject(s, className, groupName));
+export const subjectsForStudent = (subjects: Subject[], who: Sitter) =>
+  subjects.filter((s) => sitsSubject(s, who));
 
 // ---------------------------------------------------------------------------
 // marks
@@ -337,9 +383,8 @@ export function sheetFor(
 
   const rows = students.map((student) => {
     const mine = byStudent.get(student.studentId) ?? [];
-    const subjectMarks: SubjectMark[] =
-      subjectsForStudent(subjects, student.className, student.groupName)
-        .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
+    const subjectMarks: SubjectMark[] = subjectsForStudent(subjects, student)
+      .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
     return { student, tabulation: tabulate(subjectMarks), position: null as number | null };
   });
 
@@ -371,9 +416,8 @@ export async function resultsForStudent(
     .map((exam) => {
       const mine = marks.filter((m) => m.examId === exam.examId);
       if (!mine.length) return null;
-      const subjectMarks: SubjectMark[] =
-        subjectsForStudent(subjects, student.className, student.groupName)
-          .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
+      const subjectMarks: SubjectMark[] = subjectsForStudent(subjects, student)
+        .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
       return { exam, tabulation: tabulate(subjectMarks) };
     })
     .filter(Boolean) as { exam: Exam; tabulation: Tabulation }[];

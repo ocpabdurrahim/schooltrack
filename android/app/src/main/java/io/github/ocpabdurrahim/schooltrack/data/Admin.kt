@@ -179,6 +179,7 @@ class AdminRepository(
                     "className" to (cls?.className ?: s.className),
                     "section" to (cls?.section ?: s.section),
                     "groupName" to s.groupName,
+                    "religion" to s.religion,
                     "gender" to s.gender,
                     "dob" to s.dob,
                     "fatherName" to s.fatherName,

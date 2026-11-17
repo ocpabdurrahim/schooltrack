@@ -34,9 +34,9 @@ class QuickEntryTest {
     )
 
     private val roster = listOf(
-        RosterStudent("s1", 1, "Abida Sultana", "Class 9", "Science"),
-        RosterStudent("s2", 2, "Bashir Ahmed", "Class 9", "Humanities"),
-        RosterStudent("s3", 7, "Chandni Roy", "Class 10", "Science"),
+        RosterStudent("s1", 1, "Abida Sultana", "Class 9", "Science", "Islam"),
+        RosterStudent("s2", 2, "Bashir Ahmed", "Class 9", "Humanities", "Hindu"),
+        RosterStudent("s3", 7, "Chandni Roy", "Class 10", "Science", "Islam"),
     )
 
     private fun stored(
@@ -83,6 +83,13 @@ class QuickEntryTest {
         val r = buildRoster(roster, physics, emptyList())
         assertTrue(r["1"]!!.takes)     // Science
         assertFalse(r["2"]!!.takes)    // Humanities, and Physics is a Science paper
+    }
+
+    @Test
+    fun marksTheStudentWhoseRELIGIONDoesNotSitThisSubject() {
+        val r = buildRoster(roster, maths.copy(religions = listOf("Islam")), emptyList())
+        assertTrue(r["1"]!!.takes)     // Islam
+        assertFalse(r["2"]!!.takes)    // Hindu, and this is the Islam paper
     }
 
     @Test

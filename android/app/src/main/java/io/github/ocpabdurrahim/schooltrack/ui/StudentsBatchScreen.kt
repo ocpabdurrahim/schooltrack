@@ -302,6 +302,7 @@ fun StudentsBatchScreen(
                                                 className = "",
                                                 section = "",
                                                 groupName = r.groupName.ifBlank { null },
+                                                religion = r.religion.ifBlank { null },
                                                 gender = r.gender.ifBlank { null },
                                                 dob = r.dob.ifBlank { null },
                                                 fatherName = r.fatherName.ifBlank { null },

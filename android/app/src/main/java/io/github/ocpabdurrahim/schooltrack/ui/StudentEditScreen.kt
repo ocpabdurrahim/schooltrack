@@ -23,11 +23,14 @@ import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.groupOptions
 import io.github.ocpabdurrahim.schooltrack.data.normalGroup
+import io.github.ocpabdurrahim.schooltrack.data.normalReligion
+import io.github.ocpabdurrahim.schooltrack.data.religionOptions
 import kotlinx.coroutines.launch
 
 private fun blank() = StudentDetail(
     studentId = "", fullName = "", rollNo = 0, regNo = null, classId = "",
-    className = "", section = "", groupName = null, gender = null, dob = null,
+    className = "", section = "", groupName = null, religion = null, gender = null,
+    dob = null,
     fatherName = null, motherName = null, bloodGroup = null, mobileNo = null,
     status = "A",
 )
@@ -66,7 +69,10 @@ fun StudentEditScreen(
                     // or by an older import arrives as one of the picker's own
                     // options. Left raw it would match none of them, the picker
                     // would read as none, and the next save would wipe the group.
-                    form = s.copy(groupName = normalGroup(s.groupName).ifEmpty { null })
+                    form = s.copy(
+                        groupName = normalGroup(s.groupName).ifEmpty { null },
+                        religion = normalReligion(s.religion).ifEmpty { null },
+                    )
                 }
             } else {
                 classes.firstOrNull { it.active }?.let { form = form.copy(classId = it.classId) }
@@ -112,6 +118,20 @@ fun StudentEditScreen(
                         groupOptions(form.groupName).map { it to it },
                     form.groupName.orEmpty(),
                 ) { form = form.copy(groupName = it) }
+
+                Picker(
+                    "Religion",
+                    listOf("" to "— none —") +
+                        religionOptions(form.religion).map { it to it },
+                    form.religion.orEmpty(),
+                ) { form = form.copy(religion = it) }
+                Text(
+                    "The religion decides which religion paper this student sits. " +
+                        "“Other” means neither. Left blank, the student is expected to " +
+                        "sit both and their result stays unfinished.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 Picker(
                     "Gender",

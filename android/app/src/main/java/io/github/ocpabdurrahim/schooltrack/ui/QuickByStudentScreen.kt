@@ -37,6 +37,7 @@ import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.overMax
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
 import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
+import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForStudent
 import io.github.ocpabdurrahim.schooltrack.data.tabulate
 import io.github.ocpabdurrahim.schooltrack.data.typedFrom
@@ -99,8 +100,7 @@ fun QuickByStudentBody(
 
     val exam = exams.firstOrNull { it.examId == examId }
     val section = classes.firstOrNull { it.classId == classId }
-    val mySubjects = student?.let { subjectsForStudent(subjects, it.className, it.groupName) }
-        .orEmpty()
+    val mySubjects = student?.let { subjectsForStudent(subjects, it.asSitter()) }.orEmpty()
 
     suspend fun open(wanted: String) {
         val found = students.firstOrNull { it.rollNo.toString() == wanted.trim() }
@@ -114,7 +114,7 @@ fun QuickByStudentBody(
         try {
             val mine = repo.marksForExam(examId, classId).filter { it.studentId == found.studentId }
             student = found
-            typed = subjectsForStudent(subjects, found.className, found.groupName).associate { s ->
+            typed = subjectsForStudent(subjects, found.asSitter()).associate { s ->
                 val got = mine.firstOrNull { it.subjectId == s.subjectId }
                 s.subjectId to typedFrom(got?.marks, got?.parts, got?.absent ?: false)
             }

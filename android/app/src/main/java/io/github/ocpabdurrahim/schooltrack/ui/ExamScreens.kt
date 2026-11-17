@@ -63,6 +63,8 @@ import io.github.ocpabdurrahim.schooltrack.data.gradeFor
 import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.GROUPS
+import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
+import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
 import kotlinx.coroutines.launch
@@ -221,6 +223,13 @@ fun ExamsScreen(
                                         ""
                                     } else {
                                         "  ·  " + s.groupNames.joinToString(" and ") + " only"
+                                    } +
+                                    if (s.religions.isEmpty() ||
+                                        s.religions.size == RELIGIONS.size
+                                    ) {
+                                        ""
+                                    } else {
+                                        "  ·  " + s.religions.joinToString(" and ") + " only"
                                     },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -328,6 +337,37 @@ fun ExamsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
+                Text("Religions that sit it", style = MaterialTheme.typography.labelMedium,
+                     modifier = Modifier.padding(top = 12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RELIGIONS.forEach { n ->
+                        FilterChip(
+                            selected = n in subject.religions,
+                            onClick = {
+                                subject = subject.copy(
+                                    religions = if (n in subject.religions) {
+                                        subject.religions - n
+                                    } else {
+                                        subject.religions + n
+                                    },
+                                )
+                            },
+                            label = { Text(n) },
+                        )
+                    }
+                }
+                Text(
+                    if (subject.religions.isEmpty() || subject.religions.size == RELIGIONS.size) {
+                        "Only the two religion papers need this. Tick Islam on Islam & Moral " +
+                            "Education and Hindu on Hindu Religion; everything else is left alone."
+                    } else {
+                        "Only " + subject.religions.joinToString(" and ") +
+                            " students will be asked for this mark."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -363,11 +403,14 @@ fun ExamsScreen(
                                 // it is stored the shorter way, and a group
                                 // added later is covered without coming back.
                                 exams.saveSubject(
-                                    if (subject.groupNames.size == GROUPS.size) {
-                                        subject.copy(groupNames = emptyList())
-                                    } else {
-                                        subject
-                                    },
+                                    subject.copy(
+                                        groupNames = if (
+                                            subject.groupNames.size == GROUPS.size
+                                        ) emptyList() else subject.groupNames,
+                                        religions = if (
+                                            subject.religions.size == RELIGIONS.size
+                                        ) emptyList() else subject.religions,
+                                    ),
                                 )
                                 subject = Subject("", "")
                                 load()
@@ -442,7 +485,7 @@ fun MarkEntryScreen(
      * which the tabulation would then have to explain away.
      */
     val sitters = subject?.let { sub ->
-        students.filter { sitsSubject(sub, it.className, it.groupName) }
+        students.filter { sitsSubject(sub, it.asSitter()) }
     } ?: students
 
     LaunchedEffect(classId, examId, subjectId) {
@@ -625,10 +668,11 @@ fun MarkEntryScreen(
                 // counting heads has no way to know the rest were left out on
                 // purpose.
                 val missing = students.size - sitters.size
-                if (missing > 0 && subject?.groupNames?.isNotEmpty() == true) {
+                val only = subject?.let { it.groupNames + it.religions }.orEmpty()
+                if (missing > 0 && only.isNotEmpty()) {
                     Text(
-                        missing.toString() + " not shown — this is a " +
-                            subject.groupNames.joinToString(" and ") + " paper.",
+                        missing.toString() + " not shown — only " +
+                            only.joinToString(" and ") + " students sit this paper.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

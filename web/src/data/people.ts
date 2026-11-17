@@ -21,6 +21,11 @@ export type StudentDetail = {
   className: string;
   section: string;
   groupName?: string;
+  /**
+   * Islam, Hindu or Other, as the school's own table has it. It decides which
+   * religion paper the student sits, so it is a marks field, not a detail.
+   */
+  religion?: string;
   gender?: string;
   dob?: string;
   fatherName?: string;

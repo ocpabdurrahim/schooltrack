@@ -45,9 +45,9 @@ const physics: Subject = {
 };
 
 const roster = [
-  { studentId: 's1', rollNo: 1, fullName: 'Abida Sultana', className: 'Class 9', groupName: 'Science' },
-  { studentId: 's2', rollNo: 2, fullName: 'Bashir Ahmed', className: 'Class 9', groupName: 'Humanities' },
-  { studentId: 's3', rollNo: 7, fullName: 'Chandni Roy', className: 'Class 10', groupName: 'Science' },
+  { studentId: 's1', rollNo: 1, fullName: 'Abida Sultana', className: 'Class 9', groupName: 'Science', religion: 'Islam' },
+  { studentId: 's2', rollNo: 2, fullName: 'Bashir Ahmed', className: 'Class 9', groupName: 'Humanities', religion: 'Hindu' },
+  { studentId: 's3', rollNo: 7, fullName: 'Chandni Roy', className: 'Class 10', groupName: 'Science', religion: 'Islam' },
 ];
 
 const stored = (over: Partial<ResultRow>): ResultRow => ({
@@ -82,6 +82,12 @@ describe('buildRoster', () => {
     const r = buildRoster(roster, physics, []);
     expect(r['1'].takes).toBe(true);    // Science
     expect(r['2'].takes).toBe(false);   // Humanities, and Physics is a Science paper
+  });
+
+  it('marks the student whose RELIGION does not sit this subject', () => {
+    const r = buildRoster(roster, { ...maths, religions: ['Islam'] }, []);
+    expect(r['1'].takes).toBe(true);    // Islam
+    expect(r['2'].takes).toBe(false);   // Hindu, and this is the Islam paper
   });
 
   it('fills the boxes from what is already stored', () => {

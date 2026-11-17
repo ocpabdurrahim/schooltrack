@@ -105,6 +105,7 @@ export default function StudentsBatch() {
           section: '',
           regNo: r.regNo,
           groupName: r.groupName,
+          religion: r.religion,
           gender: r.gender,
           dob: r.dob,
           fatherName: r.fatherName,
@@ -249,7 +250,7 @@ export default function StudentsBatch() {
                     <td>{r.mobileNo}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 13 }}>
                       {[r.dob, r.gender === 'M' ? 'male' : r.gender === 'F' ? 'female' : '',
-                        r.bloodGroup, r.groupName, r.regNo].filter(Boolean).join(' · ')}
+                        r.bloodGroup, r.groupName, r.religion, r.regNo].filter(Boolean).join(' · ')}
                     </td>
                     <td style={{ fontSize: 13 }}>
                       {r.state === 'saved' && (

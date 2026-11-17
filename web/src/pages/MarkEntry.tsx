@@ -97,7 +97,7 @@ export default function MarkEntry() {
    * which the tabulation would then have to explain away.
    */
   const sitters = subject
-    ? students.filter((s) => sitsSubject(subject, s.className, s.groupName))
+    ? students.filter((s) => sitsSubject(subject, s))
     : students;
   const notSitting = students.length - sitters.length;
 
@@ -363,8 +363,10 @@ export default function MarkEntry() {
         <h2>
           {busy ? 'Working…' : `${sitters.length} student${sitters.length === 1 ? '' : 's'}`}
           {subject ? ` · out of ${subject.fullMarks}` : ''}
-          {notSitting > 0 && subject?.groupNames?.length
-            ? ` · ${notSitting} not shown, this is a ${subject.groupNames.join(' and ')} paper`
+          {notSitting > 0 && (subject?.groupNames?.length || subject?.religions?.length)
+            ? ` · ${notSitting} not shown — only ` +
+              `${[...(subject.groupNames ?? []), ...(subject.religions ?? [])].join(' and ')} ` +
+              'students sit this paper'
             : ''}
         </h2>
 

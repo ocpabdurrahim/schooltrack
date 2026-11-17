@@ -20,6 +20,7 @@ import {
   typedFrom,
 } from '../data/markentry';
 import { normalGroup } from '../data/groups';
+import { normalReligion } from '../data/religions';
 import { type StudentDetail, findStudents } from '../data/people';
 
 /**
@@ -76,9 +77,7 @@ export default function QuickByStudent() {
 
   const exam = exams.find((e) => e.examId === examId);
   const section = classes.find((c) => c.classId === classId);
-  const mySubjects = student
-    ? subjectsForStudent(subjects, student.className, student.groupName)
-    : [];
+  const mySubjects = student ? subjectsForStudent(subjects, student) : [];
 
   /** Finds the roll in this section and reads whatever it already has. */
   async function open(rollNo: string) {
@@ -94,7 +93,7 @@ export default function QuickByStudent() {
       const mine = marks.filter((m) => m.studentId === found.studentId);
       setStudent(found);
       setTyped(Object.fromEntries(
-        subjectsForStudent(subjects, found.className, found.groupName).map((s) => {
+        subjectsForStudent(subjects, found).map((s) => {
           const got = mine.find((m) => m.subjectId === s.subjectId);
           return [s.subjectId, typedFrom(got?.marks, got?.parts, got?.absent ?? false)];
         }),
@@ -225,6 +224,15 @@ export default function QuickByStudent() {
               No group is recorded for this student, so every paper the class sits is
               listed — including the group papers. Set the group on their record and the
               list will narrow to the ones they actually sit.
+            </div>
+          )}
+
+          {student && !normalReligion(student.religion) &&
+           mySubjects.some((s) => s.religions?.length) && (
+            <div className="err">
+              No religion is recorded for this student, so every religion paper is
+              listed and their result will stay unfinished. Set it on their record —
+              “Other” is a real answer and means neither paper.
             </div>
           )}
 

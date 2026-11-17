@@ -2,6 +2,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { groupOptions, normalGroup } from '../data/groups';
+import { normalReligion, religionOptions } from '../data/religions';
 import { getStudent } from '../data/people';
 
 type Form = {
@@ -10,6 +11,7 @@ type Form = {
   classId: string;
   regNo: string;
   groupName: string;
+  religion: string;
   gender: string;
   dob: string;
   fatherName: string;
@@ -20,7 +22,7 @@ type Form = {
 };
 
 const blank: Form = {
-  fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', gender: '',
+  fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', religion: '', gender: '',
   dob: '', fatherName: '', motherName: '', bloodGroup: '', mobileNo: '', status: 'A',
 };
 
@@ -59,6 +61,7 @@ export default function StudentEdit() {
             // raw it would match none of them, the picker would read as "none",
             // and the next save would quietly wipe the group.
             groupName: normalGroup(s.groupName),
+            religion: normalReligion(s.religion),
             gender: s.gender ?? '',
             dob: s.dob ?? '',
             fatherName: s.fatherName ?? '',
@@ -156,7 +159,22 @@ export default function StudentEdit() {
               ))}
             </select>
           </div>
+          <div style={{ flex: '1 1 140px' }}>
+            <label htmlFor="rel">Religion</label>
+            <select id="rel" value={form.religion}
+                    onChange={(e) => setForm({ ...form, religion: e.target.value })}>
+              <option value="">— none —</option>
+              {religionOptions(form.religion).map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
         </div>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          The religion decides which religion paper this student sits. “Other” is a real
+          answer — it means neither paper. Left blank, the student is expected to sit
+          both, and their result will say it is not finished until this is filled in.
+        </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 140px' }}>

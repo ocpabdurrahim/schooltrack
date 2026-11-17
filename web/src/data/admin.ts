@@ -144,6 +144,7 @@ export async function saveStudent(input: StudentInput, classes: ClassRow[]): Pro
       className: cls?.className ?? input.className,
       section: cls?.section ?? input.section,
       groupName: input.groupName,
+      religion: input.religion,
       gender: input.gender,
       dob: input.dob,
       fatherName: input.fatherName,

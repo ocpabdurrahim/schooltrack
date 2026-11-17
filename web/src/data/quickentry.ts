@@ -27,6 +27,7 @@ export type RosterStudent = {
   fullName: string;
   className: string;
   groupName?: string | null;
+  religion?: string | null;
 };
 
 /** One student on the loaded roster, with whatever is already stored. */
@@ -36,7 +37,8 @@ export type RosterRow = {
   fullName: string;
   className: string;
   groupName: string;
-  /** Does this student sit the chosen subject — their class AND their group? */
+  religion: string;
+  /** Does this student sit the chosen subject — class, group AND religion? */
   takes: boolean;
   /** What is stored for them, as text, ready for the boxes. */
   typed: Typed;
@@ -90,7 +92,8 @@ export function buildRoster(
       fullName: s.fullName,
       className: s.className,
       groupName: s.groupName ?? '',
-      takes: sitsSubject(subject, s.className, s.groupName),
+      religion: s.religion ?? '',
+      takes: sitsSubject(subject, s),
       typed: got ? typedFrom(got.marks, got.parts, got.absent) : blankTyped(),
       stored: !!got && hasEntry(got),
       savedAt: got?.updatedAt ?? null,

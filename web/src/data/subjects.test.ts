@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ResultRow,
   type Subject,
+  excludedBy,
   sheetFor,
   sitsSubject,
   subjectsForStudent,
@@ -11,9 +12,10 @@ import type { StudentDetail } from './people';
 /**
  * The SAME cases exist in android/.../data/SubjectsTest.kt.
  *
- * Classes 9 and 10 stream into groups and the groups sit different papers.
- * Getting this wrong does not look like a bug: it looks like every Humanities
- * student having an unfinished result, for ever, because Physics has no mark.
+ * Classes 9 and 10 stream into groups and the groups sit different papers, and
+ * the two religion papers go to the students of that religion. Getting either
+ * wrong does not look like a bug: it looks like a whole set of students having
+ * an unfinished result, for ever, because a paper they never sat has no mark.
  */
 
 const subject = (over: Partial<Subject> & { subjectId: string }): Subject => ({
@@ -32,46 +34,100 @@ const physics = subject({
 const history = subject({
   subjectId: 'HIST', subjectName: 'History', groupNames: ['Humanities'], sortOrder: 3,
 });
-const all = [bangla, physics, history];
+const islam = subject({
+  subjectId: 'ISL', subjectName: 'Islam & Moral Education', religions: ['Islam'], sortOrder: 4,
+});
+const hindu = subject({
+  subjectId: 'HIN', subjectName: 'Hindu Religion', religions: ['Hindu'], sortOrder: 5,
+});
+const all = [bangla, physics, history, islam, hindu];
 
 describe('sitsSubject', () => {
-  it('gives a paper with no group named to the whole class', () => {
-    expect(sitsSubject(bangla, 'Class 9', 'Science')).toBe(true);
-    expect(sitsSubject(bangla, 'Class 9', 'Humanities')).toBe(true);
-    expect(sitsSubject(bangla, 'Class 9', '')).toBe(true);
+  it('gives a paper that names neither to the whole class', () => {
+    expect(sitsSubject(bangla, { className: 'Class 9', groupName: 'Science' })).toBe(true);
+    expect(sitsSubject(bangla, { className: 'Class 9', religion: 'Hindu' })).toBe(true);
+    expect(sitsSubject(bangla, { className: 'Class 9' })).toBe(true);
   });
 
   it('gives a group paper only to that group', () => {
-    expect(sitsSubject(physics, 'Class 9', 'Science')).toBe(true);
-    expect(sitsSubject(physics, 'Class 9', 'Humanities')).toBe(false);
-    expect(sitsSubject(history, 'Class 9', 'Humanities')).toBe(true);
-    expect(sitsSubject(history, 'Class 9', 'Science')).toBe(false);
+    expect(sitsSubject(physics, { className: 'Class 9', groupName: 'Science' })).toBe(true);
+    expect(sitsSubject(physics, { className: 'Class 9', groupName: 'Humanities' })).toBe(false);
+    expect(sitsSubject(history, { className: 'Class 9', groupName: 'Humanities' })).toBe(true);
+    expect(sitsSubject(history, { className: 'Class 9', groupName: 'Science' })).toBe(false);
   });
 
-  it('understands the group however the office wrote it', () => {
-    expect(sitsSubject(physics, 'Class 9', 'sci')).toBe(true);
-    expect(sitsSubject(history, 'Class 9', 'ARTS')).toBe(true);
+  it('gives a religion paper only to that religion', () => {
+    expect(sitsSubject(islam, { className: 'Class 9', religion: 'Islam' })).toBe(true);
+    expect(sitsSubject(islam, { className: 'Class 9', religion: 'Hindu' })).toBe(false);
+    expect(sitsSubject(hindu, { className: 'Class 9', religion: 'Hindu' })).toBe(true);
+    expect(sitsSubject(hindu, { className: 'Class 9', religion: 'Islam' })).toBe(false);
   });
 
-  it('gives every paper to a student with no group recorded', () => {
+  it('gives NEITHER religion paper to a student recorded as Other', () => {
+    // "Other" is an answer, not a blank — the same as Oracle, where a student
+    // whose religion is neither Islam nor Hindu is enrolled in neither paper.
+    expect(sitsSubject(islam, { className: 'Class 9', religion: 'Other' })).toBe(false);
+    expect(sitsSubject(hindu, { className: 'Class 9', religion: 'Other' })).toBe(false);
+    expect(sitsSubject(bangla, { className: 'Class 9', religion: 'Other' })).toBe(true);
+  });
+
+  it('applies the group and the religion together', () => {
+    const sciMuslim = { className: 'Class 9', groupName: 'Science', religion: 'Islam' };
+    expect(sitsSubject(physics, sciMuslim)).toBe(true);
+    expect(sitsSubject(islam, sciMuslim)).toBe(true);
+    expect(sitsSubject(history, sciMuslim)).toBe(false);
+    expect(sitsSubject(hindu, sciMuslim)).toBe(false);
+  });
+
+  it('understands both however the office wrote them', () => {
+    expect(sitsSubject(physics, { className: 'Class 9', groupName: 'sci' })).toBe(true);
+    expect(sitsSubject(history, { className: 'Class 9', groupName: 'ARTS' })).toBe(true);
+    expect(sitsSubject(islam, { className: 'Class 9', religion: 'muslim' })).toBe(true);
+    expect(sitsSubject(hindu, { className: 'Class 9', religion: 'Hinduism' })).toBe(true);
+  });
+
+  it('gives every paper to a student with nothing recorded', () => {
     // Deliberate: see the note on sitsSubject. A short GPA nobody can see is
     // worse than a result that openly says it is not finished.
-    expect(sitsSubject(physics, 'Class 9', null)).toBe(true);
-    expect(sitsSubject(history, 'Class 9', undefined)).toBe(true);
+    expect(sitsSubject(physics, { className: 'Class 9' })).toBe(true);
+    expect(sitsSubject(islam, { className: 'Class 9' })).toBe(true);
+    expect(sitsSubject(hindu, { className: 'Class 9', religion: null })).toBe(true);
   });
 
   it('never gives a paper the class does not sit', () => {
-    expect(sitsSubject(physics, 'Class 7', 'Science')).toBe(false);
-    expect(sitsSubject(bangla, 'Class 7', '')).toBe(false);
+    expect(sitsSubject(physics, { className: 'Class 7', groupName: 'Science' })).toBe(false);
+    expect(sitsSubject(bangla, { className: 'Class 7' })).toBe(false);
+  });
+});
+
+describe('excludedBy', () => {
+  it('names the part of the rule that actually decided it', () => {
+    const humHindu = { className: 'Class 9', groupName: 'Humanities', religion: 'Hindu' };
+    expect(excludedBy(physics, humHindu)).toBe('group');
+    expect(excludedBy(islam, humHindu)).toBe('religion');
+    expect(excludedBy(bangla, humHindu)).toBeNull();
+    expect(excludedBy(history, { ...humHindu, className: 'Class 7' })).toBe('class');
+  });
+
+  it('is the one answer sitsSubject is built on', () => {
+    const who = { className: 'Class 9', groupName: 'Science', religion: 'Other' };
+    for (const s of all) expect(sitsSubject(s, who)).toBe(excludedBy(s, who) === null);
   });
 });
 
 describe('subjectsForStudent', () => {
-  it('is the class list filtered to the student’s own group', () => {
-    expect(subjectsForStudent(all, 'Class 9', 'Science').map((s) => s.subjectId))
-      .toEqual(['BAN1', 'PHY']);
-    expect(subjectsForStudent(all, 'Class 9', 'Business Studies').map((s) => s.subjectId))
-      .toEqual(['BAN1']);
+  it('is the class list narrowed to this student’s own papers', () => {
+    expect(subjectsForStudent(all, {
+      className: 'Class 9', groupName: 'Science', religion: 'Islam',
+    }).map((s) => s.subjectId)).toEqual(['BAN1', 'PHY', 'ISL']);
+
+    expect(subjectsForStudent(all, {
+      className: 'Class 9', groupName: 'Humanities', religion: 'Hindu',
+    }).map((s) => s.subjectId)).toEqual(['BAN1', 'HIST', 'HIN']);
+
+    expect(subjectsForStudent(all, {
+      className: 'Class 9', groupName: 'Business Studies', religion: 'Other',
+    }).map((s) => s.subjectId)).toEqual(['BAN1']);
   });
 });
 
@@ -102,20 +158,37 @@ const mark = (studentId: string, subjectId: string, marks: number): ResultRow =>
 });
 
 describe('the result sheet', () => {
-  const hum = student({ studentId: 's1', fullName: 'Hasina', rollNo: 1, groupName: 'Humanities' });
-  const sci = student({ studentId: 's2', fullName: 'Shakil', rollNo: 2, groupName: 'Science' });
+  const hum = student({
+    studentId: 's1', fullName: 'Hasina', rollNo: 1,
+    groupName: 'Humanities', religion: 'Islam',
+  });
+  const sci = student({
+    studentId: 's2', fullName: 'Shakil', rollNo: 2,
+    groupName: 'Science', religion: 'Hindu',
+  });
 
   it('finishes a student whose own papers are all marked', () => {
-    const rows = sheetFor([hum], all, [mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80)], 'ex1');
+    const rows = sheetFor(
+      [hum], all,
+      [mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80), mark('s1', 'ISL', 75)],
+      'ex1',
+    );
     expect(rows[0].tabulation.incomplete).toBe(false);
-    expect(rows[0].tabulation.gpa).toBe(4.5);          // A 4.0 and A+ 5.0
-    expect(rows[0].tabulation.subjects.map((s) => s.subjectId)).toEqual(['BAN1', 'HIST']);
+    expect(rows[0].tabulation.subjects.map((s) => s.subjectId))
+      .toEqual(['BAN1', 'HIST', 'ISL']);
   });
 
   it('does not hold a result open for a paper the student never sat', () => {
-    // Physics has no mark for Hasina and never will: she is Humanities.
-    const rows = sheetFor([hum], all, [mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80)], 'ex1');
-    expect(rows[0].tabulation.subjects.some((s) => s.subjectId === 'PHY')).toBe(false);
+    // Physics is a Science paper and Hindu Religion is not Hasina's: neither
+    // mark is ever coming, and neither should hold her result open.
+    const rows = sheetFor(
+      [hum], all,
+      [mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80), mark('s1', 'ISL', 75)],
+      'ex1',
+    );
+    const ids = rows[0].tabulation.subjects.map((s) => s.subjectId);
+    expect(ids).not.toContain('PHY');
+    expect(ids).not.toContain('HIN');
   });
 
   it('still holds it open for a paper the student DOES sit', () => {
@@ -124,13 +197,13 @@ describe('the result sheet', () => {
     expect(rows[0].tabulation.gpa).toBeNull();
   });
 
-  it('ranks the two groups against each other on their own papers', () => {
+  it('ranks students on their own papers, whatever they sat', () => {
     const rows = sheetFor(
       [hum, sci],
       all,
       [
-        mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80),
-        mark('s2', 'BAN1', 90), mark('s2', 'PHY', 90),
+        mark('s1', 'BAN1', 70), mark('s1', 'HIST', 80), mark('s1', 'ISL', 75),
+        mark('s2', 'BAN1', 90), mark('s2', 'PHY', 90), mark('s2', 'HIN', 90),
       ],
       'ex1',
     );

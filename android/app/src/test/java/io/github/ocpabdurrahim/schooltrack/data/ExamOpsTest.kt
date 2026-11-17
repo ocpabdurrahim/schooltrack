@@ -11,7 +11,7 @@ class ExamOpsTest {
     private fun student(id: String, classId: String, roll: Long) = StudentDetail(
         studentId = id, fullName = "S$id", rollNo = roll, regNo = null,
         classId = classId, className = "Class $classId", section = "A",
-        groupName = null, gender = null, dob = null, fatherName = null,
+        groupName = null, religion = null, gender = null, dob = null, fatherName = null,
         motherName = null, bloodGroup = null, mobileNo = null, status = "A",
     )
 

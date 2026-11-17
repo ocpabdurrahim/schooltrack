@@ -33,18 +33,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.Exam
+import io.github.ocpabdurrahim.schooltrack.data.Excluded
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
 import io.github.ocpabdurrahim.schooltrack.data.Lookup
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.RosterRow
 import io.github.ocpabdurrahim.schooltrack.data.RosterStudent
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
+import io.github.ocpabdurrahim.schooltrack.data.Sitter
 import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.boxNames
 import io.github.ocpabdurrahim.schooltrack.data.buildRoster
 import io.github.ocpabdurrahim.schooltrack.data.cleanMark
 import io.github.ocpabdurrahim.schooltrack.data.enteredLog
+import io.github.ocpabdurrahim.schooltrack.data.excludedBy
 import io.github.ocpabdurrahim.schooltrack.data.fieldBad
 import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.hasEntry
@@ -156,7 +159,10 @@ fun QuickBySubjectBody(
         note = ""
         try {
             val students = people.findStudents(classId, "").map {
-                RosterStudent(it.studentId, it.rollNo, it.fullName, it.className, it.groupName)
+                RosterStudent(
+                    it.studentId, it.rollNo, it.fullName, it.className,
+                    it.groupName, it.religion,
+                )
             }
             roster = buildRoster(students, want, repo.marksForExam(examId, classId))
             problem = ""
@@ -233,9 +239,16 @@ fun QuickBySubjectBody(
             }
             is Lookup.NotTaken -> {
                 open = null
-                problem = got.row.fullName + " is " +
-                    got.row.groupName.ifBlank { got.row.className } +
-                    ", which does not sit " + (subject?.subjectName ?: "this subject") + "."
+                val by = subject?.let {
+                    excludedBy(it, Sitter(got.row.className, got.row.groupName, got.row.religion))
+                }
+                val why = when (by) {
+                    Excluded.RELIGION -> got.row.religion
+                    Excluded.GROUP -> got.row.groupName
+                    else -> got.row.className
+                }
+                problem = got.row.fullName + " is " + why + ", which does not sit " +
+                    (subject?.subjectName ?: "this subject") + "."
             }
             is Lookup.Found -> {
                 problem = ""
@@ -285,10 +298,12 @@ fun QuickBySubjectBody(
                                 }
                             }
                             ) + (
-                            if (subject.groupNames.isEmpty()) {
-                                ""
-                            } else {
-                                " · " + subject.groupNames.joinToString(" and ") + " only"
+                            (subject.groupNames + subject.religions).let { only ->
+                                if (only.isEmpty()) {
+                                    ""
+                                } else {
+                                    " · " + only.joinToString(" and ") + " only"
+                                }
                             }
                             ) + " · " + done.first + " of " + done.second + " entered",
                         style = MaterialTheme.typography.bodySmall,
