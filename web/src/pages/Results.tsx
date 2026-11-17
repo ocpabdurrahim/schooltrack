@@ -229,13 +229,26 @@ export default function Results() {
                       </td>
                       {columns.map((c) => {
                         const s = r.tabulation.subjects.find((x) => x.subjectId === c.subjectId);
+                        // No entry at all means the student does not sit this
+                        // paper — a Humanities row under Physics. That is not
+                        // the same as a mark nobody has typed yet, and reading
+                        // it as one is how a whole group ends up looking
+                        // unfinished. A blank says "not theirs"; "—" says
+                        // "theirs, still missing".
+                        if (!s) {
+                          return (
+                            <td key={c.subjectId} style={{
+                              padding: '5px 4px', textAlign: 'center', color: 'var(--line)',
+                            }}>·</td>
+                          );
+                        }
                         return (
                           <td key={c.subjectId} style={{
                             padding: '5px 4px', textAlign: 'center',
-                            color: s?.letter === 'F' ? 'var(--bad)' : undefined,
+                            color: s.letter === 'F' ? 'var(--bad)' : undefined,
                           }}>
-                            {s?.absent ? 'abs' : s?.marks ?? '—'}
-                            {s && !s.absent && s.marks !== null && (
+                            {s.absent ? 'abs' : s.marks ?? '—'}
+                            {!s.absent && s.marks !== null && (
                               <span style={{ color: 'var(--muted)' }}> {s.letter}</span>
                             )}
                           </td>

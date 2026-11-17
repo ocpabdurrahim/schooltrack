@@ -24,6 +24,7 @@ data class RosterStudent(
     val rollNo: Long,
     val fullName: String,
     val className: String,
+    val groupName: String? = null,
 )
 
 /** One student on the loaded roster, with whatever is already stored. */
@@ -32,7 +33,8 @@ data class RosterRow(
     val rollNo: Long,
     val fullName: String,
     val className: String,
-    /** Does this student's class sit the chosen subject? */
+    val groupName: String,
+    /** Does this student sit the chosen subject — their class AND their group? */
     val takes: Boolean,
     /** What is stored for them, as text, ready for the boxes. */
     val typed: Typed,
@@ -78,7 +80,8 @@ fun buildRoster(
             rollNo = s.rollNo,
             fullName = s.fullName,
             className = s.className,
-            takes = subject.classNames.contains(s.className),
+            groupName = s.groupName.orEmpty(),
+            takes = sitsSubject(subject, s.className, s.groupName),
             typed = got?.let { typedFrom(it.marks, it.parts, it.absent) } ?: Typed(),
             stored = got != null && hasEntry(got),
             savedAt = got?.updatedAt,

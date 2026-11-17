@@ -8,6 +8,7 @@ import {
   listSubjects,
   marksForExam,
   saveMarks,
+  sitsSubject,
   subjectsForClass,
 } from '../data/exams';
 import {
@@ -88,6 +89,18 @@ export default function MarkEntry() {
   const classSubjects = className ? subjectsForClass(subjects, className) : subjects;
   const subject = classSubjects.find((s) => s.subjectId === subjectId);
 
+  /**
+   * The students who actually sit this paper.
+   *
+   * A Science paper is not handed to the Humanities half of the class, and a
+   * sheet that listed them would invite a mark for a paper they never sat —
+   * which the tabulation would then have to explain away.
+   */
+  const sitters = subject
+    ? students.filter((s) => sitsSubject(subject, s.className, s.groupName))
+    : students;
+  const notSitting = students.length - sitters.length;
+
   // the roll, and whatever has already been entered for this exam + subject
   useEffect(() => {
     if (!classId || !examId) return;
@@ -145,7 +158,7 @@ export default function MarkEntry() {
     const paste = parseMarkPaste(tally);
     const fill = applyMarkPaste(
       paste,
-      students.map((s) => ({ studentId: s.studentId, rollNo: s.rollNo })),
+      sitters.map((s) => ({ studentId: s.studentId, rollNo: s.rollNo })),
       subject?.fullMarks ?? null,
     );
     setRead({ paste, fill });
@@ -171,7 +184,7 @@ export default function MarkEntry() {
     }
     setBusy(true); setProblem(''); setNote('');
     try {
-      const rows: ResultRow[] = students.map((s) => {
+      const rows: ResultRow[] = sitters.map((s) => {
         const e = entries[s.studentId] ?? blankTyped();
         const { parts, marks } = partsAndTotal(subject, e);
         return {
@@ -194,7 +207,7 @@ export default function MarkEntry() {
   }
 
   const over = subject
-    ? students.filter((s) => overMax(subject, entries[s.studentId] ?? blankTyped())).length
+    ? sitters.filter((s) => overMax(subject, entries[s.studentId] ?? blankTyped())).length
     : 0;
 
   return (
@@ -308,7 +321,7 @@ export default function MarkEntry() {
               exactly. Write <strong>A</strong> for absent and <strong>-</strong>{' '}
               to clear a mark.
             </p>
-            <button onClick={fillFromTally} disabled={busy || !students.length}>
+            <button onClick={fillFromTally} disabled={busy || !sitters.length}>
               Fill the boxes
             </button>
 
@@ -348,8 +361,11 @@ export default function MarkEntry() {
 
       <div className="card">
         <h2>
-          {busy ? 'Working…' : `${students.length} student${students.length === 1 ? '' : 's'}`}
+          {busy ? 'Working…' : `${sitters.length} student${sitters.length === 1 ? '' : 's'}`}
           {subject ? ` · out of ${subject.fullMarks}` : ''}
+          {notSitting > 0 && subject?.groupNames?.length
+            ? ` · ${notSitting} not shown, this is a ${subject.groupNames.join(' and ')} paper`
+            : ''}
         </h2>
 
         {subject?.components?.length ? (
@@ -368,7 +384,7 @@ export default function MarkEntry() {
           </div>
         ) : null}
 
-        {students.map((s, row) => {
+        {sitters.map((s, row) => {
           const e = entries[s.studentId] ?? blankTyped();
           const comps = subject?.components ?? [];
           const got = subject ? partsAndTotal(subject, e) : { parts: null, marks: null };
@@ -474,7 +490,7 @@ export default function MarkEntry() {
         )}
 
         <button onClick={save}
-                disabled={busy || !subject || !students.length || exam?.published || over > 0}>
+                disabled={busy || !subject || !sitters.length || exam?.published || over > 0}>
           {busy ? 'Saving…' : 'Save marks'}
         </button>
         {note && <span style={{ marginLeft: 12, color: 'var(--accent)' }}>{note}</span>}

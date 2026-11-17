@@ -120,7 +120,17 @@ export default function QuickBySubject() {
     Promise.all([findStudents(classId, ''), marksForExam(examId, classId)])
       .then(([students, marks]) => {
         if (!live) return;
-        setRoster(buildRoster(students, want, marks));
+        setRoster(buildRoster(
+          students.map((st) => ({
+            studentId: st.studentId,
+            rollNo: st.rollNo,
+            fullName: st.fullName,
+            className: st.className,
+            groupName: st.groupName,
+          })),
+          want,
+          marks,
+        ));
         setProblem('');
       })
       .catch(() => { if (live) setProblem('Could not read the roll for that section.'); })
@@ -173,8 +183,8 @@ export default function QuickBySubject() {
     }
     if (got.kind === 'notTaken') {
       setOpen(null);
-      setProblem(`${got.row.fullName} is in ${got.row.className}, which does not sit ` +
-        `${subject?.subjectName ?? 'this subject'}.`);
+      setProblem(`${got.row.fullName} is ${got.row.groupName || got.row.className}, which ` +
+        `does not sit ${subject?.subjectName ?? 'this subject'}.`);
       backToRoll();
       return;
     }
@@ -315,6 +325,9 @@ export default function QuickBySubject() {
               ? subject.components.map((c) => `${c.name} ${c.max} (pass ${c.pass})`).join(' · ')
               : `one mark out of ${subject.fullMarks}`}
             {subject.combineGroup ? ` · graded with ${subject.combineGroup}` : ''}
+            {subject.groupNames?.length
+              ? ` · ${subject.groupNames.join(' and ')} only`
+              : ''}
             {' · '}<strong>{done.done} of {done.takes}</strong> entered
           </p>
         )}

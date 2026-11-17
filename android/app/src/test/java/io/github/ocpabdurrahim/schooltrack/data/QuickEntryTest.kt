@@ -27,10 +27,16 @@ class QuickEntryTest {
         components = emptyList(),
     )
 
+    private val physics = maths.copy(
+        subjectId = "PHY",
+        subjectName = "Physics",
+        groupNames = listOf("Science"),
+    )
+
     private val roster = listOf(
-        RosterStudent("s1", 1, "Abida Sultana", "Class 9"),
-        RosterStudent("s2", 2, "Bashir Ahmed", "Class 9"),
-        RosterStudent("s3", 7, "Chandni Roy", "Class 10"),
+        RosterStudent("s1", 1, "Abida Sultana", "Class 9", "Science"),
+        RosterStudent("s2", 2, "Bashir Ahmed", "Class 9", "Humanities"),
+        RosterStudent("s3", 7, "Chandni Roy", "Class 10", "Science"),
     )
 
     private fun stored(
@@ -70,6 +76,13 @@ class QuickEntryTest {
         val r = buildRoster(roster, maths, emptyList())
         assertTrue(r["1"]!!.takes)
         assertFalse(r["7"]!!.takes)   // Class 10, and Maths is set up for Class 9
+    }
+
+    @Test
+    fun marksTheStudentWhoseGroupDoesNotSitThisSubject() {
+        val r = buildRoster(roster, physics, emptyList())
+        assertTrue(r["1"]!!.takes)     // Science
+        assertFalse(r["2"]!!.takes)    // Humanities, and Physics is a Science paper
     }
 
     @Test

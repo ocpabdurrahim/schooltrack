@@ -10,13 +10,14 @@ import {
   saveSubject,
 } from '../data/exams';
 import { currentYear } from '../data/fees';
+import { GROUPS } from '../data/groups';
 import type { Component } from '../data/grading';
 
 const blankExam = { examName: '', examYear: currentYear(), published: false, sortOrder: 0 };
 const blankSubject = {
   subjectName: '', subjectCode: '', classNames: [] as string[],
   fullMarks: 100, isOptional: false, sortOrder: 0,
-  components: [] as Component[], combineGroup: '',
+  components: [] as Component[], combineGroup: '', groupNames: [] as string[],
 };
 
 /**
@@ -90,17 +91,38 @@ export default function Exams() {
     if (!subject.classNames.length) { setProblem('Tick at least one class that sits this subject.'); return; }
     setBusy(true); setProblem('');
     try {
+      // The ?? matters: a stored subject arrives here with combineGroup null
+      // and, before groups existed, no groupNames at all. Reading .trim() off
+      // that null threw, and the catch below called it a permission problem —
+      // so editing any subject with no combine tag looked like the admin had
+      // lost their rights.
+      const groups = subject.groupNames ?? [];
       await saveSubject({
         ...subject,
-        combineGroup: subject.combineGroup.trim().toUpperCase() || null,
+        combineGroup: (subject.combineGroup ?? '').trim().toUpperCase() || null,
+        // Every group ticked says the same thing as none ticked — the whole
+        // class sits it — so it is stored the shorter way, and a group added
+        // later is covered without anyone having to come back here.
+        groupNames: groups.length === GROUPS.length ? [] : groups,
       });
       setSubject({ ...blankSubject, sortOrder: (subjects.at(-1)?.sortOrder ?? 0) + 1 });
       await load();
-    } catch {
-      setProblem('That save was refused. Only an administrator may set up subjects.');
+    } catch (err) {
+      const denied = (err as { code?: string })?.code === 'permission-denied';
+      setProblem(denied
+        ? 'That save was refused. Only an administrator may set up subjects.'
+        : `That subject could not be saved: ${err instanceof Error ? err.message : 'unknown error'}`);
       setBusy(false);
     }
   }
+
+  const toggleGroup = (name: string) =>
+    setSubject({
+      ...subject,
+      groupNames: subject.groupNames.includes(name)
+        ? subject.groupNames.filter((n) => n !== name)
+        : [...subject.groupNames, name],
+    });
 
   const toggleClass = (name: string) =>
     setSubject({
@@ -193,6 +215,9 @@ export default function Exams() {
                   ? ` · ${s.components.map((c) => `${c.name} ${c.max}`).join(' + ')}`
                   : ''}
                 {s.combineGroup ? ` · with ${s.combineGroup}` : ''}
+                {s.groupNames?.length && s.groupNames.length < GROUPS.length
+                  ? ` · ${s.groupNames.join(' and ')} only`
+                  : ''}
               </span>
               <button className="link" onClick={() => { setSubject(s as never); setProblem(''); }}>edit</button>
             </span>
@@ -228,6 +253,26 @@ export default function Exams() {
             </label>
           ))}
         </div>
+
+        <label style={{ marginTop: 12 }}>Groups that sit it</label>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {GROUPS.map((n) => (
+            <label key={n} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+              <input type="checkbox" style={{ width: 'auto' }}
+                     checked={subject.groupNames.includes(n)}
+                     onChange={() => toggleGroup(n)} />
+              {n}
+            </label>
+          ))}
+        </div>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          {subject.groupNames.length === 0 || subject.groupNames.length === GROUPS.length
+            ? 'Tick none and the whole class sits it — Bangla, English, Mathematics. Tick ' +
+              'some and it becomes a group paper: Physics for Science, Accounting for ' +
+              'Business Studies.'
+            : `Only ${subject.groupNames.join(' and ')} students will be asked for this ` +
+              'mark, and only their results will wait for it.'}
+        </p>
 
         <label htmlFor="pat" style={{ marginTop: 12 }}>Marked in parts</label>
         <select

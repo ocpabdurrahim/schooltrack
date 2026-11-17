@@ -62,6 +62,8 @@ import io.github.ocpabdurrahim.schooltrack.data.typedFrom
 import io.github.ocpabdurrahim.schooltrack.data.gradeFor
 import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
+import io.github.ocpabdurrahim.schooltrack.data.GROUPS
+import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
 import kotlinx.coroutines.launch
 
@@ -212,7 +214,14 @@ fun ExamsScreen(
                             )
                             Text(
                                 s.classNames.joinToString(", ").ifBlank { "no class" } +
-                                    "  ·  " + s.fullMarks.toInt() + " marks",
+                                    "  ·  " + s.fullMarks.toInt() + " marks" +
+                                    if (s.groupNames.isEmpty() ||
+                                        s.groupNames.size == GROUPS.size
+                                    ) {
+                                        ""
+                                    } else {
+                                        "  ·  " + s.groupNames.joinToString(" and ") + " only"
+                                    },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -287,6 +296,38 @@ fun ExamsScreen(
                     }
                 }
 
+                Text("Groups that sit it", style = MaterialTheme.typography.labelMedium,
+                     modifier = Modifier.padding(top = 12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GROUPS.forEach { n ->
+                        FilterChip(
+                            selected = n in subject.groupNames,
+                            onClick = {
+                                subject = subject.copy(
+                                    groupNames = if (n in subject.groupNames) {
+                                        subject.groupNames - n
+                                    } else {
+                                        subject.groupNames + n
+                                    },
+                                )
+                            },
+                            label = { Text(n) },
+                        )
+                    }
+                }
+                Text(
+                    if (subject.groupNames.isEmpty() || subject.groupNames.size == GROUPS.size) {
+                        "Tick none and the whole class sits it — Bangla, English, Mathematics. " +
+                            "Tick some and it becomes a group paper: Physics for Science, " +
+                            "Accounting for Business Studies."
+                    } else {
+                        "Only " + subject.groupNames.joinToString(" and ") + " students will be " +
+                            "asked for this mark, and only their results will wait for it."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -317,7 +358,17 @@ fun ExamsScreen(
                         busy = true; problem = ""
                         scope.launch {
                             try {
-                                exams.saveSubject(subject)
+                                // Every group ticked says the same thing as
+                                // none ticked — the whole class sits it — so
+                                // it is stored the shorter way, and a group
+                                // added later is covered without coming back.
+                                exams.saveSubject(
+                                    if (subject.groupNames.size == GROUPS.size) {
+                                        subject.copy(groupNames = emptyList())
+                                    } else {
+                                        subject
+                                    },
+                                )
                                 subject = Subject("", "")
                                 load()
                             } catch (_: Exception) { problem = REFUSED; busy = false }
@@ -382,6 +433,17 @@ fun MarkEntryScreen(
     val className = students.firstOrNull()?.className.orEmpty()
     val classSubjects = if (className.isBlank()) subjects else subjectsForClass(subjects, className)
     val subject = classSubjects.firstOrNull { it.subjectId == subjectId }
+
+    /**
+     * The students who actually sit this paper.
+     *
+     * A Science paper is not handed to the Humanities half of the class, and a
+     * sheet that listed them would invite a mark for a paper they never sat —
+     * which the tabulation would then have to explain away.
+     */
+    val sitters = subject?.let { sub ->
+        students.filter { sitsSubject(sub, it.className, it.groupName) }
+    } ?: students
 
     LaunchedEffect(classId, examId, subjectId) {
         if (classId.isBlank() || examId.isBlank()) return@LaunchedEffect
@@ -496,12 +558,12 @@ fun MarkEntryScreen(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                     Button(
-                        enabled = !busy && students.isNotEmpty(),
+                        enabled = !busy && sitters.isNotEmpty(),
                         onClick = {
                             val paste = parseMarkPaste(tally)
                             val fill = applyMarkPaste(
                                 paste,
-                                students.map { RollEntry(it.studentId, it.rollNo) },
+                                sitters.map { RollEntry(it.studentId, it.rollNo) },
                                 subject?.fullMarks?.toLong(),
                             )
                             pasted = paste to fill
@@ -555,12 +617,12 @@ fun MarkEntryScreen(
         Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Text(
-                    (if (busy) "Working…" else students.size.toString() + " student(s)") +
+                    (if (busy) "Working…" else sitters.size.toString() + " student(s)") +
                         (subject?.let { "  ·  out of " + it.fullMarks.toInt() } ?: ""),
                     style = MaterialTheme.typography.titleMedium,
                 )
 
-                students.forEach { s ->
+                sitters.forEach { s ->
                     val typed = entries[s.studentId] ?: Typed()
                     val absent = typed.absent
                     val totals = subject?.let { partsAndTotal(it, typed) }
@@ -640,7 +702,7 @@ fun MarkEntryScreen(
                 }
 
                 Button(
-                    enabled = !busy && subject != null && students.isNotEmpty() &&
+                    enabled = !busy && subject != null && sitters.isNotEmpty() &&
                         exam?.published != true,
                     onClick = {
                         val s = subject ?: return@Button
@@ -648,7 +710,7 @@ fun MarkEntryScreen(
                         scope.launch {
                             try {
                                 repo.saveMarks(
-                                    students.map { st ->
+                                    sitters.map { st ->
                                         val typed = entries[st.studentId] ?: Typed()
                                         val (parts, total) = partsAndTotal(s, typed)
                                         ResultRow(
@@ -666,7 +728,7 @@ fun MarkEntryScreen(
                                         )
                                     },
                                 )
-                                note = students.size.toString() + " marks saved."
+                                note = sitters.size.toString() + " marks saved."
                             } catch (_: Exception) {
                                 problem = "That save was refused. Only a teacher or the head " +
                                     "may enter marks."
@@ -847,7 +909,11 @@ fun ResultsScreen(
                                         Text(
                                             c.subjectName.take(4) + " " +
                                                 when {
-                                                    s == null -> "—"
+                                                    // No entry at all means the student does
+                                                    // not sit this paper — a Humanities row
+                                                    // under Physics. "·" says "not theirs";
+                                                    // "—" says "theirs, still missing".
+                                                    s == null -> "·"
                                                     s.mark.absent -> "abs"
                                                     s.mark.marks == null -> "—"
                                                     else -> s.mark.marks.toInt().toString() +

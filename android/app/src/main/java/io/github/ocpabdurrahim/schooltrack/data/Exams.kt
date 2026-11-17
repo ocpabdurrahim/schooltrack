@@ -49,6 +49,11 @@ data class Subject(
      * second paper make a single grade out of 200. Null for a lone paper.
      */
     val combineGroup: String? = null,
+    /**
+     * Which streams sit this paper — Science, Humanities, Business Studies, as
+     * Oracle's `subject_group` records it. Empty means the whole class sits it.
+     */
+    val groupNames: List<String> = emptyList(),
 )
 
 data class ResultRow(
@@ -118,6 +123,33 @@ fun subjectMarkFor(s: Subject, got: ResultRow?): SubjectMark = SubjectMark(
 fun subjectsForClass(subjects: List<Subject>, className: String) =
     subjects.filter { className in it.classNames }
 
+/**
+ * Does this student sit this paper?
+ *
+ * Classes 9 and 10 stream into groups, and the groups sit different papers:
+ * Physics is for Science, Accounting for Business Studies. A subject with no
+ * group named is sat by the whole class — Bangla, English, Mathematics —
+ * which is also how every subject behaved before groups were recorded here,
+ * so nothing already set up changes meaning.
+ *
+ * A student with NO group recorded sits everything the class sits. That looks
+ * wrong until you consider the alternative: dropping the group papers from
+ * their result would quietly produce a GPA out of seven subjects instead of
+ * ten, and nobody would see it. Expecting every paper leaves the result openly
+ * incomplete instead, which is what gets the missing group filled in.
+ */
+fun sitsSubject(s: Subject, className: String, groupName: String?): Boolean {
+    if (className !in s.classNames) return false
+    if (s.groupNames.isEmpty()) return true
+    val mine = normalGroup(groupName)
+    if (mine.isEmpty()) return true
+    return mine in s.groupNames
+}
+
+/** The papers one student sits — the list every grade and GPA is built from. */
+fun subjectsForStudent(subjects: List<Subject>, className: String, groupName: String?) =
+    subjects.filter { sitsSubject(it, className, groupName) }
+
 class ExamsRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
 ) {
@@ -186,6 +218,7 @@ class ExamsRepository(
                 sortOrder = it.getLong("sortOrder") ?: 0,
                 components = readComponents(it.get("components")),
                 combineGroup = it.getString("combineGroup"),
+                groupNames = (it.get("groupNames") as? List<String>).orEmpty(),
             )
         }
 
@@ -220,6 +253,7 @@ class ExamsRepository(
                         mapOf("name" to it.name, "max" to it.max, "pass" to it.pass)
                     },
                     "combineGroup" to s.combineGroup,
+                    "groupNames" to s.groupNames,
                 ),
             ),
             SetOptions.merge(),
@@ -313,7 +347,8 @@ fun sheetFor(
 
     val rows = students.map { student ->
         val mine = byStudent[student.studentId].orEmpty()
-        val subjectMarks = subjectsForClass(subjects, student.className).map { s ->
+        val subjectMarks =
+            subjectsForStudent(subjects, student.className, student.groupName).map { s ->
             subjectMarkFor(s, mine.firstOrNull { it.subjectId == s.subjectId })
         }
         StudentResult(student, tabulate(subjectMarks), null)

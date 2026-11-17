@@ -16,7 +16,7 @@
  * are written against both.
  */
 
-import { type ResultRow, type Subject, subjectMarkFor } from './exams';
+import { type ResultRow, type Subject, sitsSubject, subjectMarkFor } from './exams';
 import { type Parts, type SubjectGrade, type SubjectMark, gradeForSubject } from './grading';
 import { type Typed, blankTyped, numOrNull, partsAndTotal, typedFrom } from './markentry';
 
@@ -26,6 +26,7 @@ export type RosterStudent = {
   rollNo: number;
   fullName: string;
   className: string;
+  groupName?: string | null;
 };
 
 /** One student on the loaded roster, with whatever is already stored. */
@@ -34,7 +35,8 @@ export type RosterRow = {
   rollNo: number;
   fullName: string;
   className: string;
-  /** Does this student's class sit the chosen subject? */
+  groupName: string;
+  /** Does this student sit the chosen subject — their class AND their group? */
   takes: boolean;
   /** What is stored for them, as text, ready for the boxes. */
   typed: Typed;
@@ -71,7 +73,7 @@ export function hasEntry(row: Pick<ResultRow, 'marks' | 'absent' | 'parts'>): bo
  */
 export function buildRoster(
   students: RosterStudent[],
-  subject: Pick<Subject, 'subjectId' | 'classNames'>,
+  subject: Subject,
   marks: ResultRow[],
 ): Roster {
   const mine = new Map<string, ResultRow>();
@@ -87,7 +89,8 @@ export function buildRoster(
       rollNo: s.rollNo,
       fullName: s.fullName,
       className: s.className,
-      takes: (subject.classNames ?? []).includes(s.className),
+      groupName: s.groupName ?? '',
+      takes: sitsSubject(subject, s.className, s.groupName),
       typed: got ? typedFrom(got.marks, got.parts, got.absent) : blankTyped(),
       stored: !!got && hasEntry(got),
       savedAt: got?.updatedAt ?? null,

@@ -9,7 +9,7 @@ import {
   marksForExam,
   saveMarks,
   subjectMarkFor,
-  subjectsForClass,
+  subjectsForStudent,
 } from '../data/exams';
 import { type SubjectMark, gpaText, gradeForSubject, tabulate } from '../data/grading';
 import {
@@ -19,6 +19,7 @@ import {
   partsAndTotal,
   typedFrom,
 } from '../data/markentry';
+import { normalGroup } from '../data/groups';
 import { type StudentDetail, findStudents } from '../data/people';
 
 /**
@@ -75,7 +76,9 @@ export default function QuickByStudent() {
 
   const exam = exams.find((e) => e.examId === examId);
   const section = classes.find((c) => c.classId === classId);
-  const mySubjects = student ? subjectsForClass(subjects, student.className) : [];
+  const mySubjects = student
+    ? subjectsForStudent(subjects, student.className, student.groupName)
+    : [];
 
   /** Finds the roll in this section and reads whatever it already has. */
   async function open(rollNo: string) {
@@ -90,10 +93,12 @@ export default function QuickByStudent() {
       const marks = await marksForExam(examId, classId);
       const mine = marks.filter((m) => m.studentId === found.studentId);
       setStudent(found);
-      setTyped(Object.fromEntries(subjectsForClass(subjects, found.className).map((s) => {
-        const got = mine.find((m) => m.subjectId === s.subjectId);
-        return [s.subjectId, typedFrom(got?.marks, got?.parts, got?.absent ?? false)];
-      })));
+      setTyped(Object.fromEntries(
+        subjectsForStudent(subjects, found.className, found.groupName).map((s) => {
+          const got = mine.find((m) => m.subjectId === s.subjectId);
+          return [s.subjectId, typedFrom(got?.marks, got?.parts, got?.absent ?? false)];
+        }),
+      ));
     } catch {
       setProblem('Could not read that student’s marks.');
     }
@@ -213,6 +218,15 @@ export default function QuickByStudent() {
               {' '}· {student.className}{student.groupName ? ` · ${student.groupName}` : ''}
             </span>
           </h2>
+
+          {student && !normalGroup(student.groupName) &&
+           mySubjects.some((s) => s.groupNames?.length) && (
+            <div className="err">
+              No group is recorded for this student, so every paper the class sits is
+              listed — including the group papers. Set the group on their record and the
+              list will narrow to the ones they actually sit.
+            </div>
+          )}
 
           {mySubjects.length === 0 && (
             <div className="err">

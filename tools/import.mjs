@@ -38,6 +38,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * The streams this school runs, exactly as web/src/data/groups.ts lists them.
+ * Kept here as a plain constant because this script is run with bare node,
+ * outside the app's TypeScript build.
+ */
+const GROUPS = ['Science', 'Humanities', 'Business Studies'];
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(HERE, 'data');
 const SCHOOL_ID = 'matkhola';
@@ -183,6 +190,23 @@ const MAPPINGS = {
     },
   },
 
+  /**
+   * Which streams sit which paper, from Oracle's subject_group — folded onto
+   * the subject, like its components.
+   *
+   * A paper listed under EVERY group is stored with no groups at all. It means
+   * the same thing (the whole class sits it) and it keeps meaning it if the
+   * school ever adds a fourth stream, which a hard list of three would not.
+   */
+  subjectgroups: {
+    path: () => ['subjects'],
+    id: (r) => str(r.subjectId),
+    fold: (rows) => {
+      const groupNames = [...new Set(rows.map((r) => str(r.groupName)).filter(Boolean))].sort();
+      return { groupNames: groupNames.length >= GROUPS.length ? [] : groupNames };
+    },
+  },
+
   exams: {
     path: () => ['exams'],
     id: (r) => str(r.examId),
@@ -241,6 +265,7 @@ const MAPPINGS = {
 // Reference data before anything that points at it.
 const ORDER = [
   'settings', 'classes', 'students', 'staff', 'subjects', 'components',
+  'subjectgroups',
   'exams', 'feeHeads', 'feeStructure', 'expenseHeads', 'holidays',
 ];
 

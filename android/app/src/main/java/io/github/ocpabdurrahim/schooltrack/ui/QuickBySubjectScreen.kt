@@ -156,7 +156,7 @@ fun QuickBySubjectBody(
         note = ""
         try {
             val students = people.findStudents(classId, "").map {
-                RosterStudent(it.studentId, it.rollNo, it.fullName, it.className)
+                RosterStudent(it.studentId, it.rollNo, it.fullName, it.className, it.groupName)
             }
             roster = buildRoster(students, want, repo.marksForExam(examId, classId))
             problem = ""
@@ -233,7 +233,8 @@ fun QuickBySubjectBody(
             }
             is Lookup.NotTaken -> {
                 open = null
-                problem = got.row.fullName + " is in " + got.row.className +
+                problem = got.row.fullName + " is " +
+                    got.row.groupName.ifBlank { got.row.className } +
                     ", which does not sit " + (subject?.subjectName ?: "this subject") + "."
             }
             is Lookup.Found -> {
@@ -282,6 +283,12 @@ fun QuickBySubjectBody(
                                 subject.components.joinToString(" · ") {
                                     it.name + " " + it.max.toInt() + " (pass " + it.pass.toInt() + ")"
                                 }
+                            }
+                            ) + (
+                            if (subject.groupNames.isEmpty()) {
+                                ""
+                            } else {
+                                " · " + subject.groupNames.joinToString(" and ") + " only"
                             }
                             ) + " · " + done.first + " of " + done.second + " entered",
                         style = MaterialTheme.typography.bodySmall,

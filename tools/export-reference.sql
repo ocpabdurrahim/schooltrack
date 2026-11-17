@@ -117,6 +117,32 @@ SELECT TO_CHAR(c.subject_id)              AS "subjectId",
 
 
 -- ---------------------------------------------------------------------
+--  data\subjectgroups.csv
+--
+--  Which streams sit which paper, from Oracle's subject_group. This is what
+--  keeps a Humanities student's result from waiting for ever on a Physics
+--  mark that is never coming.
+--
+--  One row per subject per group; the importer gathers a subject's rows onto
+--  the subject itself, and a subject listed under EVERY group is stored with
+--  no groups at all -- which means the same thing and keeps saying it if the
+--  school ever adds a fourth stream.
+--
+--  NOTE: the religion papers (ISL, HIN) are listed under every group here,
+--  because Oracle splits those by students_info.religion in
+--  enroll_student_subjects, not by group. SchoolTrack has no religion on a
+--  student yet, so after this import BOTH religion papers look compulsory
+--  for everyone. Until that is built, give each religion paper the groups
+--  by hand or leave those marks out of the tabulation.
+-- ---------------------------------------------------------------------
+SELECT TO_CHAR(sg.subject_id)             AS "subjectId",
+       g.group_name                       AS "groupName"
+  FROM subject_group sg
+  JOIN groups g ON g.group_id = sg.group_id
+ ORDER BY sg.subject_id, g.group_name;
+
+
+-- ---------------------------------------------------------------------
 --  data\exams.csv
 -- ---------------------------------------------------------------------
 SELECT TO_CHAR(e.exam_id)                 AS "examId",

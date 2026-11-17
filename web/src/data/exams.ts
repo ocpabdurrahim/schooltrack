@@ -27,6 +27,7 @@ import {
   type Tabulation,
   tabulate,
 } from './grading';
+import { normalGroup } from './groups';
 import type { StudentDetail } from './people';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -67,6 +68,11 @@ export type Subject = {
    * paper make a single grade out of 200. Null for a paper that stands alone.
    */
   combineGroup?: string | null;
+  /**
+   * Which streams sit this paper — Science, Humanities, Business Studies, as
+   * Oracle's `subject_group` records it. Empty means the whole class sits it.
+   */
+  groupNames?: string[];
 };
 
 export type ResultRow = {
@@ -155,6 +161,7 @@ export async function listSubjects(): Promise<Subject[]> {
     subjectId: d.id,
     ...(d.data() as Omit<Subject, 'subjectId'>),
     classNames: (d.data().classNames ?? []) as string[],
+    groupNames: (d.data().groupNames ?? []) as string[],
   }));
 }
 
@@ -171,6 +178,7 @@ export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: 
       sortOrder: s.sortOrder,
       components: s.components ?? [],
       combineGroup: s.combineGroup ?? null,
+      groupNames: s.groupNames ?? [],
     }),
     { merge: true },
   );
@@ -179,6 +187,41 @@ export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: 
 
 export const subjectsForClass = (subjects: Subject[], className: string) =>
   subjects.filter((s) => (s.classNames ?? []).includes(className));
+
+/**
+ * Does this student sit this paper?
+ *
+ * Classes 9 and 10 stream into groups, and the groups sit different papers:
+ * Physics is for Science, Accounting for Business Studies. A subject with no
+ * group named is sat by the whole class — Bangla, English, Mathematics — which
+ * is also how every subject behaved before groups were recorded here, so
+ * nothing already set up changes meaning.
+ *
+ * A student with NO group recorded sits everything the class sits. That looks
+ * wrong until you consider the alternative: dropping the group papers from
+ * their result would quietly produce a GPA out of seven subjects instead of
+ * ten, and nobody would see it. Expecting every paper leaves the result openly
+ * incomplete instead, which is what gets the missing group filled in.
+ */
+export function sitsSubject(
+  s: Subject,
+  className: string,
+  groupName?: string | null,
+): boolean {
+  if (!(s.classNames ?? []).includes(className)) return false;
+  const groups = s.groupNames ?? [];
+  if (groups.length === 0) return true;
+  const mine = normalGroup(groupName);
+  if (mine === '') return true;
+  return groups.includes(mine);
+}
+
+/** The papers one student sits — the list every grade and GPA is built from. */
+export const subjectsForStudent = (
+  subjects: Subject[],
+  className: string,
+  groupName?: string | null,
+) => subjects.filter((s) => sitsSubject(s, className, groupName));
 
 // ---------------------------------------------------------------------------
 // marks
@@ -294,8 +337,9 @@ export function sheetFor(
 
   const rows = students.map((student) => {
     const mine = byStudent.get(student.studentId) ?? [];
-    const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className)
-      .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
+    const subjectMarks: SubjectMark[] =
+      subjectsForStudent(subjects, student.className, student.groupName)
+        .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
     return { student, tabulation: tabulate(subjectMarks), position: null as number | null };
   });
 
@@ -327,8 +371,9 @@ export async function resultsForStudent(
     .map((exam) => {
       const mine = marks.filter((m) => m.examId === exam.examId);
       if (!mine.length) return null;
-      const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className)
-        .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
+      const subjectMarks: SubjectMark[] =
+        subjectsForStudent(subjects, student.className, student.groupName)
+          .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
       return { exam, tabulation: tabulate(subjectMarks) };
     })
     .filter(Boolean) as { exam: Exam; tabulation: Tabulation }[];
