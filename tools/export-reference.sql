@@ -90,9 +90,30 @@ SELECT TO_CHAR(st.staff_id)               AS "staffId",
 -- ---------------------------------------------------------------------
 SELECT TO_CHAR(su.subject_id)             AS "subjectId",
        su.subject_name                    AS "subjectName",
-       su.subject_code                    AS "subjectCode"
+       su.subject_code                    AS "subjectCode",
+       su.total_marks                     AS "fullMarks",
+       su.is_optional                     AS "isOptional",
+       su.combine_group                   AS "combineGroup"
   FROM subjects_info su
  ORDER BY su.subject_id;
+
+
+-- ---------------------------------------------------------------------
+--  data\components.csv
+--
+--  How each paper is marked, with each part's OWN pass mark. This is the
+--  one that makes 60 in CQ and 8 in MCQ a FAIL at 68 out of 100, so it is
+--  worth exporting even for a school that only wants totals today.
+--
+--  One row per part; the importer gathers a subject's rows onto the
+--  subject itself and recomputes its full marks from them.
+-- ---------------------------------------------------------------------
+SELECT TO_CHAR(c.subject_id)              AS "subjectId",
+       c.comp_name                        AS "name",
+       c.max_marks                        AS "max",
+       c.pass_marks                       AS "pass"
+  FROM subject_components c
+ ORDER BY c.subject_id, c.max_marks DESC, c.comp_name;
 
 
 -- ---------------------------------------------------------------------

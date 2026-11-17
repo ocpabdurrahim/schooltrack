@@ -38,6 +38,17 @@ data class Subject(
     val fullMarks: Double = 100.0,
     val isOptional: Boolean = false,
     val sortOrder: Long = 0,
+    /**
+     * How the paper is marked. Empty means one mark out of fullMarks, which is
+     * what every subject looked like before components existed and what a
+     * school that does not split its papers still wants.
+     */
+    val components: List<Component> = emptyList(),
+    /**
+     * Papers sharing a group are graded as ONE subject: Bangla first and
+     * second paper make a single grade out of 200. Null for a lone paper.
+     */
+    val combineGroup: String? = null,
 )
 
 data class ResultRow(
@@ -45,12 +56,20 @@ data class ResultRow(
     val studentId: String,
     val subjectId: String,
     val subjectName: String,
+    /**
+     * The subject total. When the paper is marked in parts this is their sum,
+     * worked out by the caller with subjectTotal() so one rule decides it
+     * everywhere, and stored as well as the parts so every screen that already
+     * reads `marks` keeps working untouched.
+     */
     val marks: Double?,
     val absent: Boolean,
     val classId: String,
     val rollNo: Long,
     val fullMarks: Double,
     val isOptional: Boolean,
+    /** What was entered per component. Null on a paper marked whole. */
+    val parts: Map<String, Double?>? = null,
 )
 
 data class StudentResult(
@@ -71,6 +90,24 @@ fun subjectIdFor(name: String): String =
 
 fun resultId(examId: String, studentId: String, subjectId: String) =
     examId + "_" + studentId + "_" + subjectId
+
+/**
+ * The subject, plus whatever was entered for it, as the grading engine wants
+ * it. Every screen goes through here, so a subject's components and its
+ * combine group reach the tabulation the same way on the sheet, the report
+ * card and the student's own screen.
+ */
+fun subjectMarkFor(s: Subject, got: ResultRow?): SubjectMark = SubjectMark(
+    subjectId = s.subjectId,
+    subjectName = s.subjectName,
+    fullMarks = s.fullMarks,
+    marks = got?.marks,
+    absent = got?.absent ?: false,
+    isOptional = s.isOptional,
+    components = s.components,
+    parts = got?.parts.orEmpty(),
+    combineGroup = s.combineGroup,
+)
 
 fun subjectsForClass(subjects: List<Subject>, className: String) =
     subjects.filter { className in it.classNames }
@@ -141,7 +178,25 @@ class ExamsRepository(
                 fullMarks = it.getDouble("fullMarks") ?: 100.0,
                 isOptional = it.getBoolean("isOptional") ?: false,
                 sortOrder = it.getLong("sortOrder") ?: 0,
+                components = readComponents(it.get("components")),
+                combineGroup = it.getString("combineGroup"),
             )
+        }
+
+    /** The components as Firestore hands them back: a list of plain maps. */
+    @Suppress("UNCHECKED_CAST")
+    private fun readComponents(raw: Any?): List<Component> =
+        (raw as? List<Map<String, Any?>>).orEmpty().mapNotNull { m ->
+            val name = (m["name"] as? String)?.trim().orEmpty()
+            if (name.isEmpty()) {
+                null
+            } else {
+                Component(
+                    name = name,
+                    max = (m["max"] as? Number)?.toDouble() ?: 0.0,
+                    pass = (m["pass"] as? Number)?.toDouble() ?: 0.0,
+                )
+            }
         }
 
     suspend fun saveSubject(s: Subject): String {
@@ -155,6 +210,10 @@ class ExamsRepository(
                     "fullMarks" to s.fullMarks,
                     "isOptional" to s.isOptional,
                     "sortOrder" to s.sortOrder,
+                    "components" to s.components.map {
+                        mapOf("name" to it.name, "max" to it.max, "pass" to it.pass)
+                    },
+                    "combineGroup" to s.combineGroup,
                 ),
             ),
             SetOptions.merge(),
@@ -176,7 +235,12 @@ class ExamsRepository(
         rollNo = d.getLong("rollNo") ?: 0,
         fullMarks = d.getDouble("fullMarks") ?: 100.0,
         isOptional = d.getBoolean("isOptional") ?: false,
+        parts = readParts(d.get("parts")),
     )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun readParts(raw: Any?): Map<String, Double?>? =
+        (raw as? Map<String, Any?>)?.mapValues { (_, v) -> (v as? Number)?.toDouble() }
 
     suspend fun marksForExam(examId: String, classId: String? = null): List<ResultRow> {
         var q: Query = school().collection("results").whereEqualTo("examId", examId)
@@ -212,6 +276,7 @@ class ExamsRepository(
                     "rollNo" to r.rollNo,
                     "fullMarks" to r.fullMarks,
                     "isOptional" to r.isOptional,
+                    "parts" to r.parts,
                     "updatedAt" to FieldValue.serverTimestamp(),
                 ),
                 SetOptions.merge(),
@@ -240,15 +305,7 @@ fun sheetFor(
     val rows = students.map { student ->
         val mine = byStudent[student.studentId].orEmpty()
         val subjectMarks = subjectsForClass(subjects, student.className).map { s ->
-            val got = mine.firstOrNull { it.subjectId == s.subjectId }
-            SubjectMark(
-                subjectId = s.subjectId,
-                subjectName = s.subjectName,
-                fullMarks = s.fullMarks,
-                marks = got?.marks,
-                absent = got?.absent ?: false,
-                isOptional = s.isOptional,
-            )
+            subjectMarkFor(s, mine.firstOrNull { it.subjectId == s.subjectId })
         }
         StudentResult(student, tabulate(subjectMarks), null)
     }.toMutableList()

@@ -10,12 +10,44 @@ import {
   saveSubject,
 } from '../data/exams';
 import { currentYear } from '../data/fees';
+import type { Component } from '../data/grading';
 
 const blankExam = { examName: '', examYear: currentYear(), published: false, sortOrder: 0 };
 const blankSubject = {
   subjectName: '', subjectCode: '', classNames: [] as string[],
   fullMarks: 100, isOptional: false, sortOrder: 0,
+  components: [] as Component[], combineGroup: '',
 };
+
+/**
+ * The patterns a Bangladeshi secondary school actually uses, so setting up
+ * twenty subjects is four clicks each rather than typing nine numbers.
+ *
+ * The pass mark on each part is its own, not a share of the subject's: a
+ * paper can total 68 out of 100 and still be F because the MCQ pass is 10.
+ * English carries pass 0 because those papers have no part-level pass — the
+ * subject's own 33% is the only bar.
+ */
+const PART_PATTERNS: { label: string; components: Component[] }[] = [
+  { label: 'One mark, no parts', components: [] },
+  {
+    label: 'CQ 70 + MCQ 30',
+    components: [{ name: 'CQ', max: 70, pass: 23 }, { name: 'MCQ', max: 30, pass: 10 }],
+  },
+  {
+    label: 'CQ 50 + MCQ 25 + Practical 25',
+    components: [
+      { name: 'CQ', max: 50, pass: 17 },
+      { name: 'MCQ', max: 25, pass: 8 },
+      { name: 'PRACTICAL', max: 25, pass: 8 },
+    ],
+  },
+  {
+    label: 'CQ 25 + MCQ 25 (out of 50)',
+    components: [{ name: 'CQ', max: 25, pass: 8 }, { name: 'MCQ', max: 25, pass: 8 }],
+  },
+  { label: 'Written 100', components: [{ name: 'WRITTEN', max: 100, pass: 0 }] },
+];
 
 export default function Exams() {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -58,7 +90,10 @@ export default function Exams() {
     if (!subject.classNames.length) { setProblem('Tick at least one class that sits this subject.'); return; }
     setBusy(true); setProblem('');
     try {
-      await saveSubject(subject);
+      await saveSubject({
+        ...subject,
+        combineGroup: subject.combineGroup.trim().toUpperCase() || null,
+      });
       setSubject({ ...blankSubject, sortOrder: (subjects.at(-1)?.sortOrder ?? 0) + 1 });
       await load();
     } catch {
@@ -154,6 +189,10 @@ export default function Exams() {
             <span>
               <span style={{ color: 'var(--muted)', marginRight: 12 }}>
                 {(s.classNames ?? []).join(', ') || 'no class'} · {s.fullMarks} marks
+                {s.components?.length
+                  ? ` · ${s.components.map((c) => `${c.name} ${c.max}`).join(' + ')}`
+                  : ''}
+                {s.combineGroup ? ` · with ${s.combineGroup}` : ''}
               </span>
               <button className="link" onClick={() => { setSubject(s as never); setProblem(''); }}>edit</button>
             </span>
@@ -189,6 +228,81 @@ export default function Exams() {
             </label>
           ))}
         </div>
+
+        <label htmlFor="pat" style={{ marginTop: 12 }}>Marked in parts</label>
+        <select
+          id="pat"
+          value={JSON.stringify(subject.components ?? [])}
+          onChange={(e) => {
+            const components = JSON.parse(e.target.value) as Component[];
+            setSubject({
+              ...subject,
+              components,
+              fullMarks: components.length
+                ? components.reduce((t, c) => t + c.max, 0)
+                : subject.fullMarks,
+            });
+          }}
+        >
+          {PART_PATTERNS.map((pt) => (
+            <option key={pt.label} value={JSON.stringify(pt.components)}>{pt.label}</option>
+          ))}
+          {!PART_PATTERNS.some(
+            (pt) => JSON.stringify(pt.components) === JSON.stringify(subject.components ?? []),
+          ) && (
+            <option value={JSON.stringify(subject.components ?? [])}>
+              {(subject.components ?? []).map((c) => `${c.name} ${c.max}`).join(' + ')} (as set)
+            </option>
+          )}
+        </select>
+
+        {(subject.components ?? []).length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            {(subject.components ?? []).map((c, i) => (
+              <div key={c.name} style={{
+                display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6,
+              }}>
+                <strong style={{ flex: '0 1 120px' }}>{c.name}</strong>
+                <label htmlFor={`cmax-${i}`} style={{ margin: 0 }}>out of</label>
+                <input
+                  id={`cmax-${i}`} type="number" style={{ flex: '0 1 90px' }} value={c.max}
+                  onChange={(e) => {
+                    const components = (subject.components ?? []).map(
+                      (x, j) => (j === i ? { ...x, max: Number(e.target.value) } : x),
+                    );
+                    setSubject({
+                      ...subject,
+                      components,
+                      fullMarks: components.reduce((t, x) => t + x.max, 0),
+                    });
+                  }} />
+                <label htmlFor={`cpass-${i}`} style={{ margin: 0 }}>pass at</label>
+                <input
+                  id={`cpass-${i}`} type="number" style={{ flex: '0 1 90px' }} value={c.pass}
+                  onChange={(e) => setSubject({
+                    ...subject,
+                    components: (subject.components ?? []).map(
+                      (x, j) => (j === i ? { ...x, pass: Number(e.target.value) } : x),
+                    ),
+                  })} />
+              </div>
+            ))}
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '4px 0 0' }}>
+              Full marks follow the parts: {subject.fullMarks} in total. A part below its own
+              pass mark fails the whole subject, however high the total comes to.
+            </p>
+          </div>
+        )}
+
+        <label htmlFor="cg" style={{ marginTop: 12 }}>Graded together with</label>
+        <input
+          id="cg" placeholder="BAN" value={subject.combineGroup ?? ''}
+          onChange={(e) => setSubject({ ...subject, combineGroup: e.target.value })} />
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          Papers given the same tag become ONE subject on the marksheet — put BAN on both
+          Bangla papers and they are graded as a single subject out of 200, the way the
+          board counts them. Leave it empty for a paper that stands on its own.
+        </p>
 
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={subject.isOptional}

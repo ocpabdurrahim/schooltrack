@@ -19,6 +19,7 @@ import IncomeExpense from './pages/IncomeExpense';
 import Login from './pages/Login';
 import LowAttendance from './pages/LowAttendance';
 import MarkEntry from './pages/MarkEntry';
+import QuickMarks from './pages/QuickMarks';
 import PaySalary from './pages/PaySalary';
 import Payslip from './pages/Payslip';
 import Receipt from './pages/Receipt';
@@ -119,6 +120,7 @@ export default function App() {
         <Route path="/payroll/register" element={adminOnly(<SalaryRegister />)} />
         <Route path="/payroll/payslip/:paymentId" element={adminOnly(<Payslip />)} />
         <Route path="/marks" element={staffOnly(<MarkEntry />)} />
+        <Route path="/marks/quick" element={staffOnly(<QuickMarks />)} />
         <Route path="/results" element={staffOnly(<Results />)} />
         {/* a guardian may open their own child's published report */}
         <Route path="/report/:examId/:studentId" element={<ReportCard />} />

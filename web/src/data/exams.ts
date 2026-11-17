@@ -20,7 +20,13 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { SCHOOL_ID, db } from '../firebase';
-import { type SubjectMark, type Tabulation, tabulate } from './grading';
+import {
+  type Component,
+  type Parts,
+  type SubjectMark,
+  type Tabulation,
+  tabulate,
+} from './grading';
 import type { StudentDetail } from './people';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -50,6 +56,17 @@ export type Subject = {
   fullMarks: number;
   isOptional: boolean;     // the 4th subject
   sortOrder: number;
+  /**
+   * How the paper is marked. Empty means one mark out of fullMarks, which is
+   * what every subject looked like before components existed and what a
+   * school that does not split its papers still wants.
+   */
+  components?: Component[];
+  /**
+   * Papers sharing a group are graded as ONE subject: Bangla first and second
+   * paper make a single grade out of 200. Null for a paper that stands alone.
+   */
+  combineGroup?: string | null;
 };
 
 export type ResultRow = {
@@ -57,7 +74,15 @@ export type ResultRow = {
   studentId: string;
   subjectId: string;
   subjectName: string;
+  /**
+   * The subject total. When the paper is marked in parts this is their sum,
+   * worked out by the caller with subjectTotal() so that one rule decides it
+   * everywhere, and stored as well as the parts so that every screen which
+   * already reads `marks` keeps working untouched.
+   */
   marks: number | null;
+  /** What was entered per component. Absent entirely on a paper marked whole. */
+  parts?: Parts | null;
   absent: boolean;
   classId: string;
   rollNo: number;
@@ -138,6 +163,8 @@ export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: 
       fullMarks: Number(s.fullMarks) || 100,
       isOptional: s.isOptional,
       sortOrder: s.sortOrder,
+      components: s.components ?? [],
+      combineGroup: s.combineGroup ?? null,
     }),
     { merge: true },
   );
@@ -152,6 +179,26 @@ export const subjectsForClass = (subjects: Subject[], className: string) =>
 //
 // The document id is examId_studentId_subjectId, so saving the same sheet
 // twice corrects it rather than adding a second set of marks.
+
+/**
+ * The subject, plus whatever was entered for it, as the grading engine wants
+ * it. Every screen goes through here, so a subject's components and its
+ * combine group reach the tabulation the same way on the sheet, the report
+ * card and the student's own page.
+ */
+export function subjectMarkFor(s: Subject, got?: ResultRow | null): SubjectMark {
+  return {
+    subjectId: s.subjectId,
+    subjectName: s.subjectName,
+    fullMarks: s.fullMarks,
+    marks: got ? got.marks : null,
+    absent: got?.absent ?? false,
+    isOptional: s.isOptional,
+    components: s.components?.length ? s.components : undefined,
+    parts: got?.parts ?? undefined,
+    combineGroup: s.combineGroup ?? null,
+  };
+}
 
 export const resultId = (examId: string, studentId: string, subjectId: string) =>
   `${examId}_${studentId}_${subjectId}`;
@@ -188,6 +235,7 @@ export async function saveMarks(rows: ResultRow[]) {
       {
         ...r,
         marks: r.marks === null || Number.isNaN(r.marks) ? null : Number(r.marks),
+        parts: r.parts ?? null,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -227,17 +275,8 @@ export function sheetFor(
 
   const rows = students.map((student) => {
     const mine = byStudent.get(student.studentId) ?? [];
-    const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className).map((s) => {
-      const got = mine.find((m) => m.subjectId === s.subjectId);
-      return {
-        subjectId: s.subjectId,
-        subjectName: s.subjectName,
-        fullMarks: s.fullMarks,
-        marks: got ? got.marks : null,
-        absent: got?.absent ?? false,
-        isOptional: s.isOptional,
-      };
-    });
+    const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className)
+      .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
     return { student, tabulation: tabulate(subjectMarks), position: null as number | null };
   });
 
@@ -269,17 +308,8 @@ export async function resultsForStudent(
     .map((exam) => {
       const mine = marks.filter((m) => m.examId === exam.examId);
       if (!mine.length) return null;
-      const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className).map((s) => {
-        const got = mine.find((m) => m.subjectId === s.subjectId);
-        return {
-          subjectId: s.subjectId,
-          subjectName: s.subjectName,
-          fullMarks: s.fullMarks,
-          marks: got ? got.marks : null,
-          absent: got?.absent ?? false,
-          isOptional: s.isOptional,
-        };
-      });
+      const subjectMarks: SubjectMark[] = subjectsForClass(subjects, student.className)
+        .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
       return { exam, tabulation: tabulate(subjectMarks) };
     })
     .filter(Boolean) as { exam: Exam; tabulation: Tabulation }[];

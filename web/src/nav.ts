@@ -50,7 +50,9 @@ const ALL: NavGroup[] = [
   {
     label: 'Exams',
     items: [
-      { label: 'Enter marks', to: '/marks', needs: 'staff' },
+      { label: 'Enter marks', to: '/marks', needs: 'staff', hint: 'one subject, whole section' },
+      { label: 'Quick entry', to: '/marks/quick', needs: 'staff',
+        hint: 'one student, every subject' },
       { label: 'Results', to: '/results', needs: 'staff', hint: 'result sheet and tabulation' },
       { label: 'Seat plan', to: '/exams/seat-plan', needs: 'staff' },
       { label: 'Admit cards', to: '/exams/admit-cards', needs: 'records' },

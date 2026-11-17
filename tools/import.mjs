@@ -143,7 +143,44 @@ const MAPPINGS = {
   subjects: {
     path: () => ['subjects'],
     id: (r) => str(r.subjectId),
-    doc: (r) => clean({ subjectName: str(r.subjectName), subjectCode: str(r.subjectCode) }),
+    doc: (r) => clean({
+      subjectName: str(r.subjectName),
+      subjectCode: str(r.subjectCode),
+      fullMarks: num(r.fullMarks),
+      isOptional: r.isOptional === undefined ? undefined : str(r.isOptional) === 'Y',
+      // Bangla first and second paper carry the same tag and are graded as one
+      // subject out of 200, the way the board counts them.
+      combineGroup: str(r.combineGroup),
+    }),
+  },
+
+  /**
+   * How each paper is marked — CQ, MCQ, PRACTICAL — with each part's own pass
+   * mark. Oracle keeps one ROW per component; a Firestore subject keeps them
+   * as one array on the subject itself, so `fold` gathers the rows of a
+   * subject into the single document they belong on.
+   *
+   * Parts are ordered biggest first, which is the order a teacher marks and
+   * types them in, and fullMarks is recomputed from them so the two can never
+   * drift apart.
+   */
+  components: {
+    path: () => ['subjects'],
+    id: (r) => str(r.subjectId),
+    fold: (rows) => {
+      const components = rows
+        .map((r) => ({
+          name: str(r.name).toUpperCase(),
+          max: num(r.max) ?? 0,
+          pass: num(r.pass) ?? 0,
+        }))
+        .filter((c) => c.name)
+        .sort((a, b) => b.max - a.max);
+      return {
+        components,
+        fullMarks: components.reduce((t, c) => t + c.max, 0),
+      };
+    },
   },
 
   exams: {
@@ -203,7 +240,7 @@ const MAPPINGS = {
 
 // Reference data before anything that points at it.
 const ORDER = [
-  'settings', 'classes', 'students', 'staff', 'subjects',
+  'settings', 'classes', 'students', 'staff', 'subjects', 'components',
   'exams', 'feeHeads', 'feeStructure', 'expenseHeads', 'holidays',
 ];
 
@@ -259,10 +296,21 @@ async function main() {
     const docs = [];
     const bad = [];
 
-    for (const r of rows) {
-      const id = map.id(r);
-      if (!id) { bad.push(r); continue; }
-      docs.push({ id, body: map.doc(r) });
+    if (map.fold) {
+      // Several rows make ONE document: the components of a subject.
+      const byId = new Map();
+      for (const r of rows) {
+        const id = map.id(r);
+        if (!id) { bad.push(r); continue; }
+        byId.set(id, [...(byId.get(id) ?? []), r]);
+      }
+      for (const [id, group] of byId) docs.push({ id, body: map.fold(group) });
+    } else {
+      for (const r of rows) {
+        const id = map.id(r);
+        if (!id) { bad.push(r); continue; }
+        docs.push({ id, body: map.doc(r) });
+      }
     }
 
     if (COMMIT) {

@@ -22,7 +22,8 @@ describe('who sees which menus', () => {
     expect(labels(staffAs('TEACHER'))).toEqual(['Students', 'Attendance', 'Exams']);
     expect(items(staffAs('TEACHER'), 'Students')).toEqual(['All students']);
     expect(items(staffAs('TEACHER'), 'Attendance')).not.toContain('Holidays');
-    expect(items(staffAs('TEACHER'), 'Exams')).toEqual(['Enter marks', 'Results', 'Seat plan']);
+    expect(items(staffAs('TEACHER'), 'Exams'))
+      .toEqual(['Enter marks', 'Quick entry', 'Results', 'Seat plan']);
   });
 
   it('gives the accounts user the money screens but not the records', () => {

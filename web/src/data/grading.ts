@@ -35,6 +35,24 @@ export function gradeFor(marks: number | null, fullMarks = 100, absent = false):
   return { letter: band.letter, point: band.point };
 }
 
+// ---------------------------------------------------------------------------
+// components
+//
+// A paper is marked in parts — CQ, MCQ, PRACTICAL — and each part carries its
+// OWN pass mark, not just a share of the subject's. 60 in CQ and 8 in MCQ is
+// 68 out of 100 and still a fail, because the MCQ pass is 10. That rule is the
+// whole reason components exist here rather than being added up in the UI and
+// forgotten.
+
+export type Component = {
+  name: string;   // CQ | MCQ | PRACTICAL | WRITTEN
+  max: number;
+  pass: number;
+};
+
+/** What was entered, keyed by component name. null = not entered yet. */
+export type Parts = Record<string, number | null>;
+
 export type SubjectMark = {
   subjectId: string;
   subjectName: string;
@@ -42,20 +60,165 @@ export type SubjectMark = {
   marks: number | null;      // null = not entered yet
   absent?: boolean;
   isOptional?: boolean;      // the "4th subject"
+  components?: Component[];  // how this paper is marked, if in parts
+  parts?: Parts;             // what was entered for those components
+  combineGroup?: string | null; // papers sharing one group are graded as one
 };
+
+/** True once at least one component of this subject has a mark on it. */
+function partlyEntered(m: SubjectMark): boolean {
+  if (!m.components?.length || !m.parts) return false;
+  return m.components.some((c) => m.parts?.[c.name] !== null && m.parts?.[c.name] !== undefined);
+}
+
+/**
+ * The subject's total.
+ *
+ * From the parts when the paper is marked in parts, and from `marks` when it
+ * is not — which is also what keeps results entered before components existed
+ * reading correctly. One part still blank makes the total null: a missing
+ * mark is not a zero, so the sheet says "not entered" rather than failing a
+ * student whose practical has not been marked yet.
+ */
+export function subjectTotal(m: SubjectMark): number | null {
+  if (!partlyEntered(m)) return m.marks;
+  let total = 0;
+  for (const c of m.components ?? []) {
+    const v = m.parts?.[c.name];
+    if (v === null || v === undefined || !Number.isFinite(v)) return null;
+    total += v;
+  }
+  return total;
+}
+
+/** The components that fall below their own pass mark, by name. */
+export function failedComponents(m: SubjectMark): string[] {
+  if (!partlyEntered(m)) return [];
+  const out: string[] = [];
+  for (const c of m.components ?? []) {
+    const v = m.parts?.[c.name];
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    if (v < c.pass) out.push(c.name);
+  }
+  return out;
+}
+
+export type SubjectGrade = Grade & { total: number | null; failedParts: string[] };
+
+/**
+ * One subject's grade, with the component rule applied.
+ *
+ * Order matters: absent first, then "nothing entered yet", then the component
+ * pass marks, and only then the percentage. A paper that fails a component is
+ * F however high the total, which is the rule the APEX tabulation uses and the
+ * one a printed marksheet has to agree with.
+ */
+export function gradeForSubject(m: SubjectMark): SubjectGrade {
+  if (m.absent) return { letter: 'F', point: 0, total: null, failedParts: [] };
+  const total = subjectTotal(m);
+  if (total === null) return { letter: '-', point: 0, total: null, failedParts: [] };
+  const failedParts = failedComponents(m);
+  if (failedParts.length) return { letter: 'F', point: 0, total, failedParts };
+  return { ...gradeFor(total, m.fullMarks), total, failedParts: [] };
+}
+
+// ---------------------------------------------------------------------------
+// combined papers
+//
+// Bangla first and second paper are ONE grade out of 200, and so are the two
+// English papers. Grading them separately gives a different GPA for the same
+// marks — two 3.5s where the school's own sheet shows a single 4.0 — so the
+// papers are merged into a unit before anything is graded.
+
+/** "Bengali First Paper" + "Bengali Second Paper" -> "Bengali". */
+export function unitName(names: string[], fallback: string): string {
+  if (names.length === 0) return fallback;
+  let prefix = names[0];
+  for (const n of names.slice(1)) {
+    let i = 0;
+    while (i < prefix.length && i < n.length && prefix[i] === n[i]) i += 1;
+    prefix = prefix.slice(0, i);
+  }
+  const trimmed = prefix.replace(/[^A-Za-z]+$/, '').trim();
+  return trimmed.length >= 3 ? trimmed : fallback;
+}
+
+/**
+ * Papers sharing a combine group become one unit, in the place of the first
+ * of them — so Bangla stays where Bangla was on the sheet rather than being
+ * pushed to the bottom.
+ *
+ * Each component keeps its paper's name in front of it ("Bengali First Paper
+ * MCQ"), because "MCQ" alone would collide between the two papers and a
+ * student told they failed "MCQ" would not know which one.
+ */
+export function combineUnits(marks: SubjectMark[]): SubjectMark[] {
+  const groups = new Map<string, SubjectMark[]>();
+  for (const m of marks) {
+    const g = (m.combineGroup ?? '').trim();
+    if (g === '') continue;
+    groups.set(g, [...(groups.get(g) ?? []), m]);
+  }
+
+  const done = new Set<string>();
+  const out: SubjectMark[] = [];
+  for (const m of marks) {
+    const g = (m.combineGroup ?? '').trim();
+    if (g === '' || (groups.get(g) ?? []).length < 2) {
+      out.push(m);
+      continue;
+    }
+    if (done.has(g)) continue;
+    done.add(g);
+    out.push(mergeUnit(g, groups.get(g) ?? []));
+  }
+  return out;
+}
+
+function mergeUnit(group: string, papers: SubjectMark[]): SubjectMark {
+  const components: Component[] = [];
+  const parts: Parts = {};
+  for (const p of papers) {
+    for (const c of p.components ?? []) {
+      const key = `${p.subjectName} ${c.name}`;
+      components.push({ ...c, name: key });
+      parts[key] = p.parts?.[c.name] ?? null;
+    }
+  }
+
+  const totals = papers.map((p) => subjectTotal(p));
+  const marks = totals.some((t) => t === null)
+    ? null
+    : totals.reduce((a: number, b) => a + (b ?? 0), 0);
+
+  return {
+    subjectId: `UNIT_${group}`,
+    subjectName: unitName(papers.map((p) => p.subjectName), group),
+    fullMarks: papers.reduce((t, p) => t + p.fullMarks, 0),
+    marks,
+    absent: papers.some((p) => p.absent),
+    isOptional: papers.some((p) => p.isOptional),
+    combineGroup: group,
+    components: components.length ? components : undefined,
+    parts: components.length ? parts : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// the tabulation
 
 export type Tabulation = {
   gpa: number | null;        // null while any compulsory mark is missing
   letter: string;
   failed: string[];          // names of the compulsory subjects failed
   incomplete: boolean;
-  subjects: (SubjectMark & Grade)[];
+  subjects: (SubjectMark & SubjectGrade)[];
 };
 
 /**
  * One student's result for one exam.
  *
- * Three rules carried over from the APEX tabulation, and each one matters:
+ * Four rules carried over from the APEX tabulation, and each one matters:
  *
  *   1. ONE F IN A COMPULSORY SUBJECT FAILS THE EXAM. The GPA is 0.00 and the
  *      grade F, however good the rest are.
@@ -65,13 +228,15 @@ export type Tabulation = {
  *   3. A MISSING MARK IS NOT A ZERO. Until every compulsory subject has a mark
  *      the GPA is null and the sheet says so, rather than publishing a GPA
  *      that will change when the last subject is entered.
+ *   4. A FAILED COMPONENT FAILS THE SUBJECT, whatever the total comes to.
  */
 export function tabulate(marks: SubjectMark[]): Tabulation {
-  const subjects = marks.map((m) => ({ ...m, ...gradeFor(m.marks, m.fullMarks, m.absent) }));
+  const units = combineUnits(marks);
+  const subjects = units.map((m) => ({ ...m, ...gradeForSubject(m) }));
   const compulsory = subjects.filter((s) => !s.isOptional);
   const optional = subjects.filter((s) => s.isOptional);
 
-  const incomplete = compulsory.some((s) => s.marks === null && !s.absent);
+  const incomplete = compulsory.some((s) => s.total === null && !s.absent);
   const failed = compulsory.filter((s) => s.letter === 'F').map((s) => s.subjectName);
 
   if (incomplete) return { gpa: null, letter: '-', failed, incomplete, subjects };

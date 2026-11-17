@@ -32,7 +32,7 @@ class MenuTest {
         assertEquals(listOf("All students"), items(staff("TEACHER"), "Students"))
         assertTrue("Holidays" !in items(staff("TEACHER"), "Attendance"))
         assertEquals(
-            listOf("Enter marks", "Results", "Seat plan"),
+            listOf("Enter marks", "Quick entry", "Results", "Seat plan"),
             items(staff("TEACHER"), "Exams"),
         )
     }

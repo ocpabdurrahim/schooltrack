@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
+import io.github.ocpabdurrahim.schooltrack.data.Component
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
 import io.github.ocpabdurrahim.schooltrack.data.MarkFill
@@ -45,14 +46,19 @@ import io.github.ocpabdurrahim.schooltrack.data.RollEntry
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
+import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.applyMarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
+import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.meritOrder
 import io.github.ocpabdurrahim.schooltrack.data.parseMarkPaste
+import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
+import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
 import io.github.ocpabdurrahim.schooltrack.data.subjectStats
 import io.github.ocpabdurrahim.schooltrack.data.totalMarks
+import io.github.ocpabdurrahim.schooltrack.data.typedFrom
 import io.github.ocpabdurrahim.schooltrack.data.gradeFor
 import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
@@ -61,6 +67,29 @@ import kotlinx.coroutines.launch
 
 // ===========================================================================
 // exams and subjects
+
+/**
+ * The patterns a Bangladeshi secondary school actually uses, so setting up
+ * twenty subjects is one tap each rather than typing nine numbers.
+ *
+ * The pass mark on each part is its own, not a share of the subject's: a paper
+ * can total 68 out of 100 and still be F because the MCQ pass is 10. English
+ * carries pass 0 because those papers have no part-level pass — the subject's
+ * own 33% is the only bar.
+ *
+ * The same list is in web/src/pages/Exams.tsx.
+ */
+private val PART_PATTERNS: List<Pair<String, List<Component>>> = listOf(
+    "One mark" to emptyList(),
+    "CQ 70 + MCQ 30" to listOf(Component("CQ", 70.0, 23.0), Component("MCQ", 30.0, 10.0)),
+    "CQ 50 + MCQ 25 + Practical 25" to listOf(
+        Component("CQ", 50.0, 17.0),
+        Component("MCQ", 25.0, 8.0),
+        Component("PRACTICAL", 25.0, 8.0),
+    ),
+    "CQ 25 + MCQ 25" to listOf(Component("CQ", 25.0, 8.0), Component("MCQ", 25.0, 8.0)),
+    "Written 100" to listOf(Component("WRITTEN", 100.0, 0.0)),
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -199,6 +228,48 @@ fun ExamsScreen(
                     subject = subject.copy(fullMarks = it.toDoubleOrNull() ?: 100.0)
                 }
 
+                Text("Marked in parts", style = MaterialTheme.typography.labelMedium,
+                     modifier = Modifier.padding(top = 12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PART_PATTERNS.forEach { pattern ->
+                        FilterChip(
+                            selected = subject.components == pattern.second,
+                            onClick = {
+                                subject = subject.copy(
+                                    components = pattern.second,
+                                    fullMarks = if (pattern.second.isEmpty()) subject.fullMarks
+                                    else pattern.second.sumOf { it.max },
+                                )
+                            },
+                            label = { Text(pattern.first) },
+                        )
+                    }
+                }
+                if (subject.components.isNotEmpty()) {
+                    Text(
+                        "Out of " + subject.fullMarks.toInt() + " in total. A part below its " +
+                            "own pass mark fails the whole subject, however high the total: " +
+                            subject.components.joinToString(", ") {
+                                it.name + " passes at " + it.pass.toInt()
+                            } + ".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Field(
+                    "Graded together with (BAN, ENG)",
+                    subject.combineGroup.orEmpty(),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) { subject = subject.copy(combineGroup = it.trim().uppercase().ifBlank { null }) }
+                Text(
+                    "Papers given the same tag become ONE subject on the marksheet — put BAN " +
+                        "on both Bangla papers and they are graded as a single subject out of " +
+                        "200, the way the board counts them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
                 Text("Classes that sit it", style = MaterialTheme.typography.labelMedium,
                      modifier = Modifier.padding(top = 12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -277,7 +348,7 @@ fun MarkEntryScreen(
     var classId by remember { mutableStateOf("") }
     var subjectId by remember { mutableStateOf("") }
     var students by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
-    var entries by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
+    var entries by remember { mutableStateOf<Map<String, Typed>>(emptyMap()) }
     var busy by remember { mutableStateOf(true) }
     var note by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
@@ -321,9 +392,7 @@ fun MarkEntryScreen(
             students = roll
             entries = roll.associate { s ->
                 val got = marks.firstOrNull { it.studentId == s.studentId }
-                s.studentId to ((got?.marks?.let { m ->
-                    if (m == m.toLong().toDouble()) m.toLong().toString() else m.toString()
-                } ?: "") to (got?.absent ?: false))
+                s.studentId to typedFrom(got?.marks, got?.parts, got?.absent ?: false)
             }
             problem = ""
             pasted = null
@@ -440,8 +509,9 @@ fun MarkEntryScreen(
                             // does not, and the ordinary Save button below is
                             // still what writes it.
                             if (fill.filled > 0) {
-                                entries = entries + fill.entries.mapValues {
-                                    it.value.marks to it.value.absent
+                                entries = entries + fill.entries.mapValues { (id, v) ->
+                                    (entries[id] ?: Typed())
+                                        .copy(marks = v.marks, absent = v.absent)
                                 }
                                 note = ""
                             }
@@ -491,9 +561,18 @@ fun MarkEntryScreen(
                 )
 
                 students.forEach { s ->
-                    val (marksText, absent) = entries[s.studentId] ?: ("" to false)
-                    val value = marksText.toDoubleOrNull()
-                    val grade = subject?.let { gradeFor(value, it.fullMarks, absent) }
+                    val typed = entries[s.studentId] ?: Typed()
+                    val absent = typed.absent
+                    val totals = subject?.let { partsAndTotal(it, typed) }
+                    val grade = subject?.let {
+                        gradeForSubject(
+                            subjectMarkFor(it, null).copy(
+                                marks = totals?.second,
+                                parts = totals?.first.orEmpty(),
+                                absent = absent,
+                            ),
+                        )
+                    }
                     Row(
                         Modifier.fillMaxWidth().padding(top = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -512,15 +591,50 @@ fun MarkEntryScreen(
                         )
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Field(
-                            "Marks", marksText, numeric = true,
-                            modifier = Modifier.weight(1f),
-                        ) { entries = entries + (s.studentId to (it to absent)) }
+                        val comps = subject?.components.orEmpty()
+                        if (comps.isEmpty()) {
+                            Field(
+                                "Marks", typed.marks, numeric = true,
+                                modifier = Modifier.weight(1f),
+                            ) { entries = entries + (s.studentId to typed.copy(marks = it)) }
+                        } else {
+                            comps.forEach { c ->
+                                Field(
+                                    c.name + " /" + c.max.toInt(),
+                                    typed.parts[c.name].orEmpty(),
+                                    numeric = true,
+                                    modifier = Modifier.weight(1f).padding(end = 6.dp),
+                                ) {
+                                    entries = entries + (
+                                        s.studentId to typed.copy(parts = typed.parts + (c.name to it))
+                                        )
+                                }
+                            }
+                        }
                         Checkbox(
                             checked = absent,
-                            onCheckedChange = { entries = entries + (s.studentId to (marksText to it)) },
+                            onCheckedChange = {
+                                entries = entries + (s.studentId to typed.copy(absent = it))
+                            },
                         )
                         Text("absent", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (subject?.components.orEmpty().isNotEmpty()) {
+                        Text(
+                            totals?.second?.let {
+                                "Total " + it.toInt() + " / " + (subject?.fullMarks ?: 0.0).toInt()
+                            } ?: "Total —",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (grade != null && grade.failedParts.isNotEmpty()) {
+                        Text(
+                            grade.failedParts.joinToString(" and ") +
+                                " below the pass mark — the subject is F.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                     HorizontalDivider()
                 }
@@ -535,14 +649,16 @@ fun MarkEntryScreen(
                             try {
                                 repo.saveMarks(
                                     students.map { st ->
-                                        val (m, absent) = entries[st.studentId] ?: ("" to false)
+                                        val typed = entries[st.studentId] ?: Typed()
+                                        val (parts, total) = partsAndTotal(s, typed)
                                         ResultRow(
                                             examId = examId,
                                             studentId = st.studentId,
                                             subjectId = s.subjectId,
                                             subjectName = s.subjectName,
-                                            marks = m.trim().toDoubleOrNull(),
-                                            absent = absent,
+                                            marks = total,
+                                            parts = parts,
+                                            absent = typed.absent,
                                             classId = classId,
                                             rollNo = st.rollNo,
                                             fullMarks = s.fullMarks,

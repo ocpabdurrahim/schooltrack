@@ -42,6 +42,17 @@ fun gradeFor(marks: Double?, fullMarks: Double = 100.0, absent: Boolean = false)
     return Grade(band.letter, band.point)
 }
 
+// ---------------------------------------------------------------------------
+// components
+//
+// A paper is marked in parts — CQ, MCQ, PRACTICAL — and each part carries its
+// OWN pass mark, not just a share of the subject's. 60 in CQ and 8 in MCQ is
+// 68 out of 100 and still a fail, because the MCQ pass is 10. That rule is the
+// whole reason components exist here rather than being added up in the UI and
+// forgotten.
+
+data class Component(val name: String, val max: Double, val pass: Double)
+
 data class SubjectMark(
     val subjectId: String,
     val subjectName: String,
@@ -49,9 +60,153 @@ data class SubjectMark(
     val marks: Double? = null,       // null = not entered yet
     val absent: Boolean = false,
     val isOptional: Boolean = false, // the "4th subject"
+    val components: List<Component> = emptyList(),
+    val parts: Map<String, Double?> = emptyMap(),
+    val combineGroup: String? = null,
 )
 
-data class GradedSubject(val mark: SubjectMark, val grade: Grade)
+/** True once at least one component of this subject has a mark on it. */
+private fun SubjectMark.partlyEntered(): Boolean =
+    components.isNotEmpty() && components.any { parts[it.name] != null }
+
+/**
+ * The subject's total.
+ *
+ * From the parts when the paper is marked in parts, and from [SubjectMark.marks]
+ * when it is not — which is also what keeps results entered before components
+ * existed reading correctly. One part still blank makes the total null: a
+ * missing mark is not a zero, so the sheet says "not entered" rather than
+ * failing a student whose practical has not been marked yet.
+ */
+fun subjectTotal(m: SubjectMark): Double? {
+    if (!m.partlyEntered()) return m.marks
+    var total = 0.0
+    for (c in m.components) {
+        val v = m.parts[c.name] ?: return null
+        if (v.isNaN()) return null
+        total += v
+    }
+    return total
+}
+
+/** The components that fall below their own pass mark, by name. */
+fun failedComponents(m: SubjectMark): List<String> {
+    if (!m.partlyEntered()) return emptyList()
+    return m.components
+        .filter { c ->
+            val v = m.parts[c.name]
+            v != null && !v.isNaN() && v < c.pass
+        }
+        .map { it.name }
+}
+
+data class SubjectGrade(
+    val letter: String,
+    val point: Double,
+    val total: Double? = null,
+    val failedParts: List<String> = emptyList(),
+)
+
+/**
+ * One subject's grade, with the component rule applied.
+ *
+ * Order matters: absent first, then "nothing entered yet", then the component
+ * pass marks, and only then the percentage. A paper that fails a component is
+ * F however high the total, which is the rule the APEX tabulation uses and the
+ * one a printed marksheet has to agree with.
+ */
+fun gradeForSubject(m: SubjectMark): SubjectGrade {
+    if (m.absent) return SubjectGrade("F", 0.0)
+    val total = subjectTotal(m) ?: return SubjectGrade("-", 0.0)
+    val failedParts = failedComponents(m)
+    if (failedParts.isNotEmpty()) return SubjectGrade("F", 0.0, total, failedParts)
+    val g = gradeFor(total, m.fullMarks)
+    return SubjectGrade(g.letter, g.point, total)
+}
+
+// ---------------------------------------------------------------------------
+// combined papers
+//
+// Bangla first and second paper are ONE grade out of 200, and so are the two
+// English papers. Grading them separately gives a different GPA for the same
+// marks — two 3.5s where the school's own sheet shows a single 4.0 — so the
+// papers are merged into a unit before anything is graded.
+
+/** "Bengali First Paper" + "Bengali Second Paper" -> "Bengali". */
+fun unitName(names: List<String>, fallback: String): String {
+    if (names.isEmpty()) return fallback
+    var prefix = names[0]
+    for (n in names.drop(1)) {
+        var i = 0
+        while (i < prefix.length && i < n.length && prefix[i] == n[i]) i++
+        prefix = prefix.substring(0, i)
+    }
+    val trimmed = prefix.trimEnd { it !in 'A'..'Z' && it !in 'a'..'z' }.trim()
+    return if (trimmed.length >= 3) trimmed else fallback
+}
+
+/**
+ * Papers sharing a combine group become one unit, in the place of the first
+ * of them — so Bangla stays where Bangla was on the sheet rather than being
+ * pushed to the bottom.
+ *
+ * Each component keeps its paper's name in front of it ("Bengali First Paper
+ * MCQ"), because "MCQ" alone would collide between the two papers and a
+ * student told they failed "MCQ" would not know which one.
+ */
+fun combineUnits(marks: List<SubjectMark>): List<SubjectMark> {
+    val groups = LinkedHashMap<String, MutableList<SubjectMark>>()
+    for (m in marks) {
+        val g = m.combineGroup?.trim().orEmpty()
+        if (g.isEmpty()) continue
+        groups.getOrPut(g) { mutableListOf() }.add(m)
+    }
+
+    val done = mutableSetOf<String>()
+    val out = mutableListOf<SubjectMark>()
+    for (m in marks) {
+        val g = m.combineGroup?.trim().orEmpty()
+        if (g.isEmpty() || (groups[g]?.size ?: 0) < 2) {
+            out.add(m)
+            continue
+        }
+        if (!done.add(g)) continue
+        out.add(mergeUnit(g, groups[g] ?: emptyList()))
+    }
+    return out
+}
+
+private fun mergeUnit(group: String, papers: List<SubjectMark>): SubjectMark {
+    val components = mutableListOf<Component>()
+    val parts = LinkedHashMap<String, Double?>()
+    for (p in papers) {
+        for (c in p.components) {
+            val key = p.subjectName + " " + c.name
+            components.add(c.copy(name = key))
+            parts[key] = p.parts[c.name]
+        }
+    }
+
+    val totals = papers.map { subjectTotal(it) }
+    val merged = if (totals.any { it == null }) null else totals.sumOf { it ?: 0.0 }
+
+    return SubjectMark(
+        subjectId = "UNIT_$group",
+        subjectName = unitName(papers.map { it.subjectName }, group),
+        fullMarks = papers.sumOf { it.fullMarks },
+        marks = merged,
+        absent = papers.any { it.absent },
+        isOptional = papers.any { it.isOptional },
+        components = components,
+        parts = parts,
+        combineGroup = group,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// the tabulation
+
+data class GradedSubject(val mark: SubjectMark, val grade: SubjectGrade)
 
 data class Tabulation(
     val gpa: Double?,            // null while any compulsory mark is missing
@@ -70,13 +225,14 @@ data class Tabulation(
  *      added, it is never in the divisor, and failing it fails nothing.
  *   3. A MISSING MARK IS NOT A ZERO — the GPA stays null and the sheet says
  *      so, rather than publishing a figure that will change later.
+ *   4. A FAILED COMPONENT FAILS THE SUBJECT, whatever the total comes to.
  */
 fun tabulate(marks: List<SubjectMark>): Tabulation {
-    val subjects = marks.map { GradedSubject(it, gradeFor(it.marks, it.fullMarks, it.absent)) }
+    val subjects = combineUnits(marks).map { GradedSubject(it, gradeForSubject(it)) }
     val compulsory = subjects.filter { !it.mark.isOptional }
     val optional = subjects.filter { it.mark.isOptional }
 
-    val incomplete = compulsory.any { it.mark.marks == null && !it.mark.absent }
+    val incomplete = compulsory.any { it.grade.total == null && !it.mark.absent }
     val failed = compulsory.filter { it.grade.letter == "F" }.map { it.mark.subjectName }
 
     if (incomplete) return Tabulation(null, "-", failed, true, subjects)

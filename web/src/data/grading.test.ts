@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { type SubjectMark, gradeFor, tabulate } from './grading';
+import {
+  type Component,
+  type Parts,
+  type SubjectMark,
+  combineUnits,
+  gradeFor,
+  gradeForSubject,
+  subjectTotal,
+  tabulate,
+  unitName,
+} from './grading';
 
 /**
  * The SAME cases exist in android/app/src/test/.../GradingTest.kt. If a case
@@ -101,5 +111,146 @@ describe('tabulate', () => {
     const t = tabulate([sub('Agriculture', 80, { isOptional: true })]);
     expect(t.gpa).toBeNull();
     expect(t.incomplete).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// components
+
+const MCQ30_CQ70: Component[] = [
+  { name: 'MCQ', max: 30, pass: 10 },
+  { name: 'CQ', max: 70, pass: 23 },
+];
+
+const SCIENCE: Component[] = [
+  { name: 'MCQ', max: 25, pass: 8 },
+  { name: 'CQ', max: 50, pass: 17 },
+  { name: 'PRACTICAL', max: 25, pass: 8 },
+];
+
+const parted = (
+  name: string,
+  components: Component[],
+  parts: Parts,
+  extra: Partial<SubjectMark> = {},
+): SubjectMark => ({
+  subjectId: name,
+  subjectName: name,
+  fullMarks: components.reduce((t, c) => t + c.max, 0),
+  marks: null,
+  components,
+  parts,
+  ...extra,
+});
+
+describe('a paper marked in parts', () => {
+  it('adds the parts up and grades the total', () => {
+    const g = gradeForSubject(parted('Maths', MCQ30_CQ70, { MCQ: 22, CQ: 55 }));
+    expect(g.total).toBe(77);
+    expect(g).toMatchObject({ letter: 'A', point: 4, failedParts: [] });
+  });
+
+  it('FAILS the subject when one part is below its own pass mark', () => {
+    // 68 out of 100 is a C by percentage, but the MCQ pass is 10.
+    const g = gradeForSubject(parted('Maths', MCQ30_CQ70, { MCQ: 8, CQ: 60 }));
+    expect(g.total).toBe(68);
+    expect(g).toMatchObject({ letter: 'F', point: 0, failedParts: ['MCQ'] });
+  });
+
+  it('names every part that failed, not just the first', () => {
+    const g = gradeForSubject(parted('Physics', SCIENCE, { MCQ: 5, CQ: 40, PRACTICAL: 3 }));
+    expect(g.failedParts).toEqual(['MCQ', 'PRACTICAL']);
+    expect(g.letter).toBe('F');
+  });
+
+  it('grades a practical subject on all three parts', () => {
+    const g = gradeForSubject(parted('Physics', SCIENCE, { MCQ: 20, CQ: 40, PRACTICAL: 20 }));
+    expect(g.total).toBe(80);
+    expect(g).toMatchObject({ letter: 'A+', point: 5 });
+  });
+
+  it('treats one blank part as not entered, NOT as a zero', () => {
+    // The practical has not been marked yet. Scoring it 0 would fail a child
+    // who has not sat it.
+    const g = gradeForSubject(parted('Physics', SCIENCE, { MCQ: 20, CQ: 40, PRACTICAL: null }));
+    expect(g.total).toBeNull();
+    expect(g).toMatchObject({ letter: '-', point: 0, failedParts: [] });
+  });
+
+  it('still reads a result entered before components existed', () => {
+    // Components are defined on the subject, but this row has only a total.
+    const g = gradeForSubject({
+      subjectId: 'Maths', subjectName: 'Maths', fullMarks: 100,
+      marks: 68, components: MCQ30_CQ70,
+    });
+    expect(g.total).toBe(68);
+    expect(g).toMatchObject({ letter: 'A-', point: 3.5, failedParts: [] });
+  });
+
+  it('is F when absent, whatever is in the parts', () => {
+    const g = gradeForSubject(parted('Maths', MCQ30_CQ70, { MCQ: 30, CQ: 70 }, { absent: true }));
+    expect(g).toMatchObject({ letter: 'F', point: 0 });
+  });
+});
+
+describe('papers graded as one unit', () => {
+  const ban1 = parted('Bengali First Paper', MCQ30_CQ70, { MCQ: 25, CQ: 45 },
+    { combineGroup: 'BAN' });
+  const ban2 = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 24, CQ: 56 },
+    { combineGroup: 'BAN' });
+
+  it('merges the two papers into one subject out of 200', () => {
+    const [unit] = combineUnits([ban1, ban2]);
+    expect(unit.subjectName).toBe('Bengali');
+    expect(unit.fullMarks).toBe(200);
+    expect(subjectTotal(unit)).toBe(150);
+    expect(gradeForSubject(unit)).toMatchObject({ letter: 'A', point: 4 });
+  });
+
+  it('keeps the unit where the first paper was, not at the end', () => {
+    const maths = parted('Maths', MCQ30_CQ70, { MCQ: 20, CQ: 50 });
+    const names = combineUnits([ban1, maths, ban2]).map((u) => u.subjectName);
+    expect(names).toEqual(['Bengali', 'Maths']);
+  });
+
+  it('keeps each paper name on its components so a failure can be told apart', () => {
+    const low = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 4, CQ: 56 },
+      { combineGroup: 'BAN' });
+    const [unit] = combineUnits([ban1, low]);
+    expect(gradeForSubject(unit).failedParts).toEqual(['Bengali Second Paper MCQ']);
+  });
+
+  it('counts the unit once in the GPA, not twice', () => {
+    // Four papers, three units: Bengali, English, Maths.
+    const eng1 = sub('English First Paper', 70, { combineGroup: 'ENG' });
+    const eng2 = sub('English Second Paper', 80, { combineGroup: 'ENG' });
+    const maths = sub('Maths', 90);
+    const t = tabulate([eng1, eng2, maths]);
+    expect(t.subjects.map((s) => s.subjectName)).toEqual(['English', 'Maths']);
+    // English 150/200 = 75% = 4.0, Maths 90 = 5.0 -> 4.5
+    expect(t.gpa).toBe(4.5);
+  });
+
+  it('leaves a lone paper alone when its partner is not in the list', () => {
+    const only = sub('Bengali First Paper', 70, { combineGroup: 'BAN' });
+    expect(combineUnits([only]).map((u) => u.subjectName)).toEqual(['Bengali First Paper']);
+  });
+
+  it('is incomplete while either paper is unmarked', () => {
+    const blank = sub('English Second Paper', null, { combineGroup: 'ENG' });
+    const eng1 = sub('English First Paper', 70, { combineGroup: 'ENG' });
+    expect(tabulate([eng1, blank]).incomplete).toBe(true);
+  });
+});
+
+describe('unitName', () => {
+  it('takes the common beginning of the paper names', () => {
+    expect(unitName(['Bengali First Paper', 'Bengali Second Paper'], 'BAN')).toBe('Bengali');
+    expect(unitName(['English 1st Paper', 'English 2nd Paper'], 'ENG')).toBe('English');
+  });
+
+  it('falls back to the group when the names share nothing', () => {
+    expect(unitName(['Bangla', 'Sahitya'], 'BAN')).toBe('BAN');
+    expect(unitName([], 'ENG')).toBe('ENG');
   });
 });

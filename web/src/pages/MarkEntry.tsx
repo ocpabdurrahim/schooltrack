@@ -17,10 +17,35 @@ import {
   parseMarkPaste,
 } from '../data/batch';
 import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
-import { gradeFor } from '../data/grading';
+import { gradeForSubject } from '../data/grading';
+import {
+  type Typed,
+  blankTyped,
+  numOrNull,
+  overMax,
+  partsAndTotal,
+  typedFrom,
+} from '../data/markentry';
 import { type StudentDetail, findStudents } from '../data/people';
 
-type Entry = { marks: string; absent: boolean };
+/** One student's boxes for this subject — the shared shape, so the two mark
+ * entry screens and both apps agree on what a typed box means. */
+type Entry = Typed;
+
+/**
+ * Enter moves straight down the column, to the same box for the next student.
+ *
+ * That is the whole point of a quick entry: a teacher with a bundle of scripts
+ * types a number, presses Enter, types the next, and never reaches for the
+ * mouse. Tab still moves across the row, for the two or three parts of one
+ * student's paper.
+ */
+function downOnEnter(ev: React.KeyboardEvent, row: number, col: number) {
+  if (ev.key !== 'Enter') return;
+  ev.preventDefault();
+  const next = document.getElementById(`mk-${row + 1}-${col}`) as HTMLInputElement | null;
+  if (next) { next.focus(); next.select(); }
+}
 
 export default function MarkEntry() {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -79,10 +104,7 @@ export default function MarkEntry() {
         const mine = marks.filter((m) => m.subjectId === subjectId);
         setEntries(Object.fromEntries(roll.map((s) => {
           const got = mine.find((m) => m.studentId === s.studentId);
-          return [s.studentId, {
-            marks: got?.marks === null || got?.marks === undefined ? '' : String(got.marks),
-            absent: got?.absent ?? false,
-          }];
+          return [s.studentId, typedFrom(got?.marks, got?.parts, got?.absent ?? false)];
         })));
         setProblem('');
         setRead(null);
@@ -130,7 +152,13 @@ export default function MarkEntry() {
     // Filling is not saving: the boxes change, the sheet does not, and the
     // ordinary Save button below is still what writes it.
     if (fill.filled > 0) {
-      setEntries((was) => ({ ...was, ...fill.entries }));
+      setEntries((was) => ({
+        ...was,
+        ...Object.fromEntries(
+          Object.entries(fill.entries)
+            .map(([id, v]) => [id, { ...(was[id] ?? blankTyped()), ...v }]),
+        ),
+      }));
       setNote('');
     }
   }
@@ -144,12 +172,13 @@ export default function MarkEntry() {
     setBusy(true); setProblem(''); setNote('');
     try {
       const rows: ResultRow[] = students.map((s) => {
-        const e = entries[s.studentId] ?? { marks: '', absent: false };
-        const value = e.marks.trim() === '' ? null : Number(e.marks);
+        const e = entries[s.studentId] ?? blankTyped();
+        const { parts, marks } = partsAndTotal(subject, e);
         return {
           examId, studentId: s.studentId, subjectId: subject.subjectId,
           subjectName: subject.subjectName,
-          marks: value !== null && Number.isFinite(value) ? value : null,
+          marks,
+          parts,
           absent: e.absent,
           classId, rollNo: s.rollNo,
           fullMarks: subject.fullMarks,
@@ -165,7 +194,7 @@ export default function MarkEntry() {
   }
 
   const over = subject
-    ? students.filter((s) => Number(entries[s.studentId]?.marks) > subject.fullMarks).length
+    ? students.filter((s) => overMax(subject, entries[s.studentId] ?? blankTyped())).length
     : 0;
 
   return (
@@ -222,6 +251,17 @@ export default function MarkEntry() {
         {problem && <div className="err">{problem}</div>}
       </div>
 
+      {subject?.components?.length ? (
+        <div className="card">
+          <h2>Paste a tally</h2>
+          <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+            Not for this paper. {subject.subjectName} is marked in
+            {' '}{subject.components.map((c) => c.name).join(' and ')}, and a pasted tally
+            carries one number per student — there is no way to tell which part it is.
+            Type the parts below, or paste into a subject that is marked as one mark.
+          </p>
+        </div>
+      ) : (
       <div className="card">
         <h2>
           Paste a tally
@@ -304,6 +344,7 @@ export default function MarkEntry() {
           </>
         )}
       </div>
+      )}
 
       <div className="card">
         <h2>
@@ -311,11 +352,40 @@ export default function MarkEntry() {
           {subject ? ` · out of ${subject.fullMarks}` : ''}
         </h2>
 
-        {students.map((s) => {
-          const e = entries[s.studentId] ?? { marks: '', absent: false };
-          const value = e.marks.trim() === '' ? null : Number(e.marks);
-          const grade = subject ? gradeFor(value, subject.fullMarks, e.absent) : null;
-          const tooHigh = subject && value !== null && value > subject.fullMarks;
+        {subject?.components?.length ? (
+          <div style={{
+            display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+            padding: '4px 0', color: 'var(--muted)', fontSize: 13,
+          }}>
+            <span style={{ width: 34 }}>Roll</span>
+            <span style={{ flex: '2 1 180px' }}>Name</span>
+            {subject.components.map((c) => (
+              <span key={c.name} style={{ flex: '0 1 96px' }}>
+                {c.name} /{c.max} · pass {c.pass}
+              </span>
+            ))}
+            <span style={{ flex: '0 1 76px', textAlign: 'right' }}>Total</span>
+          </div>
+        ) : null}
+
+        {students.map((s, row) => {
+          const e = entries[s.studentId] ?? blankTyped();
+          const comps = subject?.components ?? [];
+          const got = subject ? partsAndTotal(subject, e) : { parts: null, marks: null };
+          const grade = subject
+            ? gradeForSubject({
+              subjectId: subject.subjectId,
+              subjectName: subject.subjectName,
+              fullMarks: subject.fullMarks,
+              marks: got.marks,
+              parts: got.parts ?? undefined,
+              components: comps.length ? comps : undefined,
+              absent: e.absent,
+            })
+            : null;
+          const setPart = (name: string, v: string) => setEntries({
+            ...entries, [s.studentId]: { ...e, parts: { ...e.parts, [name]: v } },
+          });
           return (
             <div key={s.studentId} style={{
               display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
@@ -323,13 +393,53 @@ export default function MarkEntry() {
             }}>
               <strong style={{ width: 34 }}>{s.rollNo}</strong>
               <span style={{ flex: '2 1 180px' }}>{s.fullName}</span>
-              <input
-                style={{ flex: '0 1 110px', borderColor: tooHigh ? 'var(--bad)' : undefined }}
-                type="number" inputMode="decimal" aria-label={`marks ${s.fullName}`}
-                value={e.marks} disabled={e.absent}
-                onChange={(ev) => setEntries({
-                  ...entries, [s.studentId]: { ...e, marks: ev.target.value },
-                })} />
+
+              {comps.length === 0 ? (
+                <input
+                  id={`mk-${row}-0`}
+                  style={{
+                    flex: '0 1 110px',
+                    borderColor: (numOrNull(e.marks) ?? 0) > (subject?.fullMarks ?? 100)
+                      ? 'var(--bad)' : undefined,
+                  }}
+                  type="number" inputMode="decimal" aria-label={`marks ${s.fullName}`}
+                  value={e.marks} disabled={e.absent}
+                  onKeyDown={(ev) => downOnEnter(ev, row, 0)}
+                  onChange={(ev) => setEntries({
+                    ...entries, [s.studentId]: { ...e, marks: ev.target.value },
+                  })} />
+              ) : comps.map((c, col) => {
+                const v = numOrNull(e.parts[c.name] ?? '');
+                const tooHigh = v !== null && v > c.max;
+                const belowPass = v !== null && v < c.pass;
+                return (
+                  <input
+                    key={c.name}
+                    id={`mk-${row}-${col}`}
+                    style={{
+                      flex: '0 1 96px',
+                      borderColor: tooHigh || belowPass ? 'var(--bad)' : undefined,
+                    }}
+                    type="number" inputMode="decimal"
+                    aria-label={`${c.name} ${s.fullName}`}
+                    title={belowPass && !tooHigh
+                      ? `Below the ${c.name} pass mark of ${c.pass} — this fails the subject`
+                      : undefined}
+                    value={e.parts[c.name] ?? ''} disabled={e.absent}
+                    onKeyDown={(ev) => downOnEnter(ev, row, col)}
+                    onChange={(ev) => setPart(c.name, ev.target.value)} />
+                );
+              })}
+
+              {comps.length > 0 && (
+                <span style={{
+                  flex: '0 1 76px', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                  color: got.marks === null ? 'var(--muted)' : undefined,
+                }}>
+                  {got.marks === null ? '—' : `${got.marks}/${subject?.fullMarks ?? 0}`}
+                </span>
+              )}
+
               <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
                 <input type="checkbox" style={{ width: 'auto' }} checked={e.absent}
                        onChange={(ev) => setEntries({
@@ -337,12 +447,22 @@ export default function MarkEntry() {
                        })} />
                 absent
               </label>
+
               <span style={{
-                width: 34, textAlign: 'right', fontWeight: 600,
+                width: 58, textAlign: 'right', fontWeight: 600,
                 color: grade?.letter === 'F' ? 'var(--bad)' : 'var(--muted)',
               }}>
                 {grade?.letter ?? ''}
+                {grade && grade.letter !== '-' && grade.letter !== 'F'
+                  ? ` ${grade.point.toFixed(1)}` : ''}
               </span>
+
+              {grade && grade.failedParts.length > 0 && (
+                <span style={{ color: 'var(--bad)', fontSize: 13, flexBasis: '100%' }}>
+                  {grade.failedParts.join(' and ')} below the pass mark — the subject is F
+                  at {got.marks} out of {subject?.fullMarks}.
+                </span>
+              )}
             </div>
           );
         })}
