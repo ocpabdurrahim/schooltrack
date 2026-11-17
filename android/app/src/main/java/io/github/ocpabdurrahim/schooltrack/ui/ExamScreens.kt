@@ -621,6 +621,18 @@ fun MarkEntryScreen(
                         (subject?.let { "  ·  out of " + it.fullMarks.toInt() } ?: ""),
                     style = MaterialTheme.typography.titleMedium,
                 )
+                // Say why the sheet is shorter than the section, or a teacher
+                // counting heads has no way to know the rest were left out on
+                // purpose.
+                val missing = students.size - sitters.size
+                if (missing > 0 && subject?.groupNames?.isNotEmpty() == true) {
+                    Text(
+                        missing.toString() + " not shown — this is a " +
+                            subject.groupNames.joinToString(" and ") + " paper.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 sitters.forEach { s ->
                     val typed = entries[s.studentId] ?: Typed()
