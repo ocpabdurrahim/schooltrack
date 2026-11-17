@@ -88,6 +88,12 @@ export type ResultRow = {
   rollNo: number;
   fullMarks: number;
   isOptional: boolean;
+  /**
+   * When this mark was last saved, epoch ms. Read only — the server sets it on
+   * every save, and the quick-entry list reads it to put the rows just keyed
+   * in at the top, where a mistyped mark is still worth catching.
+   */
+  updatedAt?: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -203,13 +209,26 @@ export function subjectMarkFor(s: Subject, got?: ResultRow | null): SubjectMark 
 export const resultId = (examId: string, studentId: string, subjectId: string) =>
   `${examId}_${studentId}_${subjectId}`;
 
+/**
+ * One stored mark. `updatedAt` comes back as a Firestore timestamp, so it is
+ * turned into plain milliseconds here rather than in every screen that reads
+ * it — and is null for marks saved before the field existed.
+ */
+function toRow(data: Record<string, unknown>): ResultRow {
+  const at = data.updatedAt as { toMillis?: () => number } | null | undefined;
+  return {
+    ...(data as unknown as ResultRow),
+    updatedAt: typeof at?.toMillis === 'function' ? at.toMillis() : null,
+  };
+}
+
 export async function marksForExam(examId: string, classId?: string): Promise<ResultRow[]> {
   const base = collection(school(), 'results');
   const q = classId
     ? query(base, where('examId', '==', examId), where('classId', '==', classId))
     : query(base, where('examId', '==', examId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as ResultRow);
+  return snap.docs.map((d) => toRow(d.data()));
 }
 
 export async function marksForStudent(studentId: string): Promise<ResultRow[]> {
@@ -217,7 +236,7 @@ export async function marksForStudent(studentId: string): Promise<ResultRow[]> {
     collection(school(), 'results'),
     where('studentId', '==', studentId),
   ));
-  return snap.docs.map((d) => d.data() as ResultRow);
+  return snap.docs.map((d) => toRow(d.data()));
 }
 
 /**

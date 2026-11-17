@@ -17,7 +17,20 @@ val Status.label: String
         Status.E -> "Leave"
     }
 
-data class SchoolClass(val classId: String, val displayName: String)
+/**
+ * One section.
+ *
+ * `className` and `section` are the two halves of the display name, kept
+ * apart because the pickers that choose a class and then a section need them
+ * apart — and because a subject is set up against the CLASS, not the section.
+ * Both default to empty so a section saved before they existed still reads.
+ */
+data class SchoolClass(
+    val classId: String,
+    val displayName: String,
+    val className: String = "",
+    val section: String = "",
+)
 
 data class Student(
     val studentId: String,
@@ -48,6 +61,8 @@ class AttendanceRepository(
             SchoolClass(
                 classId = it.id,
                 displayName = it.getString("displayName") ?: it.id,
+                className = it.getString("className").orEmpty(),
+                section = it.getString("section").orEmpty(),
             )
         }
 

@@ -63,7 +63,7 @@ private val ALL = listOf(
             MenuItem("Enter marks", Screen.MarkEntry, Need.STAFF,
                 "one subject, whole section"),
             MenuItem("Quick entry", Screen.QuickMarks, Need.STAFF,
-                "one student, every subject"),
+                "roll after roll, or one whole marksheet"),
             MenuItem("Results", Screen.Results, Need.STAFF, "result sheet and tabulation"),
             MenuItem("Seat plan", Screen.SeatPlan, Need.STAFF),
             MenuItem("Admit cards", Screen.AdmitCards, Need.RECORDS),

@@ -70,6 +70,12 @@ data class ResultRow(
     val isOptional: Boolean,
     /** What was entered per component. Null on a paper marked whole. */
     val parts: Map<String, Double?>? = null,
+    /**
+     * When this mark was last saved, epoch ms. Read only — the server sets it
+     * on every save, and the quick-entry list reads it to put the rows just
+     * keyed in at the top, where a mistyped mark is still worth catching.
+     */
+    val updatedAt: Long? = null,
 )
 
 data class StudentResult(
@@ -236,6 +242,9 @@ class ExamsRepository(
         fullMarks = d.getDouble("fullMarks") ?: 100.0,
         isOptional = d.getBoolean("isOptional") ?: false,
         parts = readParts(d.get("parts")),
+        // Null for a mark saved before this field existed, which is why the
+        // entered list orders those by roll rather than pretending a time.
+        updatedAt = d.getTimestamp("updatedAt")?.toDate()?.time,
     )
 
     @Suppress("UNCHECKED_CAST")

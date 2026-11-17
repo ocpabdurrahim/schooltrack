@@ -94,7 +94,11 @@ button {
 button:hover { background: var(--accent-ink); }
 button.link { background: none; color: var(--muted); padding: 0; margin: 0; text-decoration: underline; font-weight: 400; box-shadow: none; }
 button.link:hover { background: none; color: var(--ink); }
+/* The second button in a pair, where only one of the two is the main action. */
+button.ghost { background: #fff; color: var(--ink-soft); border: 1px solid var(--line); box-shadow: none; }
+button.ghost:hover { background: var(--line-soft); color: var(--ink); }
 button[disabled], button[disabled]:hover { opacity: .55; cursor: default; background: var(--accent); }
+button.ghost[disabled], button.ghost[disabled]:hover { background: #fff; }
 
 .err { color: var(--bad); font-size: 14px; margin-top: 10px; }
 
