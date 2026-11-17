@@ -592,6 +592,7 @@ fun MarkEntryScreen(
 fun ResultsScreen(
     isAdmin: Boolean,
     onOpenStudent: (String) -> Unit,
+    onEnterMarks: () -> Unit,
     onBack: () -> Unit,
     repo: ExamsRepository = remember { ExamsRepository() },
     people: PeopleRepository = remember { PeopleRepository() },
@@ -657,6 +658,12 @@ fun ResultsScreen(
     ) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
+                // People look for "upload results" here, where the results are.
+                // The marks themselves are entered one subject at a time, and a
+                // file is read in on that screen.
+                TextButton(onClick = onEnterMarks, modifier = Modifier.align(Alignment.End)) {
+                    Text("Enter or upload marks")
+                }
                 Picker("Exam", exams.map { it.examId to (it.examName + " " + it.examYear) }, examId) {
                     examId = it
                 }

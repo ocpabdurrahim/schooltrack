@@ -29,8 +29,8 @@ android {
         applicationId = "io.github.ocpabdurrahim.schooltrack"
         minSdk = 24
         targetSdk = 35
-        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 9
-        versionName = (project.findProperty("versionNameOverride") as String?) ?: "1.0.8"
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 10
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "1.0.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // ./gradlew assembleDebug -PuseEmulators=true  points the app at the

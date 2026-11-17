@@ -171,6 +171,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                 screen == Screen.Results && isStaff -> ResultsScreen(
                     isAdmin = current.isAdmin,
                     onOpenStudent = { openStudent = it; go(Screen.Student) },
+                    onEnterMarks = { go(Screen.MarkEntry) },
                     onBack = { back() },
                 )
 

@@ -140,6 +140,10 @@ export default function Results() {
           {exam ? `${exam.examName} ${exam.examYear}` : 'Pick an exam'}
           {section ? ` · ${section.displayName}` : ''}
           {exam?.published && ' · published'}
+          {/* People look for "upload results" here, where the results are.
+              The marks themselves are entered one subject at a time, and a
+              file is read in on that screen. */}
+          {' · '}<Link to="/marks">enter or upload marks</Link>
         </h2>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
