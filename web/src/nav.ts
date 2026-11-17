@@ -32,6 +32,7 @@ const ALL: NavGroup[] = [
     items: [
       { label: 'All students', to: '/students', needs: 'staff', hint: 'search by name, roll or class' },
       { label: 'Add a student', to: '/students/new', needs: 'records' },
+      { label: 'Add many students', to: '/students/batch', needs: 'records', hint: 'paste a whole section in one go' },
       { label: 'ID cards', to: '/id-cards', needs: 'records', hint: 'printed sheet, with the QR code' },
       { label: 'Certificates', to: '/certificates', needs: 'records', hint: 'testimonial, transfer, character' },
     ],

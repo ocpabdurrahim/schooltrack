@@ -17,6 +17,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,21 +29,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
+import io.github.ocpabdurrahim.schooltrack.data.MarkFill
+import io.github.ocpabdurrahim.schooltrack.data.MarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.ResultRow
+import io.github.ocpabdurrahim.schooltrack.data.RollEntry
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
 import io.github.ocpabdurrahim.schooltrack.data.Subject
+import io.github.ocpabdurrahim.schooltrack.data.applyMarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
 import io.github.ocpabdurrahim.schooltrack.data.meritOrder
+import io.github.ocpabdurrahim.schooltrack.data.parseMarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.subjectStats
 import io.github.ocpabdurrahim.schooltrack.data.totalMarks
 import io.github.ocpabdurrahim.schooltrack.data.gradeFor
@@ -274,6 +281,12 @@ fun MarkEntryScreen(
     var note by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
 
+    // the paste panel: a tally read, filled into the grid, and saved by the
+    // ordinary Save button like anything typed in by hand
+    var pasteOpen by remember { mutableStateOf(false) }
+    var tally by remember { mutableStateOf("") }
+    var pasted by remember { mutableStateOf<Pair<MarkPaste, MarkFill>?>(null) }
+
     LaunchedEffect(Unit) {
         try {
             exams = repo.listExams()
@@ -306,6 +319,7 @@ fun MarkEntryScreen(
                 } ?: "") to (got?.absent ?: false))
             }
             problem = ""
+            pasted = null
         } catch (_: Exception) {
             problem = "Could not load the marks."
         }
@@ -348,6 +362,105 @@ fun MarkEntryScreen(
                     Problem("No subject is assigned to this class yet.")
                 }
                 Problem(problem)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Paste a tally",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { pasteOpen = !pasteOpen; pasted = null }) {
+                        Text(if (pasteOpen) "close" else "open")
+                    }
+                }
+
+                if (!pasteOpen) {
+                    Text(
+                        "Marks off an answer-script tally, a whole section at a time, " +
+                            "instead of box by box. Nothing is saved until you press " +
+                            "Save marks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = tally,
+                        onValueChange = { tally = it },
+                        label = { Text("Roll and mark, a line each") },
+                        singleLine = false,
+                        minLines = 5,
+                        textStyle = MaterialTheme.typography.bodyMedium
+                            .copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    Text(
+                        "A roll and its mark on each line — 1 78, 1=78, 1, Ayesha, 78 — or a " +
+                            "bare column of marks in roll order, which has to match this " +
+                            "section exactly. Write A for absent and - to clear a mark.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Button(
+                        enabled = !busy && students.isNotEmpty(),
+                        onClick = {
+                            val paste = parseMarkPaste(tally)
+                            val fill = applyMarkPaste(
+                                paste,
+                                students.map { RollEntry(it.studentId, it.rollNo) },
+                                subject?.fullMarks?.toLong(),
+                            )
+                            pasted = paste to fill
+                            // Filling is not saving: the boxes change, the sheet
+                            // does not, and the ordinary Save button below is
+                            // still what writes it.
+                            if (fill.filled > 0) {
+                                entries = entries + fill.entries.mapValues {
+                                    it.value.marks to it.value.absent
+                                }
+                                note = ""
+                            }
+                        },
+                        modifier = Modifier.padding(top = 10.dp),
+                    ) { Text("Fill the boxes") }
+
+                    pasted?.let { (paste, fill) ->
+                        if (fill.problem.isNotEmpty()) {
+                            Problem(fill.problem)
+                        } else {
+                            Text(
+                                "${fill.filled} box(es) filled in. Check them below, then " +
+                                    "press Save marks.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Green,
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
+                        }
+                        if (fill.unknownRolls.isNotEmpty()) {
+                            Problem(
+                                "This section has no roll " +
+                                    fill.unknownRolls.joinToString(", ") +
+                                    " — those lines were left out.",
+                            )
+                        }
+                        if (fill.overRolls.isNotEmpty()) {
+                            Problem(
+                                "Roll " + fill.overRolls.joinToString(", ") +
+                                    " got more than the full marks.",
+                            )
+                        }
+                        paste.rows.filter { it.problem.isNotEmpty() }.forEach {
+                            Problem("Line ${it.line}: ${it.problem}")
+                        }
+                    }
+                }
             }
         }
 

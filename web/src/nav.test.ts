@@ -35,7 +35,7 @@ describe('who sees which menus', () => {
   it('gives the office the student records but no money', () => {
     expect(labels(staffAs('OFFICE'))).toEqual(['Students', 'Attendance', 'Exams']);
     expect(items(staffAs('OFFICE'), 'Students'))
-      .toEqual(['All students', 'Add a student', 'ID cards', 'Certificates']);
+      .toEqual(['All students', 'Add a student', 'Add many students', 'ID cards', 'Certificates']);
   });
 
   it('gives a guardian and an unknown account no menus whatsoever', () => {

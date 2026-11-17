@@ -10,6 +10,12 @@ import {
   saveMarks,
   subjectsForClass,
 } from '../data/exams';
+import {
+  type MarkFill,
+  type MarkPaste,
+  applyMarkPaste,
+  parseMarkPaste,
+} from '../data/batch';
 import { gradeFor } from '../data/grading';
 import { type StudentDetail, findStudents } from '../data/people';
 
@@ -29,6 +35,12 @@ export default function MarkEntry() {
   const [busy, setBusy] = useState(true);
   const [note, setNote] = useState('');
   const [problem, setProblem] = useState('');
+
+  // the paste panel: a tally read, filled into the grid, and saved by the
+  // ordinary Save button like anything typed in by hand
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [tally, setTally] = useState('');
+  const [read, setRead] = useState<{ paste: MarkPaste; fill: MarkFill } | null>(null);
 
   useEffect(() => {
     Promise.all([listExams(), listSubjects(), listClasses()])
@@ -71,6 +83,7 @@ export default function MarkEntry() {
           }];
         })));
         setProblem('');
+        setRead(null);
       } catch {
         if (live) setProblem('Could not load the marks.');
       } finally {
@@ -87,6 +100,22 @@ export default function MarkEntry() {
       setSubjectId(classSubjects[0].subjectId);
     }
   }, [className, subjects]);
+
+  function fillFromTally() {
+    const paste = parseMarkPaste(tally);
+    const fill = applyMarkPaste(
+      paste,
+      students.map((s) => ({ studentId: s.studentId, rollNo: s.rollNo })),
+      subject?.fullMarks ?? null,
+    );
+    setRead({ paste, fill });
+    // Filling is not saving: the boxes change, the sheet does not, and the
+    // ordinary Save button below is still what writes it.
+    if (fill.filled > 0) {
+      setEntries((was) => ({ ...was, ...fill.entries }));
+      setNote('');
+    }
+  }
 
   async function save() {
     if (!exam || !subject) return;
@@ -173,6 +202,81 @@ export default function MarkEntry() {
           </div>
         )}
         {problem && <div className="err">{problem}</div>}
+      </div>
+
+      <div className="card">
+        <h2>
+          Paste a tally
+          <button
+            className="link"
+            style={{ marginLeft: 12 }}
+            onClick={() => { setPasteOpen(!pasteOpen); setRead(null); }}
+          >
+            {pasteOpen ? 'close' : 'open'}
+          </button>
+        </h2>
+
+        {!pasteOpen && (
+          <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
+            Marks off an answer-script tally, a whole section at a time, instead
+            of box by box. Nothing is saved until you press Save marks.
+          </p>
+        )}
+
+        {pasteOpen && (
+          <>
+            <textarea
+              className="mono"
+              rows={8}
+              aria-label="pasted marks"
+              value={tally}
+              placeholder={`1 78
+2 65
+3 abs`}
+              onChange={(e) => setTally(e.target.value)}
+            />
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '10px 0 0' }}>
+              A roll and its mark on each line — <strong>1 78</strong>,{' '}
+              <strong>1=78</strong>, <strong>1, Ayesha, 78</strong> — or a bare
+              column of marks in roll order, which has to match this section
+              exactly. Write <strong>A</strong> for absent and <strong>-</strong>{' '}
+              to clear a mark.
+            </p>
+            <button onClick={fillFromTally} disabled={busy || !students.length}>
+              Fill the boxes
+            </button>
+
+            {read && (
+              <>
+                {read.fill.problem && <div className="err">{read.fill.problem}</div>}
+                {!read.fill.problem && (
+                  <p style={{ margin: '12px 0 0' }} className="good">
+                    <strong>
+                      {read.fill.filled} box{read.fill.filled === 1 ? '' : 'es'} filled in.
+                    </strong>{' '}
+                    <span style={{ color: 'var(--muted)' }}>
+                      Check them below, then press Save marks.
+                    </span>
+                  </p>
+                )}
+                {read.fill.unknownRolls.length > 0 && (
+                  <div className="err">
+                    This section has no roll {read.fill.unknownRolls.join(', ')} — those
+                    lines were left out.
+                  </div>
+                )}
+                {read.fill.overRolls.length > 0 && (
+                  <div className="err">
+                    Roll {read.fill.overRolls.join(', ')} got more than the full marks.
+                  </div>
+                )}
+                {read.paste.rows.filter((r) => r.problem).map((r) => (
+                  <div className="err" key={r.line}>Line {r.line}: {r.problem}</div>
+                ))}
+              </>
+            )}
+          </>
+        )}
       </div>
 
       <div className="card">

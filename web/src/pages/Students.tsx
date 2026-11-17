@@ -59,6 +59,8 @@ export default function Students() {
         {mayEdit && (
           <p style={{ marginTop: 14, marginBottom: 0 }}>
             <Link to="/students/new">Add a student</Link>
+            {' · '}
+            <Link to="/students/batch">Add many at once</Link>
           </p>
         )}
       </div>

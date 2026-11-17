@@ -38,6 +38,10 @@ private val ALL = listOf(
         listOf(
             MenuItem("All students", Screen.Students, Need.STAFF, "search by name, roll or class"),
             MenuItem("Add a student", Screen.StudentEdit, Need.RECORDS),
+            MenuItem(
+                "Add many students", Screen.StudentsBatch, Need.RECORDS,
+                "paste a whole section in one go",
+            ),
             // ID cards are per student on the phone: opened from the student,
             // because a printed sheet is a thing you do at a desk.
             MenuItem("Certificates", Screen.Certificates, Need.RECORDS, "testimonial, transfer, character"),
