@@ -3,6 +3,9 @@
  * SchoolTrack — one-way mirror: Oracle CSV exports → Firestore.
  *
  *   node import.mjs                 # dry run: says what it WOULD write
+ *   node import.mjs --compare       # dry run, and read what is live to say
+ *                                   #   what this export would add, update,
+ *                                   #   and leave behind as a duplicate
  *   node import.mjs --commit        # actually writes
  *   node import.mjs --only students,classes --commit
  *
@@ -279,6 +282,8 @@ const MAPPINGS = {
 };
 
 // Reference data before anything that points at it.
+const COMPARE = process.argv.includes('--compare');
+
 const ORDER = [
   'settings', 'classes', 'students', 'staff', 'subjects', 'components',
   'subjectgroups',
@@ -295,7 +300,7 @@ async function main() {
                  existsSync(join(process.env.APPDATA ?? process.env.HOME ?? '',
                                  'gcloud', 'application_default_credentials.json'));
 
-  if (COMMIT && !hasKey && !hasAdc) {
+  if ((COMMIT || COMPARE) && !hasKey && !hasAdc) {
     console.error([
       'No credentials.',
       '',
@@ -306,7 +311,7 @@ async function main() {
   }
 
   let db = null;
-  if (COMMIT) {
+  if (COMMIT || COMPARE) {
     initializeApp({
       credential: hasKey
         ? cert(JSON.parse(readFileSync(keyFile, 'utf8')))
@@ -374,6 +379,27 @@ async function main() {
       `${name.padEnd(14)} ${String(docs.length).padStart(5)} document(s)` +
       (bad.length ? `   ${bad.length} skipped (no id)` : ''),
     );
+
+    // What is already there, and what this export does NOT account for.
+    //
+    // Worth printing before anything is written: a collection the app has
+    // been filling in by hand will not share Oracle's ids, so the mirror
+    // ADDS to it rather than replacing it, and the same students end up in
+    // the list twice. That is a decision for a person, not for this script,
+    // so it says the number and leaves it alone.
+    if (COMPARE) {
+      const col = db.collection('schools').doc(SCHOOL_ID).collection(...map.path());
+      const live = new Set((await col.get()).docs.map((d) => d.id));
+      const incoming = new Set(docs.map((d) => d.id));
+      const updated = [...incoming].filter((id) => live.has(id)).length;
+      const strangers = [...live].filter((id) => !incoming.has(id));
+      console.log(
+        `${' '.repeat(15)}live: ${live.size} — ${updated} updated, ` +
+        `${incoming.size - updated} added, ` +
+        `${strangers.length} already there and NOT in this export` +
+        (strangers.length ? ` (${strangers.slice(0, 4).join(', ')}${strangers.length > 4 ? '…' : ''})` : ''),
+      );
+    }
     if (docs.length) {
       console.log(`${' '.repeat(15)}e.g. ${docs[0].id} -> ${JSON.stringify(docs[0].body).slice(0, 110)}…`);
     }

@@ -1,10 +1,15 @@
 -- =====================================================================
 --  SchoolTrack -- export reference data from Oracle (APEX app SMS)
 --
---  Run each query on its own in SQL Workshop -> SQL Commands, then use
---  the results grid's DOWNLOAD -> CSV and save it into
---      SchoolTrack\tools\data\<name>.csv
---  with the name given above each query. That folder is in .gitignore:
+--  Run each query on its own in SQL Workshop -> SQL Commands. Set the
+--  ROWS selector to its largest value BEFORE running, or the download
+--  stops at the rows on screen. Then Download -> CSV, and leave the file
+--  wherever the browser puts it.
+--
+--  You do NOT have to rename anything:
+--      node tools/collect-exports.mjs
+--  reads each downloaded CSV's header, works out which export it is, and
+--  files it as tools\data\<name>.csv. That folder is in .gitignore:
 --  these files contain students' names, their parents' names, mobile
 --  numbers and dates of birth, and THIS REPOSITORY IS PUBLIC.
 --
