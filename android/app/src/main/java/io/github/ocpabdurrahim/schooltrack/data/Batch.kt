@@ -187,7 +187,9 @@ private fun assign(row: StudentRow, field: Field?, cell: String): StudentRow {
         Field.MOBILE -> row.copy(mobileNo = v)
         Field.BLOOD -> row.copy(bloodGroup = v)
         Field.REG -> row.copy(regNo = v)
-        Field.GROUP -> row.copy(groupName = v)
+        // "sci" and "commerce" become the proper names, so the group picker on
+        // the student's own screen shows the group instead of an odd extra option.
+        Field.GROUP -> row.copy(groupName = normalGroup(v))
     }
 }
 

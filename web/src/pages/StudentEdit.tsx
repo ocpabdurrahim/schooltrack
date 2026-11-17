@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
+import { groupOptions, normalGroup } from '../data/groups';
 import { getStudent } from '../data/people';
 
 type Form = {
@@ -53,7 +54,11 @@ export default function StudentEdit() {
             rollNo: s.rollNo ?? 0,
             classId: s.classId ?? '',
             regNo: s.regNo ?? '',
-            groupName: s.groupName ?? '',
+            // Through normalGroup, so a record written "commerce" by hand or by
+            // an older import arrives as one of the picker's own options. Left
+            // raw it would match none of them, the picker would read as "none",
+            // and the next save would quietly wipe the group.
+            groupName: normalGroup(s.groupName),
             gender: s.gender ?? '',
             dob: s.dob ?? '',
             fatherName: s.fatherName ?? '',
@@ -143,7 +148,13 @@ export default function StudentEdit() {
           </div>
           <div style={{ flex: '1 1 140px' }}>
             <label htmlFor="grp">Group</label>
-            <input id="grp" placeholder="Science" {...text('groupName')} />
+            <select id="grp" value={form.groupName}
+                    onChange={(e) => setForm({ ...form, groupName: e.target.value })}>
+              <option value="">— none —</option>
+              {groupOptions(form.groupName).map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
           </div>
         </div>
 

@@ -20,6 +20,8 @@
  * register is worse than a rejected paste.
  */
 
+import { normalGroup } from './groups';
+
 // ---------------------------------------------------------------------------
 // students
 
@@ -176,6 +178,11 @@ function assign(row: StudentRow, field: Field | undefined, cell: string) {
       else row.note = also(row.note, `"${v}" is not male or female, so it was left out`);
       break;
     }
+    case 'groupName':
+      // "sci" and "commerce" become the proper names, so the group picker on the
+      // student's own page shows the group instead of an odd extra option.
+      row.groupName = normalGroup(v);
+      break;
     default:
       row[field] = v;
   }

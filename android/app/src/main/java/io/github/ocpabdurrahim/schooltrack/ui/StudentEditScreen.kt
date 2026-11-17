@@ -21,6 +21,8 @@ import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
+import io.github.ocpabdurrahim.schooltrack.data.groupOptions
+import io.github.ocpabdurrahim.schooltrack.data.normalGroup
 import kotlinx.coroutines.launch
 
 private fun blank() = StudentDetail(
@@ -57,7 +59,15 @@ fun StudentEditScreen(
             classes = admin.listAllClasses()
             if (studentId.isNotEmpty()) {
                 val s = people.getStudent(studentId)
-                if (s == null) problem = "No student with that number." else form = s
+                if (s == null) {
+                    problem = "No student with that number."
+                } else {
+                    // Through normalGroup, so a record written "commerce" by hand
+                    // or by an older import arrives as one of the picker's own
+                    // options. Left raw it would match none of them, the picker
+                    // would read as none, and the next save would wipe the group.
+                    form = s.copy(groupName = normalGroup(s.groupName).ifEmpty { null })
+                }
             } else {
                 classes.firstOrNull { it.active }?.let { form = form.copy(classId = it.classId) }
             }
@@ -96,7 +106,12 @@ fun StudentEditScreen(
                 ) { form = form.copy(classId = it) }
 
                 Field("Registration no.", form.regNo.orEmpty()) { form = form.copy(regNo = it) }
-                Field("Group", form.groupName.orEmpty()) { form = form.copy(groupName = it) }
+                Picker(
+                    "Group",
+                    listOf("" to "— none —") +
+                        groupOptions(form.groupName).map { it to it },
+                    form.groupName.orEmpty(),
+                ) { form = form.copy(groupName = it) }
 
                 Picker(
                     "Gender",

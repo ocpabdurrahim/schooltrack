@@ -133,6 +133,17 @@ class BatchTest {
     }
 
     @Test
+    fun `writes the group the way the picker spells it`() {
+        val rows = parseStudentRows(
+            "Roll,Name,Group\n1,Ayesha,commerce\n2,Bashir,SCI\n3,Chaity,Vocational",
+        )
+        assertEquals(
+            listOf("Business Studies", "Science", "Vocational"),
+            rows.map { it.groupName },
+        )
+    }
+
+    @Test
     fun `ignores blank lines and trailing whitespace`() {
         assertEquals(emptyList<StudentRow>(), parseStudentRows("\n\n  \n"))
         val row = parseStudentRows("  1 , Ayesha  ")[0]

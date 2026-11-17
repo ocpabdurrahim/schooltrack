@@ -110,6 +110,14 @@ describe('reading a pasted list of students', () => {
     });
   });
 
+  it('writes the group the way the picker spells it', () => {
+    const rows = parseStudentRows(
+      'Roll,Name,Group\n1,Ayesha,commerce\n2,Bashir,SCI\n3,Chaity,Vocational',
+    );
+    expect(rows.map((r) => r.groupName))
+      .toEqual(['Business Studies', 'Science', 'Vocational']);
+  });
+
   it('ignores blank lines and trailing whitespace', () => {
     expect(parseStudentRows('\n\n  \n')).toEqual([]);
     expect(parseStudentRows('  1 , Ayesha  ')[0]).toMatchObject({ rollNo: 1, fullName: 'Ayesha' });
