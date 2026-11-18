@@ -141,7 +141,8 @@ export default function Students() {
                 <th>Class</th>
                 <th>Group</th>
                 <th className="num">
-                  Attendance<small>{since === 'year' ? 'this year' : 'this month'}</small>
+                  Days present
+                  <small>{since === 'year' ? 'this year' : 'this month'}</small>
                 </th>
                 {maySeeMoney && <th className="num">Paid</th>}
                 {maySeeMoney && <th className="num">Due</th>}
@@ -167,12 +168,23 @@ export default function Students() {
                         ? <span className="chip">{s.groupName}</span>
                         : <span className="muted">—</span>}
                     </td>
-                    <td data-label="Attendance" className={`num${thin ? ' bad' : ''}`}>
+                    <td data-label="Days present" className={`num${thin ? ' bad' : ''}`}>
                       {!classId
                         ? <span className="muted">pick a section</span>
                         : a === undefined || a.percent === null
-                          ? <span className="muted">{extras ? '…' : 'not marked'}</span>
-                          : <>{a.percent}%<span className="of"> {a.present}/{a.marked}</span></>}
+                          ? <span className="muted">
+                              {extras ? '…' : 'register not taken'}
+                            </span>
+                          : (
+                            <span title={`Present on ${a.present} of the ${a.marked} day`
+                              + `${a.marked === 1 ? '' : 's'} the register was taken`
+                              + ' (late counts as present)'}>
+                              {a.percent}%
+                              <span className="of">
+                                {a.present} of {a.marked} day{a.marked === 1 ? '' : 's'}
+                              </span>
+                            </span>
+                          )}
                     </td>
                     {maySeeMoney && (
                       <td data-label="Paid" className="num">
@@ -194,11 +206,13 @@ export default function Students() {
         {rows.length > 0 && (
           <p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 0 }}>
             {classId
-              ? 'Attendance is of the days marked, not of the working days — a week nobody '
-                + 'took the register is not a week of truancy. Money is this year’s: what has '
-                + 'been taken, and what is still owed up to this month.'
-              : 'Pick a section to see attendance: it is one query for the whole section, and '
-                + 'a year of marks for the whole school is not worth fetching to show a list.'}
+              ? '“2 of 25 days” counts only the days the register was actually taken, not '
+                + 'every working day — a week nobody marked is not a week of truancy. Late '
+                + 'counts as present. Money is this year’s: what has been taken, and what is '
+                + 'still owed up to this month.'
+              : 'Pick a section above to see how many days each child was present: that is '
+                + 'one query for the whole section, and a year of marks for the whole school '
+                + 'is not worth fetching to show a list.'}
           </p>
         )}
       </div>

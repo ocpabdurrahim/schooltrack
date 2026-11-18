@@ -234,8 +234,15 @@ fun StudentsScreen(
                             when {
                                 selected == null -> Unit
                                 t == null -> Unit
-                                pc == null -> add("attendance not marked")
-                                else -> add(percent(pc) + " present")
+                                pc == null -> add("register not taken")
+                                // The count as well as the percentage: nobody
+                                // should have to guess what it is a
+                                // percentage OF.
+                                else -> add(
+                                    "present " + percent(pc) +
+                                        " (" + t.present + " of " + t.marked +
+                                        (if (t.marked == 1) " day)" else " days)"),
+                                )
                             }
                             if (d != null) {
                                 add("paid " + money(d.paid))

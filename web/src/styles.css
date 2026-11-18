@@ -337,7 +337,9 @@ table.sheet tbody tr:last-child td { border-bottom: 0; }
 .stu th.num { text-align: right; }
 .stu .muted { color: var(--muted); }
 .stu .bad { color: var(--bad); }
-.stu .of { color: var(--muted); font-size: 12px; }
+/* The count under the percentage: 92%, then "23 of 25 days" in small type,
+   so nobody has to guess what the percentage is a percentage OF. */
+.stu .of { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
 
 @media (max-width: 760px) {
   .stu, .stu tbody, .stu tr, .stu td { display: block; width: 100%; }
