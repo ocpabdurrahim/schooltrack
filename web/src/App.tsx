@@ -19,6 +19,7 @@ import IncomeExpense from './pages/IncomeExpense';
 import Login from './pages/Login';
 import LowAttendance from './pages/LowAttendance';
 import MarkEntry from './pages/MarkEntry';
+import MarkSheets from './pages/MarkSheets';
 import QuickMarks from './pages/QuickMarks';
 import PaySalary from './pages/PaySalary';
 import Payslip from './pages/Payslip';
@@ -122,6 +123,7 @@ export default function App() {
         <Route path="/marks" element={staffOnly(<MarkEntry />)} />
         <Route path="/marks/quick" element={staffOnly(<QuickMarks />)} />
         <Route path="/results" element={staffOnly(<Results />)} />
+        <Route path="/marks/sheets" element={staffOnly(<MarkSheets />)} />
         {/* a guardian may open their own child's published report */}
         <Route path="/report/:examId/:studentId" element={<ReportCard />} />
         <Route path="/classes" element={adminOnly(<Classes />)} />

@@ -475,4 +475,10 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   .hero { background: none !important; color: #000 !important; padding: 0 !important; box-shadow: none; }
   .hero h1, .hero-sub, .hero-who { color: #000 !important; }
   .print-sheet { border: 1px solid #000; padding: 18px; }
+  /* One mark sheet per page, and never split one across two. */
+  .print-page { break-after: page; page-break-after: always; }
+  .print-page:last-child { break-after: auto; page-break-after: auto; }
+  .print-page, .print-sheet { break-inside: avoid; page-break-inside: avoid; }
 }
+/* On screen the sheets are stacked cards, so they need the gap back. */
+.print-page + .print-page { margin-top: 16px; }

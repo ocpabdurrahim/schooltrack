@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,6 +28,9 @@ import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.Tabulation
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.UnitLine
+import io.github.ocpabdurrahim.schooltrack.data.markSheet
+import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
 
@@ -58,6 +62,9 @@ fun ReportCardScreen(
     var attendance by remember { mutableStateOf<AttendanceSummary?>(null) }
     var problem by remember { mutableStateOf("") }
 
+    var lines by remember { mutableStateOf<List<UnitLine>>(emptyList()) }
+    var detailed by remember { mutableStateOf(false) }
+
     LaunchedEffect(examId, studentId) {
         try {
             admin.getSettings()?.let { schoolName = it.instituteName; headTeacher = it.headTeacher.orEmpty() }
@@ -75,8 +82,12 @@ fun ReportCardScreen(
             }
 
             val subjects = exams.listSubjects()
-            val own = sheetFor(listOf(s), subjects, exams.marksForStudent(studentId), examId).first()
+            val mine = exams.marksForStudent(studentId)
+            val own = sheetFor(listOf(s), subjects, mine, examId).first()
             tabulation = own.tabulation
+            // The same lines the printed mark sheet is built from, so the
+            // phone and the paper can never disagree.
+            lines = markSheet(subjects, s.asSitter(), mine.filter { it.examId == examId })
 
             try {
                 val classmates = people.findStudents(s.classId, "")
@@ -147,7 +158,25 @@ fun ReportCardScreen(
                     }
                     HorizontalDivider(Modifier.padding(vertical = 10.dp))
 
-                    t.subjects.forEach { g ->
+                    // Two shapes of the same sheet: brief is what goes home,
+                    // detailed is what a disputed mark is settled with.
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = !detailed,
+                            onClick = { detailed = false },
+                            label = { Text("Brief") },
+                        )
+                        FilterChip(
+                            selected = detailed,
+                            onClick = { detailed = true },
+                            label = { Text("Detailed") },
+                        )
+                    }
+
+                    lines.forEach { u ->
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -155,30 +184,56 @@ fun ReportCardScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    g.mark.subjectName +
-                                        if (g.mark.isOptional) " (optional)" else "",
+                                    u.unitName + if (u.isOptional) " (optional)" else "",
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Text(
-                                    "out of " + g.mark.fullMarks.toInt(),
+                                    "out of " + u.fullMarks.toInt(),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Text(
                                 when {
-                                    g.mark.absent -> "absent"
-                                    g.mark.marks == null -> "—"
-                                    else -> g.mark.marks.toInt().toString()
+                                    u.absent -> "absent"
+                                    u.marks != null -> u.marks.toInt().toString()
+                                    u.soFar != null -> "(" + u.soFar.toInt() + ")"
+                                    else -> "—"
                                 },
                                 modifier = Modifier.padding(end = 16.dp),
                             )
                             Text(
-                                g.grade.letter,
+                                u.letter,
                                 fontWeight = FontWeight.Bold,
-                                color = if (g.grade.letter == "F") MaterialTheme.colorScheme.error
+                                color = if (u.letter == "F") MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurface,
                             )
+                        }
+
+                        if (detailed) {
+                            u.papers.forEach { p ->
+                                val parts = p.parts.entries.joinToString("  ") { (name, v) ->
+                                    name + " " + (v?.toInt()?.toString() ?: "—")
+                                }
+                                Text(
+                                    (if (u.papers.size > 1) p.subjectName + " — " else "") +
+                                        (if (parts.isEmpty()) "one mark" else parts) +
+                                        "   = " + (p.marks?.toInt()?.toString() ?: "—") +
+                                        "/" + p.fullMarks.toInt(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
+                                )
+                            }
+                            if (u.failedParts.isNotEmpty()) {
+                                Text(
+                                    u.failedParts.joinToString(" and ") +
+                                        " below the pass mark — this subject is F.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
+                                )
+                            }
                         }
                         HorizontalDivider()
                     }

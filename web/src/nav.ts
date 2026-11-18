@@ -54,6 +54,8 @@ const ALL: NavGroup[] = [
       { label: 'Quick entry', to: '/marks/quick', needs: 'staff',
         hint: 'roll after roll, or one whole marksheet' },
       { label: 'Results', to: '/results', needs: 'staff', hint: 'result sheet and tabulation' },
+      { label: 'Mark sheets', to: '/marks/sheets', needs: 'staff',
+        hint: 'one per student, detailed or brief' },
       { label: 'Seat plan', to: '/exams/seat-plan', needs: 'staff' },
       { label: 'Admit cards', to: '/exams/admit-cards', needs: 'records' },
       { label: 'Exam routine', to: '/exams/routine', needs: 'admin' },
