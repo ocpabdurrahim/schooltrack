@@ -8,6 +8,7 @@ import {
   studentMonth,
   weekdayOf,
   workingDays,
+  attendanceTotals,
 } from './attendanceReports';
 
 /** The same cases exist in android/.../AttendanceReportsTest.kt. */
@@ -185,5 +186,46 @@ describe("one student's month, as a parent is shown it", () => {
     expect(onHoliday.marked).toBe(1);
     expect(onHoliday.percent).toBe(100);
     expect(onHoliday.workingDays).toBe(21);   // the holiday is still a holiday
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the figure on the student list
+
+describe('attendanceTotals', () => {
+  const students = [{ studentId: 'a' }, { studentId: 'b' }, { studentId: 'c' }];
+
+  it('counts present and late as present, the same as everywhere else', () => {
+    const got = attendanceTotals(students, [
+      { studentId: 'a', status: 'P' as const },
+      { studentId: 'a', status: 'L' as const },
+      { studentId: 'a', status: 'A' as const },
+      { studentId: 'a', status: 'E' as const },
+    ]);
+    expect(got.get('a')).toEqual({ present: 2, marked: 4, percent: 50 });
+  });
+
+  it('is of the days MARKED, not of the days in the range', () => {
+    // A week nobody took the register is not a week of truancy.
+    const got = attendanceTotals(students, [{ studentId: 'b', status: 'P' as const }]);
+    expect(got.get('b')).toEqual({ present: 1, marked: 1, percent: 100 });
+  });
+
+  it('gives a student with nothing marked no percentage at all', () => {
+    const got = attendanceTotals(students, []);
+    expect(got.get('c')).toEqual({ present: 0, marked: 0, percent: null });
+  });
+
+  it('has a row for every student, marked or not', () => {
+    expect([...attendanceTotals(students, []).keys()]).toEqual(['a', 'b', 'c']);
+  });
+
+  it('ignores a mark belonging to somebody not on this list', () => {
+    const got = attendanceTotals(students, [
+      { studentId: 'a', status: 'P' as const },
+      { studentId: 'zzz', status: 'A' as const },
+    ]);
+    expect(got.size).toBe(3);
+    expect(got.get('a')?.marked).toBe(1);
   });
 });

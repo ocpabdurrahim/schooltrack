@@ -43,6 +43,7 @@ const who = (email: string) =>
 const admin = () => who('admin@school.test').firestore();
 const teacher = () => who('teacher@school.test').firestore();
 const accounts = () => who('accounts@school.test').firestore();
+const office = () => who('office@school.test').firestore();
 const retired = () => who('retired@school.test').firestore();
 const parent = () => who('parent@home.test').firestore();
 const stranger = () => env.unauthenticatedContext().firestore();
@@ -78,6 +79,7 @@ beforeEach(async () => {
     await member('admin@school.test', 'ADMIN');
     await member('teacher@school.test', 'TEACHER');
     await member('accounts@school.test', 'ACCOUNTS');
+    await member('office@school.test', 'OFFICE');
     // left the school: still listed, but must have no access at all
     await member('retired@school.test', 'TEACHER', { active: false });
 
@@ -320,6 +322,16 @@ describe('role boundaries', () => {
 
   it('a TEACHER cannot read payments', async () => {
     await assertFails(getDoc(doc(teacher(), p('payments', 'RCPT-000001'))));
+  });
+
+  // The student list offers Paid and Due columns, and they are fetched from
+  // /payments. OFFICE may read the rate card but NOT a receipt, so the list
+  // must not offer those columns to an OFFICE user: it would only earn a
+  // refusal where the rest of the page worked.
+  it('an OFFICE user reads the rate card but not a payment', async () => {
+    await assertSucceeds(getDoc(doc(office(), p('feeHeads', 'TUITION'))));
+    await assertSucceeds(getDoc(doc(office(), p('feeStructure', 'TUITION_Class 6_2026'))));
+    await assertFails(getDoc(doc(office(), p('payments', 'RCPT-000001'))));
   });
 
   it('a TEACHER cannot create a payment', async () => {

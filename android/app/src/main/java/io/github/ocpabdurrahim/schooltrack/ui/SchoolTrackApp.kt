@@ -110,6 +110,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                         null
                     },
                     onBack = { back() },
+                    canSeeMoney = current.canCollectFees,
                 )
 
                 screen == Screen.Children && current is Access.Guardian -> ChildrenScreen(

@@ -187,4 +187,50 @@ class AttendanceReportsTest {
         assertEquals(100.0, month.percent!!, 0.001)
         assertEquals(21, month.workingDays)
     }
+
+    // ----------------------------------------------------------------------
+    // the figure on the student list
+
+    @Test
+    fun countsPresentAndLateAsPresentTheSameAsEverywhereElse() {
+        val got = attendanceTotals(
+            listOf("a", "b", "c"),
+            listOf(
+                Triple("a", "2026-11-01", Status.P),
+                Triple("a", "2026-11-02", Status.L),
+                Triple("a", "2026-11-03", Status.A),
+                Triple("a", "2026-11-04", Status.E),
+            ),
+        )
+        assertEquals(2, got.getValue("a").present)
+        assertEquals(4, got.getValue("a").marked)
+        assertEquals(50.0, got.getValue("a").percent!!, 0.001)
+    }
+
+    @Test
+    fun isOfTheDaysMarkedNotOfTheDaysInTheRange() {
+        // A week nobody took the register is not a week of truancy.
+        val got = attendanceTotals(
+            listOf("a", "b"), listOf(Triple("b", "2026-11-01", Status.P)),
+        )
+        assertEquals(100.0, got.getValue("b").percent!!, 0.001)
+        assertEquals(1, got.getValue("b").marked)
+    }
+
+    @Test
+    fun givesAStudentWithNothingMarkedNoPercentageAtAll() {
+        val got = attendanceTotals(listOf("c"), emptyList())
+        assertEquals(0, got.getValue("c").marked)
+        assertNull(got.getValue("c").percent)
+    }
+
+    @Test
+    fun ignoresAMarkBelongingToSomebodyNotOnThisList() {
+        val got = attendanceTotals(
+            listOf("a"),
+            listOf(Triple("a", "2026-11-01", Status.P), Triple("zzz", "2026-11-01", Status.A)),
+        )
+        assertEquals(1, got.size)
+        assertEquals(1, got.getValue("a").marked)
+    }
 }

@@ -15,6 +15,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
@@ -33,10 +34,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import io.github.ocpabdurrahim.schooltrack.data.AttendanceReportsRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
+import io.github.ocpabdurrahim.schooltrack.data.AttendanceTotal
+import io.github.ocpabdurrahim.schooltrack.data.Dues
+import io.github.ocpabdurrahim.schooltrack.data.FeesRepository
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
+import io.github.ocpabdurrahim.schooltrack.data.attendanceTotals
+import io.github.ocpabdurrahim.schooltrack.data.money
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,8 +52,11 @@ fun StudentsScreen(
     onOpen: (String) -> Unit,
     onAdd: (() -> Unit)?,
     onBack: () -> Unit,
+    canSeeMoney: Boolean = false,
     people: PeopleRepository = remember { PeopleRepository() },
     attendance: AttendanceRepository = remember { AttendanceRepository() },
+    reports: AttendanceReportsRepository = remember { AttendanceReportsRepository() },
+    fees: FeesRepository = remember { FeesRepository() },
 ) {
     var classes by remember { mutableStateOf<List<SchoolClass>>(emptyList()) }
     var selected by remember { mutableStateOf<SchoolClass?>(null) }
@@ -55,6 +65,9 @@ fun StudentsScreen(
     var rows by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
     var busy by remember { mutableStateOf(true) }
     var problem by remember { mutableStateOf("") }
+    var thisYear by remember { mutableStateOf(false) }
+    var totals by remember { mutableStateOf<Map<String, AttendanceTotal>>(emptyMap()) }
+    var owed by remember { mutableStateOf<Map<String, Dues>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
         try {
@@ -76,6 +89,42 @@ fun StudentsScreen(
             problem = "Could not search the students."
         }
         busy = false
+    }
+
+    // Attendance, once there is a section to fetch it for: one query for the
+    // whole section, so a figure per student costs nothing extra. A year of
+    // marks for the whole school is not worth pulling to decorate a list.
+    LaunchedEffect(selected, rows, thisYear) {
+        val section = selected
+        if (section == null || rows.isEmpty()) {
+            totals = emptyMap()
+            return@LaunchedEffect
+        }
+        totals = try {
+            val from = if (thisYear) people.startOfYear() else people.startOfMonth()
+            val marks = reports.marksBetween(section.classId, from, attendance.todayInDhaka())
+            attendanceTotals(
+                rows.map { it.studentId },
+                marks.map { Triple(it.studentId, it.date, it.status) },
+            )
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    // The money: three queries however many students are listed, so it does
+    // not need a section first. ADMIN and ACCOUNTS only -- /payments is closed
+    // to everybody else, so asking would only earn a refusal.
+    LaunchedEffect(rows, canSeeMoney) {
+        if (!canSeeMoney || rows.isEmpty()) {
+            owed = emptyMap()
+            return@LaunchedEffect
+        }
+        owed = try {
+            fees.duesFor(rows, fees.currentYear()).associateBy { it.student.studentId }
+        } catch (_: Exception) {
+            emptyMap()
+        }
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -125,6 +174,22 @@ fun StudentsScreen(
             }
         }
 
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = !thisYear,
+                onClick = { thisYear = false },
+                label = { Text("This month") },
+            )
+            FilterChip(
+                selected = thisYear,
+                onClick = { thisYear = true },
+                label = { Text("This year") },
+            )
+        }
+
         Text(
             when {
                 busy -> "Searching…"
@@ -161,6 +226,37 @@ fun StudentsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+
+                        val t = totals[s.studentId]
+                        val d = owed[s.studentId]
+                        val bits = buildList {
+                            val pc = t?.percent
+                            when {
+                                selected == null -> Unit
+                                t == null -> Unit
+                                pc == null -> add("attendance not marked")
+                                else -> add(percent(pc) + " present")
+                            }
+                            if (d != null) {
+                                add("paid " + money(d.paid))
+                                if (d.due > 0) add("due " + money(d.due))
+                            }
+                        }
+                        if (bits.isNotEmpty()) {
+                            val thin = t?.percent?.let { it < 70 } ?: false
+                            Text(
+                                bits.joinToString("  ·  "),
+                                style = MaterialTheme.typography.bodySmall,
+                                // Below 70%, or anything still owed, is what
+                                // the school chases -- so it is what is worth
+                                // seeing from across the room.
+                                color = if (thin || (d != null && d.due > 0)) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
                     Text("›", style = MaterialTheme.typography.titleLarge)
                 }
@@ -236,3 +332,7 @@ fun ChildrenScreen(
         }
     }
 }
+
+/** 92.5 -> "92.5%", 92.0 -> "92%": a whole number reads better than 92.0%. */
+private fun percent(p: Double): String =
+    if (p % 1.0 == 0.0) p.toInt().toString() + "%" else p.toString() + "%"

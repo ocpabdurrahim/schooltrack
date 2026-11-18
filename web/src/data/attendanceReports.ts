@@ -124,6 +124,58 @@ export async function marksForMonth(classId: string, month: string) {
 }
 
 /**
+ * Every mark for one section between two dates.
+ *
+ * The same shape and the same index as marksForMonth — the section first, the
+ * date range second — so a year costs one query rather than one per student,
+ * which is what makes a figure per student affordable on a list of 78.
+ */
+export async function marksBetween(classId: string, from: string, to: string) {
+  const snap = await getDocs(query(
+    collection(school(), 'attendanceMarks'),
+    where('classId', '==', classId),
+    where('date', '>=', from),
+    where('date', '<=', to),
+  ));
+  return snap.docs.map((d) => d.data() as {
+    studentId: string; date: string; status: Status;
+  });
+}
+
+export type AttendanceTotal = {
+  present: number;     // P and L both count as present, as everywhere here
+  marked: number;
+  percent: number | null;
+};
+
+/**
+ * How much of what was marked each student was there for.
+ *
+ * Of the days MARKED, not of the working days: a week nobody took the register
+ * must not read as a week of truancy on a list the office acts on. A student
+ * with nothing marked has no percentage at all rather than a zero.
+ */
+export function attendanceTotals(
+  students: { studentId: string }[],
+  marks: { studentId: string; status: Status }[],
+): Map<string, AttendanceTotal> {
+  const out = new Map<string, AttendanceTotal>();
+  for (const s of students) out.set(s.studentId, { present: 0, marked: 0, percent: null });
+
+  for (const m of marks) {
+    const row = out.get(m.studentId);
+    if (!row) continue;                       // a mark for somebody not on this list
+    row.marked += 1;
+    if (m.status === 'P' || m.status === 'L') row.present += 1;
+  }
+
+  for (const row of out.values()) {
+    row.percent = row.marked ? Math.round((row.present / row.marked) * 1000) / 10 : null;
+  }
+  return out;
+}
+
+/**
  * One section's month.
  *
  * The percentage is of days MARKED, the same rule as everywhere else in this

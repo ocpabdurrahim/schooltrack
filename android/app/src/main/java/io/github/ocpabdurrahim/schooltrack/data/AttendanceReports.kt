@@ -255,6 +255,29 @@ class AttendanceReportsRepository(
             }
     }
 
+    /**
+     * Every mark for one section between two dates.
+     *
+     * The same shape and the same index as marksForMonth -- the section first,
+     * the date range second -- so a year costs one query rather than one per
+     * student. The twin of marksBetween() in web/src/data/attendanceReports.ts.
+     */
+    suspend fun marksBetween(classId: String, from: String, to: String): List<MonthMark> =
+        school().collection("attendanceMarks")
+            .whereEqualTo("classId", classId)
+            .whereGreaterThanOrEqualTo("date", from)
+            .whereLessThanOrEqualTo("date", to)
+            .get().await().documents.mapNotNull { d ->
+                val status = d.getString("status")?.let {
+                    runCatching { Status.valueOf(it) }.getOrNull()
+                } ?: return@mapNotNull null
+                MonthMark(
+                    studentId = d.getString("studentId") ?: return@mapNotNull null,
+                    date = d.getString("date") ?: return@mapNotNull null,
+                    status = status,
+                )
+            }
+
     suspend fun marksForMonth(classId: String, month: String): List<MonthMark> {
         val days = daysInMonth(month)
         return school().collection("attendanceMarks")
@@ -271,5 +294,46 @@ class AttendanceReportsRepository(
                     status = status,
                 )
             }
+    }
+}
+
+data class AttendanceTotal(
+    val present: Int,     // P and L both count as present, as everywhere here
+    val marked: Int,
+    val percent: Double?,
+)
+
+/**
+ * How much of what was marked each student was there for.
+ *
+ * Of the days MARKED, not of the working days: a week nobody took the register
+ * must not read as a week of truancy on a list the office acts on. A student
+ * with nothing marked has no percentage at all rather than a zero.
+ *
+ * The twin of attendanceTotals() in web/src/data/attendanceReports.ts.
+ */
+fun attendanceTotals(
+    studentIds: List<String>,
+    marks: List<Triple<String, String, Status>>,   // studentId, date, status
+): Map<String, AttendanceTotal> {
+    val present = mutableMapOf<String, Int>()
+    val marked = mutableMapOf<String, Int>()
+    for (id in studentIds) { present[id] = 0; marked[id] = 0 }
+
+    for ((studentId, _, status) in marks) {
+        if (studentId !in marked) continue        // a mark for somebody not on this list
+        marked[studentId] = marked.getValue(studentId) + 1
+        if (status == Status.P || status == Status.L) {
+            present[studentId] = present.getValue(studentId) + 1
+        }
+    }
+
+    return studentIds.associateWith { id ->
+        val n = marked.getValue(id)
+        AttendanceTotal(
+            present = present.getValue(id),
+            marked = n,
+            percent = if (n == 0) null else Math.round(present.getValue(id) * 1000.0 / n) / 10.0,
+        )
     }
 }
