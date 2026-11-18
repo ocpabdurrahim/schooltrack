@@ -147,6 +147,7 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     studentId = editStudent,
                     onSaved = { id -> openStudent = id; replaceWith(Screen.Student) },
                     onBack = { back() },
+                    email = (current as? Access.Staff)?.email.orEmpty(),
                 )
 
                 screen == Screen.Collect && current is Access.Staff &&

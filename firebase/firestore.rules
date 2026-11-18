@@ -131,6 +131,27 @@ service cloud.firestore {
         allow write: if hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
       }
 
+      /**
+       * A student's photograph, kept apart from the record itself so that
+       * listing a section does not drag 78 pictures across with it.
+       *
+       * The size guard is the point of this block: a photo is a data URL in a
+       * document, and a document may not exceed 1 MiB. 200_000 characters of
+       * base64 is about 150 KB of JPEG -- above what the apps produce, below
+       * anything that could threaten the limit -- so a client with a bug, or
+       * someone poking at the API by hand, cannot wedge a record that then
+       * refuses to load.
+       */
+      match /studentPhotos/{studentId} {
+        allow read: if isStaff(s) || guardianSees(s, studentId);
+        allow write: if hasRole(s, ['ADMIN', 'OFFICE'])
+          && (request.method == 'delete' || (
+            request.resource.data.jpeg is string
+            && request.resource.data.jpeg.size() < 200000
+            && request.resource.data.jpeg.matches('^data:image/jpeg;base64,.*')
+          ));
+      }
+
       match /staff/{staffId} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
         allow write: if isAdmin(s) && stamped();

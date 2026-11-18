@@ -334,6 +334,58 @@ describe('role boundaries', () => {
     await assertFails(getDoc(doc(office(), p('payments', 'RCPT-000001'))));
   });
 
+  // ---- student photographs -------------------------------------------
+  //
+  // A photo is a data URL inside a document, so the rules carry a size guard
+  // as well as a role check: a document that grew past 1 MiB would refuse to
+  // load at all, and the record would be unreachable rather than merely ugly.
+
+  const photo = (bytes: number) =>
+    'data:image/jpeg;base64,' + 'A'.repeat(bytes);
+
+  it('the office may set a student photo', async () => {
+    await assertSucceeds(
+      setDoc(doc(office(), p('studentPhotos', '76')), {
+        jpeg: photo(1000), bytes: 750, updatedBy: 'office@school.test', updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('a TEACHER may read a photo but not change one', async () => {
+    await assertSucceeds(getDoc(doc(teacher(), p('studentPhotos', '76'))));
+    await assertFails(
+      setDoc(doc(teacher(), p('studentPhotos', '76')), {
+        jpeg: photo(1000), updatedBy: 'teacher@school.test', updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it("a parent reads their own child's photo and nobody else's", async () => {
+    await assertSucceeds(getDoc(doc(parent(), p('studentPhotos', '76'))));
+    await assertFails(getDoc(doc(parent(), p('studentPhotos', '77'))));
+  });
+
+  it('refuses a photo big enough to threaten the document limit', async () => {
+    await assertFails(
+      setDoc(doc(admin(), p('studentPhotos', '76')), {
+        jpeg: photo(200_001), updatedBy: 'admin@school.test', updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('refuses something that is not a JPEG data URL', async () => {
+    await assertFails(
+      setDoc(doc(admin(), p('studentPhotos', '76')), {
+        jpeg: 'https://example.test/photo.jpg',
+        updatedBy: 'admin@school.test', updatedAt: new Date(),
+      }),
+    );
+  });
+
+  it('lets the office take a photo off again', async () => {
+    await assertSucceeds(deleteDoc(doc(office(), p('studentPhotos', '76'))));
+  });
+
   it('a TEACHER cannot create a payment', async () => {
     await assertFails(
       setDoc(doc(teacher(), p('payments', 'RCPT-000002')), {

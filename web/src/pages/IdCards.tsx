@@ -4,6 +4,7 @@ import { type SchoolSettings, getSettings } from '../data/admin';
 import { type SchoolClass, listClasses } from '../data/attendance';
 import { cardCode } from '../data/documents';
 import { PER_SHEET, chunk, mirrored } from '../data/idcards';
+import { getStudentPhotos } from '../data/photos';
 import { type StudentDetail, findStudents } from '../data/people';
 
 /**
@@ -30,6 +31,7 @@ export default function IdCards() {
   const [classId, setClassId] = useState('');
   const [students, setStudents] = useState<StudentDetail[]>([]);
   const [codes, setCodes] = useState<Record<string, string>>({});
+  const [faces, setFaces] = useState<Record<string, string>>({});
   const [school, setSchool] = useState<SchoolSettings | null>(null);
   const [layout, setLayout] = useState<'sheets' | 'pairs'>('sheets');
   const [busy, setBusy] = useState(true);
@@ -61,6 +63,14 @@ export default function IdCards() {
           await QRCode.toDataURL(cardCode(s.studentId), { margin: 0, width: 360 }),
         ] as const));
         if (live) setCodes(Object.fromEntries(pairs));
+
+        // The photos come after the codes, and never hold the sheet up: a
+        // section half of whose children have had their picture taken should
+        // still print, with an empty box for the rest.
+        getStudentPhotos(roll.map((x) => x.studentId))
+          .then((got) => { if (live) setFaces(got); })
+          .catch(() => {});
+
         setProblem('');
       } catch {
         if (live) setProblem('Could not build the cards.');
@@ -88,7 +98,9 @@ export default function IdCards() {
         </div>
 
         <div className="idc-body">
-          <div className="idc-photo">PHOTO</div>
+          {faces[s.studentId]
+            ? <img className="idc-photo" src={faces[s.studentId]} alt="" />
+            : <div className="idc-photo">PHOTO</div>}
           <div className="idc-name">{s.fullName}</div>
           <div className="idc-role">{s.className} - {s.section}</div>
 
@@ -179,7 +191,8 @@ export default function IdCards() {
           {' '}Keep the printer at A4 and <strong>100% scale</strong> — "fit to page" shrinks
           the cards and they stop fitting a lanyard holder.
           {' '}The QR carries <code>SMS-STU-&lt;student number&gt;</code>, exactly what the gate
-          scanner reads. The photo box is left empty to be filled in before lamination.
+          scanner reads. A student with a photo on their record gets it printed; the rest get an
+          empty box to fill in before lamination.
         </p>
         {problem && <div className="err">{problem}</div>}
       </div>

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,9 +48,11 @@ import io.github.ocpabdurrahim.schooltrack.data.DocumentsRepository
 import io.github.ocpabdurrahim.schooltrack.data.FeesRepository
 import io.github.ocpabdurrahim.schooltrack.data.IssuedDocument
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.PhotosRepository
 import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.cardCode
+import io.github.ocpabdurrahim.schooltrack.data.decodePhoto
 import io.github.ocpabdurrahim.schooltrack.data.qrBitmap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -341,13 +345,16 @@ fun IdCardScreen(
     onBack: () -> Unit,
     people: PeopleRepository = remember { PeopleRepository() },
     admin: AdminRepository = remember { AdminRepository() },
+    photos: PhotosRepository = remember { PhotosRepository() },
 ) {
     var student by remember { mutableStateOf<StudentDetail?>(null) }
     var school by remember { mutableStateOf<SchoolSettings?>(null) }
+    var face by remember { mutableStateOf<String?>(null) }
     var problem by remember { mutableStateOf("") }
 
     LaunchedEffect(studentId) {
         school = admin.getSettings()
+        face = runCatching { photos.get(studentId) }.getOrNull()
         student = try {
             people.getStudent(studentId)
         } catch (_: Exception) {
@@ -367,7 +374,7 @@ fun IdCardScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                IdCardFront(s, school)
+                IdCardFront(s, school, face)
                 IdCardBack(s, school, code, bitmap?.asImageBitmap())
             }
 
@@ -428,7 +435,7 @@ private fun CardRow(label: String, value: String) {
 }
 
 @Composable
-private fun IdCardFront(s: StudentDetail, school: SchoolSettings?) {
+private fun IdCardFront(s: StudentDetail, school: SchoolSettings?, face: String?) {
     CardFace {
         Column(
             Modifier
@@ -462,10 +469,22 @@ private fun IdCardFront(s: StudentDetail, school: SchoolSettings?) {
             Box(
                 Modifier
                     .size(width = 76.dp, height = 90.dp)
+                    .clip(RoundedCornerShape(5.dp))
                     .border(1.dp, CARD_HAIR, RoundedCornerShape(5.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("PHOTO", fontSize = 8.sp, letterSpacing = 1.6.sp, color = CARD_FAINT)
+                val shown = remember(face) { face?.let { decodePhoto(it) } }
+                if (shown != null) {
+                    Image(
+                        bitmap = shown.asImageBitmap(),
+                        contentDescription = null,
+                        // cropped to fill the box rather than squashed into it
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text("PHOTO", fontSize = 8.sp, letterSpacing = 1.6.sp, color = CARD_FAINT)
+                }
             }
 
             Text(

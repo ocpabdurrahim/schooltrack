@@ -1,9 +1,12 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../auth';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { groupOptions, normalGroup } from '../data/groups';
 import { normalReligion, religionOptions } from '../data/religions';
 import { getStudent } from '../data/people';
+import { fileToCardPhoto } from '../data/photoFile';
+import { deleteStudentPhoto, getStudentPhoto, saveStudentPhoto } from '../data/photos';
 
 type Form = {
   fullName: string;
@@ -31,10 +34,19 @@ export default function StudentEdit() {
   const navigate = useNavigate();
   const isNew = !studentId;
 
+  const { access } = useAuth();
   const [form, setForm] = useState<Form>(blank);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState('');
+
+  // The photo is held here until the record is saved, so that backing out of
+  // a half-finished form leaves nothing behind -- and so that a NEW student
+  // gets their picture written under the number the save hands back.
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoChanged, setPhotoChanged] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const pick = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -51,6 +63,7 @@ export default function StudentEdit() {
           const s = await getStudent(studentId);
           if (!live) return;
           if (!s) { setProblem('No student with that number.'); return; }
+          getStudentPhoto(studentId).then((j) => { if (live) setPhoto(j); }).catch(() => {});
           setForm({
             fullName: s.fullName ?? '',
             rollNo: s.rollNo ?? 0,
@@ -89,6 +102,22 @@ export default function StudentEdit() {
       setForm({ ...form, [k]: e.target.value }),
   });
 
+  async function choose(file: File | undefined) {
+    if (!file) return;
+    setPhotoBusy(true);
+    setProblem('');
+    try {
+      setPhoto(await fileToCardPhoto(file));
+      setPhotoChanged(true);
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : 'That photo could not be read.');
+    } finally {
+      setPhotoBusy(false);
+      // so that picking the SAME file again after a failure still fires
+      if (pick.current) pick.current.value = '';
+    }
+  }
+
   async function save() {
     if (!form.fullName.trim()) { setProblem('A student needs a name.'); return; }
     if (!form.classId) { setProblem('Pick a section. If there are none, add one first.'); return; }
@@ -97,6 +126,15 @@ export default function StudentEdit() {
     setProblem('');
     try {
       const id = await saveStudent({ ...form, studentId, className: '', section: '' }, classes);
+
+      // After the record, never before: a new student has no number to file a
+      // photo under until the save has handed one back.
+      if (photoChanged) {
+        const who = access.kind === 'staff' ? access.email : '';
+        if (photo) await saveStudentPhoto(id, photo, who);
+        else await deleteStudentPhoto(id);
+      }
+
       navigate(`/students/${id}`);
     } catch {
       setProblem(
@@ -116,7 +154,38 @@ export default function StudentEdit() {
             : `Card code SMS-STU-${studentId}`}
         </h2>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div>
+            <label htmlFor="photo">Photo</label>
+            <div style={{
+              width: 92, height: 115, borderRadius: 8,
+              border: '1px dashed var(--line)', overflow: 'hidden',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--muted)', fontSize: 12, background: 'var(--bg-soft, transparent)',
+            }}>
+              {photo
+                ? <img src={photo} alt="" style={{
+                    width: '100%', height: '100%', objectFit: 'cover',
+                  }} />
+                : <span>{photoBusy ? '…' : 'none'}</span>}
+            </div>
+            <input ref={pick} id="photo" type="file" accept="image/*"
+                   style={{ display: 'none' }}
+                   onChange={(e) => choose(e.target.files?.[0])} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 13 }}>
+              <button type="button" className="link" onClick={() => pick.current?.click()}
+                      disabled={photoBusy}>
+                {photo ? 'change' : 'choose'}
+              </button>
+              {photo && (
+                <button type="button" className="link"
+                        onClick={() => { setPhoto(null); setPhotoChanged(true); }}>
+                  remove
+                </button>
+              )}
+            </div>
+          </div>
+
           <div style={{ flex: '3 1 260px' }}>
             <label htmlFor="fn">Full name</label>
             <input id="fn" {...text('fullName')} />
@@ -129,6 +198,13 @@ export default function StudentEdit() {
                    onChange={(e) => setForm({ ...form, rollNo: Number(e.target.value) })} />
           </div>
         </div>
+
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '2px 0 10px' }}>
+          The photo goes on the ID card, and is shrunk to card size as it is picked —
+          pick the original from the camera, there is no need to resize it first. It is
+          kept with the record, not in the student list, so it costs nothing to the pages
+          that do not show it.
+        </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '2 1 200px' }}>

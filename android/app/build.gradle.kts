@@ -116,6 +116,9 @@ dependencies {
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.zxing.core)
 
+    // student photos: EXIF, so a portrait taken on a phone is not stored lying down
+    implementation(libs.androidx.exifinterface)
+
     // the offline queue: a scan at the gate must survive no signal
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
