@@ -125,6 +125,8 @@ fun subjectMarkFor(s: Subject, got: ResultRow?): SubjectMark = SubjectMark(
     components = s.components,
     parts = got?.parts.orEmpty(),
     combineGroup = s.combineGroup,
+    groupNames = s.groupNames,
+    religions = s.religions,
 )
 
 fun subjectsForClass(subjects: List<Subject>, className: String) =

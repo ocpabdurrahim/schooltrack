@@ -66,6 +66,8 @@ import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.GROUPS
 import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
 import io.github.ocpabdurrahim.schooltrack.data.asSitter
+import io.github.ocpabdurrahim.schooltrack.data.shortName
+import io.github.ocpabdurrahim.schooltrack.data.slot
 import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
@@ -960,20 +962,25 @@ fun ResultsScreen(
                             Text(r.student.fullName, style = MaterialTheme.typography.bodyMedium)
 
                             if (view == "tabulation") {
+                                // Each student's OWN subjects, named short: a
+                                // Science row and a Humanities row sit under
+                                // the same headings, so the cell has to say
+                                // which paper it holds. Nothing is skipped and
+                                // nothing is a dot, because the row is built
+                                // from what this student sits.
+                                val mine = slot(r.tabulation)
+                                val cells = mine.common +
+                                    listOfNotNull(mine.religion) +
+                                    mine.group +
+                                    listOfNotNull(mine.optional)
                                 Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                    columns.forEach { c ->
-                                        val s = r.tabulation.subjects
-                                            .firstOrNull { it.mark.subjectId == c.subjectId }
+                                    cells.forEach { s ->
                                         Text(
-                                            c.subjectName.take(4) + " " +
+                                            shortName(s.mark.subjectName) + " " +
                                                 when {
-                                                    // No entry at all means the student does
-                                                    // not sit this paper — a Humanities row
-                                                    // under Physics. "·" says "not theirs";
                                                     // "—" says "theirs, still missing";
-                                                    // "(50)" says half of a combined subject
-                                                    // is in, which is neither of those.
-                                                    s == null -> "·"
+                                                    // "(50)" says half of a combined
+                                                    // subject is in, which is not the same.
                                                     s.mark.absent -> "abs"
                                                     s.mark.marks == null ->
                                                         enteredSoFar(s.mark)
@@ -983,7 +990,7 @@ fun ResultsScreen(
                                                         " " + s.grade.letter
                                                 } + "   ",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = if (s?.grade?.letter == "F")
+                                            color = if (s.grade.letter == "F")
                                                 MaterialTheme.colorScheme.error
                                             else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )

@@ -18,7 +18,9 @@ import {
   sheetColumns,
   totalMarks,
 } from '../data/exams';
-import { enteredSoFar, gpaText } from '../data/grading';
+import { type SubjectGrade, type SubjectMark, enteredSoFar, gpaText } from '../data/grading';
+import { shortName, shortNames } from '../data/shortnames';
+import { layout, slot } from '../data/tabsheet';
 import { findStudents } from '../data/people';
 
 type View = 'tabulation' | 'sheet';
@@ -35,6 +37,39 @@ type View = 'tabulation' | 'sheet';
  *
  * Neither stores anything. Correct a mark and both correct themselves.
  */
+/**
+ * One mark on the tabulation sheet.
+ *
+ * `named` is for the slot columns — REL, Grp 1, 4th — where the heading cannot
+ * say which subject the cell holds because it is a different one on every row.
+ *
+ * Four things look alike here and must not: a mark, a mark not entered yet, a
+ * subject half entered (the two Bangla papers are one subject out of 200), and
+ * a paper this student does not sit at all.
+ */
+function Mark({ cell, named = false }: { cell?: SubjectMark & SubjectGrade; named?: boolean }) {
+  if (!cell) {
+    return (
+      <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--line)' }}>·</td>
+    );
+  }
+  const sofar = cell.marks === null && !cell.absent ? enteredSoFar(cell) : null;
+  return (
+    <td style={{
+      padding: '5px 4px', textAlign: 'center',
+      color: cell.letter === 'F' ? 'var(--bad)' : sofar !== null ? 'var(--muted)' : undefined,
+    }}>
+      {cell.absent ? 'abs' : cell.marks ?? (sofar !== null ? `(${sofar})` : '—')}
+      {named && (
+        <span style={{ color: 'var(--muted)', fontSize: 11 }}> {shortName(cell.subjectName)}</span>
+      )}
+      {!named && !cell.absent && cell.marks !== null && (
+        <span style={{ color: 'var(--muted)' }}> {cell.letter}</span>
+      )}
+    </td>
+  );
+}
+
 export default function Results() {
   const { access } = useAuth();
   const admin = access.kind === 'staff' && access.role === 'ADMIN';
@@ -86,6 +121,11 @@ export default function Results() {
 
   const className = rows[0]?.student.className ?? '';
   const columns = className ? sheetColumns(subjects, className) : [];
+  // The sheet's shape comes from the students actually on it: as many group
+  // columns as the widest of them needs, and none at all for a class that has
+  // not been streamed.
+  const shape = layout(rows.map((r) => r.tabulation));
+  const commonShort = shortNames(shape.common.map((c) => c.subjectName));
   const complete = rows.filter((r) => !r.tabulation.incomplete).length;
   const passed = rows.filter((r) => (r.tabulation.gpa ?? 0) > 0).length;
   const stats = subjectStats(rows, columns);
@@ -209,14 +249,22 @@ export default function Results() {
                   <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '6px 4px' }}>Roll</th>
                     <th style={{ padding: '6px 4px' }}>Name</th>
-                    {columns.map((c) => (
+                    {shape.common.map((c, i) => (
                       <th key={c.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {c.subjectName.slice(0, 10)}{c.isOptional ? '*' : ''}
-                        <span style={{ display: 'block', fontWeight: 400, color: 'var(--muted)' }}>
-                          /{c.fullMarks}
-                        </span>
+                        {commonShort[i]}
                       </th>
                     ))}
+                    {shape.religion && (
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>REL</th>
+                    )}
+                    {Array.from({ length: shape.groupSlots }, (_, i) => (
+                      <th key={`grp${i}`} style={{ padding: '6px 4px', textAlign: 'center' }}>
+                        Grp {i + 1}
+                      </th>
+                    ))}
+                    {shape.optional && (
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>4th</th>
+                    )}
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>GPA</th>
                     <th style={{ padding: '6px 4px', textAlign: 'center' }}>Grade</th>
@@ -224,111 +272,101 @@ export default function Results() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.student.studentId} style={{ borderBottom: '1px solid var(--line)' }}>
-                      <td style={{ padding: '5px 4px' }}>{r.student.rollNo}</td>
-                      <td style={{ padding: '5px 4px' }}>
-                        <Link to={`/students/${r.student.studentId}`}>{r.student.fullName}</Link>
+                  {rows.map((r) => {
+                    const mine = slot(r.tabulation);
+                    return (
+                      <tr key={r.student.studentId} style={{ borderBottom: '1px solid var(--line)' }}>
+                        <td style={{ padding: '5px 4px' }}>{r.student.rollNo}</td>
+                        <td style={{ padding: '5px 4px' }}>
+                          <Link to={`/students/${r.student.studentId}`}>{r.student.fullName}</Link>
+                        </td>
+
+                        {/* The subjects everybody sits, so the heading says which. */}
+                        {shape.common.map((c) => (
+                          <Mark
+                            key={c.subjectId}
+                            cell={mine.common.find((x) => x.subjectId === c.subjectId)}
+                          />
+                        ))}
+
+                        {/* A slot holds whichever paper THIS student sits, so the
+                            cell has to say which one it is. */}
+                        {shape.religion && <Mark cell={mine.religion ?? undefined} named />}
+                        {Array.from({ length: shape.groupSlots }, (_, i) => (
+                          <Mark key={`grp${i}`} cell={mine.group[i]} named />
+                        ))}
+                        {shape.optional && <Mark cell={mine.optional ?? undefined} named />}
+
+                        <td style={{ padding: '5px 4px', textAlign: 'right' }}>
+                          {totalMarks(r.tabulation) ?? '—'}
+                        </td>
+                        <td style={{ padding: '5px 4px', textAlign: 'right', fontWeight: 700 }}>
+                          {gpaText(r.tabulation.gpa)}
+                        </td>
+                        <td style={{
+                          padding: '5px 4px', textAlign: 'center',
+                          color: r.tabulation.letter === 'F' ? 'var(--bad)' : undefined,
+                        }}>
+                          {r.tabulation.letter}
+                        </td>
+                        <td style={{ padding: '5px 4px', textAlign: 'right' }}>
+                          {r.position ?? '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
+                REL is the student&rsquo;s own religion paper, Grp 1 to {shape.groupSlots || 1} their
+                group subjects and 4th their optional one — each cell names the subject it
+                holds, because a Science row and a Humanities row sit side by side here.
+                A dash is a mark not entered; that student has no total, no GPA and no
+                position. A number in brackets, like (50), means part of that subject is in
+                and part is not — the two Bangla papers are one subject out of 200.
+              </p>
+
+              {/* Per-subject statistics, which cannot live in the columns any
+                  more: Grp 1 is Physics on one row and History on the next, and
+                  a highest mark across the two would mean nothing. */}
+              <h2 style={{ marginTop: 18 }}>By subject</h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
+                    <th style={{ padding: '5px 4px' }}>Subject</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Sat</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Highest</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Lowest</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Average</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Passed</th>
+                    <th style={{ padding: '5px 4px', textAlign: 'right' }}>Failed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.map((s) => (
+                    <tr key={s.subjectId} style={{ borderBottom: '1px solid var(--line-soft)' }}>
+                      <td style={{ padding: '4px' }}>{s.subjectName}</td>
+                      <td style={{ padding: '4px', textAlign: 'right' }}>
+                        {s.passed + s.failed}
                       </td>
-                      {columns.map((c) => {
-                        const s = r.tabulation.subjects.find((x) => x.subjectId === c.subjectId);
-                        // No entry at all means the student does not sit this
-                        // paper — a Humanities row under Physics. That is not
-                        // the same as a mark nobody has typed yet, and reading
-                        // it as one is how a whole group ends up looking
-                        // unfinished. A blank says "not theirs"; "—" says
-                        // "theirs, still missing".
-                        if (!s) {
-                          return (
-                            <td key={c.subjectId} style={{
-                              padding: '5px 4px', textAlign: 'center', color: 'var(--line)',
-                            }}>·</td>
-                          );
-                        }
-                        // A subject that is half in has no mark yet — Bangla
-                        // first and second paper are ONE subject out of 200 —
-                        // but it must not print the same dash as a subject
-                        // nobody has touched, or the teacher who just keyed in
-                        // one of the two papers thinks it went nowhere.
-                        const sofar = s.marks === null && !s.absent ? enteredSoFar(s) : null;
-                        return (
-                          <td key={c.subjectId} style={{
-                            padding: '5px 4px', textAlign: 'center',
-                            color: s.letter === 'F' ? 'var(--bad)'
-                              : sofar !== null ? 'var(--muted)' : undefined,
-                          }}>
-                            {s.absent ? 'abs' : s.marks ?? (sofar !== null ? `(${sofar})` : '—')}
-                            {!s.absent && s.marks !== null && (
-                              <span style={{ color: 'var(--muted)' }}> {s.letter}</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td style={{ padding: '5px 4px', textAlign: 'right' }}>
-                        {totalMarks(r.tabulation) ?? '—'}
-                      </td>
-                      <td style={{ padding: '5px 4px', textAlign: 'right', fontWeight: 700 }}>
-                        {gpaText(r.tabulation.gpa)}
-                      </td>
+                      <td style={{ padding: '4px', textAlign: 'right' }}>{s.highest ?? '—'}</td>
+                      <td style={{ padding: '4px', textAlign: 'right' }}>{s.lowest ?? '—'}</td>
+                      <td style={{ padding: '4px', textAlign: 'right' }}>{s.average ?? '—'}</td>
+                      <td style={{ padding: '4px', textAlign: 'right' }}>{s.passed}</td>
                       <td style={{
-                        padding: '5px 4px', textAlign: 'center',
-                        color: r.tabulation.letter === 'F' ? 'var(--bad)' : undefined,
+                        padding: '4px', textAlign: 'right',
+                        color: s.failed ? 'var(--bad)' : undefined,
                       }}>
-                        {r.tabulation.letter}
-                      </td>
-                      <td style={{ padding: '5px 4px', textAlign: 'right' }}>
-                        {r.position ?? '—'}
+                        {s.failed}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid var(--line)', color: 'var(--muted)' }}>
-                    <td colSpan={2} style={{ padding: '6px 4px' }}>Highest</td>
-                    {stats.map((s) => (
-                      <td key={s.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {s.highest ?? '—'}
-                      </td>
-                    ))}
-                    <td colSpan={4} />
-                  </tr>
-                  <tr style={{ color: 'var(--muted)' }}>
-                    <td colSpan={2} style={{ padding: '2px 4px' }}>Lowest</td>
-                    {stats.map((s) => (
-                      <td key={s.subjectId} style={{ padding: '2px 4px', textAlign: 'center' }}>
-                        {s.lowest ?? '—'}
-                      </td>
-                    ))}
-                    <td colSpan={4} />
-                  </tr>
-                  <tr style={{ color: 'var(--muted)' }}>
-                    <td colSpan={2} style={{ padding: '2px 4px' }}>Average</td>
-                    {stats.map((s) => (
-                      <td key={s.subjectId} style={{ padding: '2px 4px', textAlign: 'center' }}>
-                        {s.average ?? '—'}
-                      </td>
-                    ))}
-                    <td colSpan={4} />
-                  </tr>
-                  <tr style={{ color: 'var(--muted)' }}>
-                    <td colSpan={2} style={{ padding: '2px 4px' }}>Failed</td>
-                    {stats.map((s) => (
-                      <td key={s.subjectId} style={{ padding: '2px 4px', textAlign: 'center' }}>
-                        {s.failed}
-                      </td>
-                    ))}
-                    <td colSpan={4} />
-                  </tr>
-                </tfoot>
               </table>
-              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
-                * optional subject — it adds to the total, and to the GPA only above 2.00.
-                A dash is a mark not entered; that student has no total, no GPA and no
-                position. A number in brackets, like (50), means part of that subject is
-                in and part is not — the two Bangla papers are one subject out of 200, so
-                it has no mark of its own until both are entered. A dot is a paper that
-                student does not sit. Statistics ignore a mark that has not been entered,
-                and count an absence as a fail.
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8 }}>
+                Only the students who sit a subject are counted in its row. A mark not
+                entered is ignored; an absence counts as a fail.
               </p>
             </div>
           )}

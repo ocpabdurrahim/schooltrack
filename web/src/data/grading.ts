@@ -63,6 +63,14 @@ export type SubjectMark = {
   components?: Component[];  // how this paper is marked, if in parts
   parts?: Parts;             // what was entered for those components
   combineGroup?: string | null; // papers sharing one group are graded as one
+  /**
+   * Which streams and religions sit this paper, carried through from the
+   * subject so that a GRADED UNIT can still be told apart on a sheet. By the
+   * time Bangla first and second paper are one unit there is no subject left
+   * to look the answer up in.
+   */
+  groupNames?: string[];
+  religions?: string[];
 };
 
 /** True once at least one component of this subject has a mark on it. */
@@ -221,6 +229,10 @@ function mergeUnit(group: string, papers: SubjectMark[]): SubjectMark {
   return {
     subjectId: `UNIT_${group}`,
     subjectName: unitName(papers.map((p) => p.subjectName), group),
+    // Papers graded together are the same subject, so they stand or fall on
+    // the same stream: the first paper's answer is the unit's.
+    groupNames: papers[0]?.groupNames ?? [],
+    religions: papers[0]?.religions ?? [],
     fullMarks: papers.reduce((t, p) => t + p.fullMarks, 0),
     marks,
     absent: papers.some((p) => p.absent),

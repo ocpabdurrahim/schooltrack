@@ -294,6 +294,8 @@ export function subjectMarkFor(s: Subject, got?: ResultRow | null): SubjectMark 
     components: s.components?.length ? s.components : undefined,
     parts: got?.parts ?? undefined,
     combineGroup: s.combineGroup ?? null,
+    groupNames: s.groupNames ?? [],
+    religions: s.religions ?? [],
   };
 }
 

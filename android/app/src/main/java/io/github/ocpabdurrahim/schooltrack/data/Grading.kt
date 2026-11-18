@@ -63,6 +63,14 @@ data class SubjectMark(
     val components: List<Component> = emptyList(),
     val parts: Map<String, Double?> = emptyMap(),
     val combineGroup: String? = null,
+    /**
+     * Which streams and religions sit this paper, carried through from the
+     * subject so that a GRADED UNIT can still be told apart on a sheet. By the
+     * time Bangla first and second paper are one unit there is no subject left
+     * to look the answer up in.
+     */
+    val groupNames: List<String> = emptyList(),
+    val religions: List<String> = emptyList(),
 )
 
 /** True once at least one component of this subject has a mark on it. */
@@ -220,6 +228,10 @@ private fun mergeUnit(group: String, papers: List<SubjectMark>): SubjectMark {
     return SubjectMark(
         subjectId = "UNIT_$group",
         subjectName = unitName(papers.map { it.subjectName }, group),
+        // Papers graded together are the same subject, so they stand or fall
+        // on the same stream: the first paper's answer is the unit's.
+        groupNames = papers.firstOrNull()?.groupNames.orEmpty(),
+        religions = papers.firstOrNull()?.religions.orEmpty(),
         fullMarks = papers.sumOf { it.fullMarks },
         marks = merged,
         absent = papers.any { it.absent },
