@@ -26,6 +26,7 @@ import {
   type SubjectMark,
   type Tabulation,
   combineUnits,
+  marksTotal,
   tabulate,
 } from './grading';
 import { normalGroup } from './groups';
@@ -437,18 +438,18 @@ export async function getExam(examId: string): Promise<Exam | null> {
 // together.
 
 /**
- * The total of every subject sat, INCLUDING the optional one.
+ * The total of every subject sat, INCLUDING an optional one that was marked.
  *
  * The optional subject counts towards the total even though it only partly
  * counts towards the GPA — that is how a tabulation sheet has always been
  * read, and a total that silently dropped a subject the student sat would be
  * queried by the first teacher to add up the row by hand.
  *
- * Null while any mark is missing: a part-total is worse than no total.
+ * Withheld only while a COMPULSORY mark is missing, which is the same test the
+ * GPA uses: see marksTotal().
  */
 export function totalMarks(t: Tabulation): number | null {
-  if (t.subjects.some((s) => s.marks === null && !s.absent)) return null;
-  return t.subjects.reduce((sum, s) => sum + (s.absent ? 0 : s.marks ?? 0), 0);
+  return marksTotal(t.subjects).obtained;
 }
 
 /**
@@ -489,8 +490,7 @@ export function resultLines(
       (a.exam.sortOrder ?? 0) - (b.exam.sortOrder ?? 0) ||
       a.exam.examId.localeCompare(b.exam.examId))
     .map(({ exam, tabulation }) => {
-      const outOf = tabulation.subjects.reduce((t, s) => t + s.fullMarks, 0);
-      const obtained = totalMarks(tabulation);
+      const { obtained, outOf } = marksTotal(tabulation.subjects);
       return {
         examId: exam.examId,
         examName: exam.examName,

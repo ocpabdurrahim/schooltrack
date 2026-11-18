@@ -31,6 +31,7 @@ import {
   combineUnits,
   enteredSoFar,
   gradeForSubject,
+  marksTotal,
 } from './grading';
 
 /** One paper, with what was entered for each of its parts. */
@@ -139,12 +140,10 @@ export function markSheet(
   });
 }
 
-/** What the foot of the sheet adds up — the marks, not the GPA. */
-export function sheetTotal(lines: UnitLine[]): { obtained: number | null; outOf: number } {
-  const outOf = lines.reduce((t, u) => t + u.fullMarks, 0);
-  const missing = lines.some((u) => u.marks === null && !u.absent);
-  return {
-    obtained: missing ? null : lines.reduce((t, u) => t + (u.absent ? 0 : u.marks ?? 0), 0),
-    outOf,
-  };
-}
+/**
+ * What the foot of the sheet adds up — the marks, not the GPA.
+ *
+ * The same marksTotal() the result sheet and the progress report use, so the
+ * three can never disagree about what a student scored.
+ */
+export const sheetTotal = (lines: UnitLine[]) => marksTotal(lines);

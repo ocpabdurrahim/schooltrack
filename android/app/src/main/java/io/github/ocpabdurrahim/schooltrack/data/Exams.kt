@@ -435,12 +435,10 @@ fun sheetFor(
  *
  * The optional subject counts towards the total even though it only partly
  * counts towards the GPA — that is how a tabulation sheet has always been
- * read. Null while any mark is missing: a part-total is worse than none.
+ * read. Withheld only while a COMPULSORY mark is missing, which is the same
+ * test the GPA uses: see marksTotal().
  */
-fun totalMarks(t: Tabulation): Double? {
-    if (t.subjects.any { it.mark.marks == null && !it.mark.absent }) return null
-    return t.subjects.sumOf { if (it.mark.absent) 0.0 else (it.mark.marks ?: 0.0) }
-}
+fun totalMarks(t: Tabulation): Double? = marksTotal(t.subjects.map { it.mark }).first
 
 /**
  * One line per exam: earliest YEAR first, then by exam id. The twin of
@@ -476,8 +474,7 @@ fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
     results
         .sortedWith(compareBy({ it.first.examYear }, { it.first.sortOrder }, { it.first.examId }))
         .map { (exam, tabulation) ->
-            val outOf = tabulation.subjects.sumOf { it.mark.fullMarks }
-            val obtained = totalMarks(tabulation)
+            val (obtained, outOf) = marksTotal(tabulation.subjects.map { it.mark })
             ResultLine(
                 examId = exam.examId,
                 examName = exam.examName,

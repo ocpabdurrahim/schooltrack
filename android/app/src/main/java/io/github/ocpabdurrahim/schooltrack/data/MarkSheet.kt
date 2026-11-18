@@ -116,10 +116,21 @@ fun markSheet(subjects: List<Subject>, who: Sitter, marks: List<ResultRow>): Lis
     }
 }
 
-/** What the foot of the sheet adds up — the marks, not the GPA. */
-fun sheetTotal(lines: List<UnitLine>): Pair<Double?, Double> {
-    val outOf = lines.sumOf { it.fullMarks }
-    val missing = lines.any { it.marks == null && !it.absent }
-    val obtained = if (missing) null else lines.sumOf { if (it.absent) 0.0 else it.marks ?: 0.0 }
-    return obtained to outOf
-}
+/**
+ * What the foot of the sheet adds up — the marks, not the GPA.
+ *
+ * The same marksTotal() the result sheet and the progress report use, so the
+ * three can never disagree about what a student scored.
+ */
+fun sheetTotal(lines: List<UnitLine>): Pair<Double?, Double> = marksTotal(
+    lines.map {
+        SubjectMark(
+            subjectId = it.unitId,
+            subjectName = it.unitName,
+            fullMarks = it.fullMarks,
+            marks = it.marks,
+            absent = it.absent,
+            isOptional = it.isOptional,
+        )
+    },
+)

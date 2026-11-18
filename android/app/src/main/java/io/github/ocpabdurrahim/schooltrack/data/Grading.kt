@@ -274,6 +274,30 @@ fun tabulate(marks: List<SubjectMark>): Tabulation {
     return Tabulation(rounded, letterForGpa(rounded), emptyList(), false, subjects)
 }
 
+/**
+ * What a result adds up to, and what it is out of.
+ *
+ * ONE rule for every sheet, because the alternative was shipped and found: the
+ * GPA treats a result as finished once every COMPULSORY subject is marked —
+ * a student takes one 4th subject, not every optional one the class offers —
+ * while the total demanded all of them and printed a dash. A sheet showed
+ * "GPA 4.33" beside "Total —", which reads as a bug in the arithmetic.
+ *
+ * So the total is withheld on exactly the same test as the GPA, and an
+ * optional subject with no mark is left out of BOTH sides: counting its full
+ * marks against a student who never sat it would read as a zero.
+ */
+fun marksTotal(subjects: List<SubjectMark>): Pair<Double?, Double> {
+    val counted = subjects.filter { !it.isOptional || it.marks != null || it.absent }
+    val missing = counted.any { !it.isOptional && it.marks == null && !it.absent }
+    val obtained = if (missing) {
+        null
+    } else {
+        counted.sumOf { if (it.absent) 0.0 else it.marks ?: 0.0 }
+    }
+    return obtained to counted.sumOf { it.fullMarks }
+}
+
 /** The overall letter, from the GPA rather than from any one subject. */
 fun letterForGpa(gpa: Double): String = when {
     gpa >= 5.0 -> "A+"

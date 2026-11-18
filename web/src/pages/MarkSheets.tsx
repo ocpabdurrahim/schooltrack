@@ -222,12 +222,21 @@ function Sheet({
           <tbody>
             {lines.map((u) => {
               const split = shape === 'detailed' && u.papers.length > 1;
+              // An optional subject with no mark is one the student did not
+              // take — nobody sits two 4th subjects. It stays on the sheet
+              // because the class offers it, but it counts towards neither the
+              // marks nor what they are out of, and the row has to say so or
+              // the Out of column will not add up for whoever checks it.
+              const notSat = u.isOptional && u.marks === null && !u.absent;
               return (
                 <Fragment key={u.unitId}>
                   {shape === 'detailed' && u.papers.map((p) => (
                     <tr key={p.subjectId} style={{ borderBottom: '1px solid var(--line-soft)' }}>
-                      <td style={{ padding: '5px 4px', paddingLeft: split ? 14 : 4 }}>
-                        {p.subjectName}
+                      <td style={{
+                        padding: '5px 4px', paddingLeft: split ? 14 : 4,
+                        color: notSat ? 'var(--muted)' : undefined,
+                      }}>
+                        {p.subjectName}{notSat ? ' — 4th subject, not sat' : ''}
                       </td>
                       {columns.map((c) => (
                         <td key={c} style={{
@@ -242,7 +251,7 @@ function Sheet({
                         {mark(p.marks, p.absent)}
                       </td>
                       <td style={{ padding: '5px 4px', textAlign: 'right', color: 'var(--muted)' }}>
-                        {p.fullMarks}
+                        {notSat ? '—' : p.fullMarks}
                       </td>
                       {!split && (
                         <>
@@ -269,8 +278,9 @@ function Sheet({
                       borderBottom: '1px solid var(--line)',
                       fontWeight: split ? 600 : undefined,
                     }}>
-                      <td style={{ padding: '5px 4px' }}>
-                        {u.unitName}{u.isOptional ? ' (optional)' : ''}
+                      <td style={{ padding: '5px 4px', color: notSat ? 'var(--muted)' : undefined }}>
+                        {u.unitName}
+                        {notSat ? ' — 4th subject, not sat' : u.isOptional ? ' (optional)' : ''}
                       </td>
                       {columns.map((c) => <td key={c} />)}
                       <td style={{
@@ -283,7 +293,7 @@ function Sheet({
                             : u.soFar !== null ? `(${u.soFar})` : '—'}
                       </td>
                       <td style={{ padding: '5px 4px', textAlign: 'right', color: 'var(--muted)' }}>
-                        {u.fullMarks}
+                        {notSat ? '—' : u.fullMarks}
                       </td>
                       <td style={{ padding: '5px 4px', textAlign: 'right' }}>
                         {u.letter === '-' ? '—' : u.point.toFixed(2)}

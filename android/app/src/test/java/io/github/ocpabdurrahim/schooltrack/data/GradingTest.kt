@@ -1,6 +1,8 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -368,5 +370,65 @@ class GradingTest {
                 SubjectMark(subjectId = "REL", subjectName = "Religion", marks = null),
             ),
         )
+    }
+
+    // ----------------------------------------------------------------------
+    // the total, and the 4th subject
+    //
+    // From a real sheet: a Science student had every compulsory subject marked
+    // and Higher Maths (optional) marked 85, but Agriculture — the other
+    // optional one the class is offered — had no mark, because nobody sits
+    // two. The GPA printed 4.33 and the total printed a dash beside it.
+
+    private fun sub(
+        marks: Double?,
+        optional: Boolean = false,
+        absent: Boolean = false,
+    ) = SubjectMark(
+        subjectId = "S", subjectName = "S", fullMarks = 100.0,
+        marks = marks, isOptional = optional, absent = absent,
+    )
+
+    @Test
+    fun addsUpWhatWasMarked() {
+        val (obtained, outOf) = marksTotal(listOf(sub(70.0), sub(80.0), sub(90.0)))
+        assertEquals(240.0, obtained!!, 0.001)
+        assertEquals(300.0, outOf, 0.001)
+    }
+
+    @Test
+    fun withholdsTheTotalWhileACompulsoryMarkIsMissing() {
+        assertNull(marksTotal(listOf(sub(70.0), sub(null))).first)
+    }
+
+    @Test
+    fun doesNotWithholdItForAnOptionalSubjectNobodyMarked() {
+        val (obtained, outOf) =
+            marksTotal(listOf(sub(70.0), sub(80.0), sub(null, optional = true)))
+        assertEquals(150.0, obtained!!, 0.001)
+        assertEquals(200.0, outOf, 0.001)   // the unsat 4th subject counts on neither side
+    }
+
+    @Test
+    fun countsAnOptionalSubjectThatWasMarkedOnBothSides() {
+        val (obtained, outOf) =
+            marksTotal(listOf(sub(70.0), sub(80.0), sub(85.0, optional = true)))
+        assertEquals(235.0, obtained!!, 0.001)
+        assertEquals(300.0, outOf, 0.001)
+    }
+
+    @Test
+    fun countsAnAbsenceAsNothingScoredButStillOutOfItsMarks() {
+        val (obtained, outOf) = marksTotal(listOf(sub(70.0), sub(null, absent = true)))
+        assertEquals(70.0, obtained!!, 0.001)
+        assertEquals(200.0, outOf, 0.001)
+    }
+
+    @Test
+    fun agreesWithTheGpaAboutWhetherAResultIsFinished() {
+        // The bug in one line: these two must never disagree.
+        val subjects = listOf(sub(70.0), sub(80.0), sub(null, optional = true))
+        assertFalse(tabulate(subjects).incomplete)
+        assertNotNull(marksTotal(subjects).first)
     }
 }

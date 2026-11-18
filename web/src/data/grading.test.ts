@@ -9,7 +9,8 @@ import {
   subjectTotal,
   tabulate,
   unitName,
-  enteredSoFar,} from './grading';
+  enteredSoFar,
+  marksTotal,} from './grading';
 
 /**
  * The SAME cases exist in android/app/src/test/.../GradingTest.kt. If a case
@@ -302,5 +303,52 @@ describe('enteredSoFar', () => {
     expect(enteredSoFar({
       subjectId: 'REL', subjectName: 'Religion', fullMarks: 100, marks: null,
     })).toBeNull();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// the total, and the 4th subject
+//
+// From a real sheet: a Science student had every compulsory subject marked and
+// Higher Maths (optional) marked 85, but Agriculture — the other optional one
+// the class is offered — had no mark, because nobody sits two. The GPA printed
+// 4.33 and the total printed a dash beside it.
+
+describe('marksTotal', () => {
+  const sub = (marks: number | null, over: Partial<SubjectMark> = {}): SubjectMark => ({
+    subjectId: 'S', subjectName: 'S', fullMarks: 100, marks, ...over,
+  });
+
+  it('adds up what was marked', () => {
+    expect(marksTotal([sub(70), sub(80), sub(90)]))
+      .toEqual({ obtained: 240, outOf: 300 });
+  });
+
+  it('withholds the total while a COMPULSORY mark is missing', () => {
+    expect(marksTotal([sub(70), sub(null)]).obtained).toBeNull();
+  });
+
+  it('does NOT withhold it for an optional subject nobody marked', () => {
+    const got = marksTotal([sub(70), sub(80), sub(null, { isOptional: true })]);
+    expect(got.obtained).toBe(150);
+    expect(got.outOf).toBe(200);     // the unsat 4th subject is out of neither side
+  });
+
+  it('counts an optional subject that WAS marked, on both sides', () => {
+    expect(marksTotal([sub(70), sub(80), sub(85, { isOptional: true })]))
+      .toEqual({ obtained: 235, outOf: 300 });
+  });
+
+  it('counts an absence as nothing scored, but still out of its marks', () => {
+    expect(marksTotal([sub(70), sub(null, { absent: true })]))
+      .toEqual({ obtained: 70, outOf: 200 });
+  });
+
+  it('agrees with the GPA about whether a result is finished', () => {
+    // The bug in one line: these two must never disagree.
+    const subjects = [sub(70), sub(80), sub(null, { isOptional: true })];
+    expect(tabulate(subjects).incomplete).toBe(false);
+    expect(marksTotal(subjects).obtained).not.toBeNull();
   });
 });

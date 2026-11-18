@@ -212,19 +212,23 @@ describe('resultLines, the results a parent reads', () => {
     expect(line.percent).toBe(55);
   });
 
-  it('withholds the total when the OPTIONAL mark is missing, but keeps the GPA', () => {
-    // The GPA ignores a missing optional subject on purpose -- the 4th subject
-    // only ever helps -- but a total that silently leaves one subject out would
-    // be a different total from the one on the result sheet. So the grade is
-    // shown and the marks are not, which is also what totalMarks() has always
-    // done for the staff sheet.
+  it('still totals the marks when the OPTIONAL one was never sat', () => {
+    // This used to withhold the total, on the grounds that a total leaving one
+    // subject out would disagree with the result sheet's. The school found what
+    // that looked like on paper: "GPA 4.33" printed beside "Total --", which
+    // reads as broken arithmetic. A student sits ONE 4th subject, not every
+    // optional one their class is offered, so there was never a mark coming.
+    //
+    // The objection is answered a better way now: the result sheet, the mark
+    // sheets and this report all call marksTotal(), so they cannot disagree.
     const [line] = resultLines([
       { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }) },
     ]);
     expect(line.incomplete).toBe(false);
     expect(line.gpa).not.toBeNull();
-    expect(line.obtained).toBeNull();
-    expect(line.percent).toBeNull();
+    expect(line.obtained).toBe(210);    // 80 + 70 + 60, out of the three sat
+    expect(line.outOf).toBe(300);       // NOT 400: the unsat 4th subject is not counted
+    expect(line.percent).toBe(70);
   });
 
   it('carries whether the exam is published, which is what a parent may see', () => {

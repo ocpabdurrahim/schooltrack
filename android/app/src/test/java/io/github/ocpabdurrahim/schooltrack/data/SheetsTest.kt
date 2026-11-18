@@ -251,10 +251,16 @@ class SheetsTest {
     }
 
     @Test
-    fun `the total is withheld when the OPTIONAL mark is missing, but the GPA stays`() {
-        // The GPA ignores a missing optional subject on purpose — the 4th
-        // subject only ever helps — but a total that silently left one subject
-        // out would be a different total from the one on the result sheet.
+    fun `the marks still total when the OPTIONAL subject was never sat`() {
+        // This used to withhold the total, on the grounds that a total leaving
+        // one subject out would disagree with the result sheet's. The school
+        // found what that looked like on paper: "GPA 4.33" printed beside
+        // "Total —", which reads as broken arithmetic. A student sits ONE 4th
+        // subject, not every optional one their class is offered, so there was
+        // never a mark coming.
+        //
+        // The objection is answered a better way now: the result sheet, the
+        // mark sheets and this report all call marksTotal().
         val line = resultLines(
             listOf(
                 exam("e", "Exam", "2026") to
@@ -263,8 +269,9 @@ class SheetsTest {
         ).first()
         assertEquals(false, line.incomplete)
         assertEquals(true, line.gpa != null)
-        assertNull(line.obtained)
-        assertNull(line.percent)
+        assertEquals(210.0, line.obtained!!, 0.001)   // 80 + 70 + 60, out of the three sat
+        assertEquals(300.0, line.outOf, 0.001)        // NOT 400: the unsat 4th is not counted
+        assertEquals(70.0, line.percent!!, 0.001)
     }
 
     @Test
