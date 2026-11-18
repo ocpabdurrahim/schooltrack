@@ -52,6 +52,18 @@ data class Layout(
     /** The religion papers on this sheet, and the 4th subjects. Empty: none. */
     val religion: List<String>,
     val optional: List<String>,
+    /**
+     * Where the religion column goes: how many of the common columns come
+     * before it.
+     *
+     * It is not a column for the end of the sheet. Religion is the sixth
+     * subject of the school's order, after Mathematics and before ICT, and
+     * the sheet reads in that order like every other screen -- see
+     * SubjectOrder.kt. Only the group columns and the 4th subject are
+     * gathered at the right, because those are as many columns as the widest
+     * stream needs.
+     */
+    val religionAt: Int,
 )
 
 /**
@@ -73,8 +85,13 @@ fun layout(results: List<Tabulation>): Layout {
         if (name != null && name !in into) into.add(name)
     }
 
+    // Kept to be ranked, not to be shown: every religion paper sits in the one
+    // slot, so the first one found places the column for all of them.
+    var relCell: GradedSubject? = null
+
     for (t in results) {
         val s = slot(t)
+        if (relCell == null) relCell = s.religion
         for (c in s.common) {
             if (seen.add(c.mark.subjectId)) common.add(c.mark.subjectId to c.mark.subjectName)
         }
@@ -86,5 +103,14 @@ fun layout(results: List<Tabulation>): Layout {
         note(optional, s.optional?.mark?.subjectName)
     }
 
-    return Layout(common, groupSlots.map { it.toList() }, religion, optional)
+    // A common subject the order has never heard of counts as coming after the
+    // religion paper, which is where it sits everywhere else in the app.
+    val relRank = relCell?.let {
+        subjectRank(SubjectKey(it.mark.subjectId, it.mark.subjectName))
+    } ?: UNRANKED
+    val religionAt = common.count { (id, name) ->
+        subjectRank(SubjectKey(subjectId = id, subjectName = name)) < relRank
+    }
+
+    return Layout(common, groupSlots.map { it.toList() }, religion, optional, religionAt)
 }

@@ -138,7 +138,12 @@ export default function Results() {
   );
   /** A slot's heading: the subjects it holds, shortened and joined. */
   const slotHead = (names: string[]) => names.map((n) => short.get(n) ?? n).join('/');
-  const commonShort = shape.common.map((c) => short.get(c.subjectName) ?? c.subjectName);
+  // The religion column is not a column for the end of the sheet: it is the
+  // sixth subject of the school's order, so the common columns are split
+  // around it. See Layout.religionAt.
+  const commonBefore = shape.common.slice(0, shape.religionAt);
+  const commonAfter = shape.common.slice(shape.religionAt);
+  const commonShort = (c: { subjectName: string }) => short.get(c.subjectName) ?? c.subjectName;
   // The stream column earns its place only when the slots hold more than one
   // subject each — in an unstreamed class it would be an empty column.
   const streamed = shape.groupSlots.some((names) => names.length > 1);
@@ -266,9 +271,9 @@ export default function Results() {
                     <th style={{ padding: '6px 4px' }}>Roll</th>
                     <th style={{ padding: '6px 4px' }}>Name</th>
                     {streamed && <th style={{ padding: '6px 4px' }}>Grp</th>}
-                    {shape.common.map((c, i) => (
+                    {commonBefore.map((c) => (
                       <th key={c.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {commonShort[i]}
+                        {commonShort(c)}
                       </th>
                     ))}
                     {shape.religion.length > 0 && (
@@ -276,6 +281,11 @@ export default function Results() {
                         {slotHead(shape.religion)}
                       </th>
                     )}
+                    {commonAfter.map((c) => (
+                      <th key={c.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
+                        {commonShort(c)}
+                      </th>
+                    ))}
                     {shape.groupSlots.map((names, i) => (
                       <th key={`grp${i}`} style={{ padding: '6px 4px', textAlign: 'center' }}>
                         {slotHead(names)}
@@ -307,17 +317,24 @@ export default function Results() {
                           </td>
                         )}
 
-                        {/* The subjects everybody sits, so the heading says which. */}
-                        {shape.common.map((c) => (
+                        {/* The subjects everybody sits, so the heading says which.
+                            A slot holds whichever paper THIS student sits, so its
+                            cell has to say which one it is — and the religion slot
+                            keeps its place in the order, between the common
+                            subjects rather than after them. */}
+                        {commonBefore.map((c) => (
                           <Mark
                             key={c.subjectId}
                             cell={mine.common.find((x) => x.subjectId === c.subjectId)}
                           />
                         ))}
-
-                        {/* A slot holds whichever paper THIS student sits, so the
-                            cell has to say which one it is. */}
                         {shape.religion.length > 0 && <Mark cell={mine.religion ?? undefined} />}
+                        {commonAfter.map((c) => (
+                          <Mark
+                            key={c.subjectId}
+                            cell={mine.common.find((x) => x.subjectId === c.subjectId)}
+                          />
+                        ))}
                         {shape.groupSlots.map((_, i) => (
                           <Mark key={`grp${i}`} cell={mine.group[i]} />
                         ))}

@@ -134,6 +134,37 @@ class TabSheetTest {
     }
 
     @Test
+    fun putsTheReligionColumnAfterMathematicsAndBeforeIct() {
+        // Religion is the sixth subject of the school's order, not a column
+        // for the end of the sheet: the common columns are split around it.
+        val got = layout(
+            listOf(tabulationFor("Science", "Islam"), tabulationFor("Humanities", "Hindu")),
+        )
+        assertEquals(3, got.religionAt)
+        assertEquals(
+            listOf("BANGLA", "ENGLISH", "MATHEMATICS"),
+            got.common.take(got.religionAt).map { it.first },
+        )
+        assertEquals(listOf("ICT"), got.common.drop(got.religionAt).map { it.first })
+    }
+
+    @Test
+    fun putsTheReligionColumnAfterCommonSubjectsItDoesNotKnow() {
+        // An invented paper has no place in the order, so it keeps the place
+        // the school gave it -- before the religion column rather than
+        // swallowing it.
+        val odd = tabulate(
+            listOf(
+                subjectMarkFor(subject("MORAL_SCIENCE", 1), null),
+                subjectMarkFor(subject("ISLAM", 2, religions = listOf("Islam")), null),
+            ),
+        )
+        val got = layout(listOf(odd))
+        assertEquals(listOf("ISLAM"), got.religion)
+        assertEquals(0, got.religionAt)
+    }
+
+    @Test
     fun namesASubjectOnceHoweverManyStudentsSitIt() {
         val got = layout(
             listOf(tabulationFor("Science", "Islam"), tabulationFor("Science", "Islam")),

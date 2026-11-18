@@ -67,7 +67,6 @@ import io.github.ocpabdurrahim.schooltrack.data.GROUPS
 import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
 import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.shortName
-import io.github.ocpabdurrahim.schooltrack.data.slot
 import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
@@ -968,11 +967,14 @@ fun ResultsScreen(
                                 // which paper it holds. Nothing is skipped and
                                 // nothing is a dot, because the row is built
                                 // from what this student sits.
-                                val mine = slot(r.tabulation)
-                                val cells = mine.common +
-                                    listOfNotNull(mine.religion) +
-                                    mine.group +
-                                    listOfNotNull(mine.optional)
+                                // In the school's order, which is what
+                                // tabulation.subjects is already in -- see
+                                // SubjectOrder.kt. There is no need to sort
+                                // them into slots the way the printed sheet
+                                // does: that is for lining fixed columns up
+                                // across streams, and here every cell names
+                                // its own paper.
+                                val cells = r.tabulation.subjects
                                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                                     cells.forEach { s ->
                                         Text(

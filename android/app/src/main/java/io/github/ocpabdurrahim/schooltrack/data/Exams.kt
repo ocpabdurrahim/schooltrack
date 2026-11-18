@@ -31,9 +31,9 @@ data class Exam(
 )
 
 data class Subject(
-    val subjectId: String,
-    val subjectName: String,
-    val subjectCode: String? = null,
+    override val subjectId: String,
+    override val subjectName: String,
+    override val subjectCode: String? = null,
     val classNames: List<String> = emptyList(),
     val fullMarks: Double = 100.0,
     val isOptional: Boolean = false,
@@ -61,7 +61,7 @@ data class Subject(
      * neither for a student recorded as Other.
      */
     val religions: List<String> = emptyList(),
-)
+) : NamedSubject
 
 data class ResultRow(
     val examId: String,
@@ -259,8 +259,19 @@ class ExamsRepository(
     // subjects
 
     @Suppress("UNCHECKED_CAST")
-    suspend fun listSubjects(): List<Subject> =
-        school().collection("subjects").orderBy("sortOrder").get().await().documents.map {
+    /**
+     * Every subject the school has, in the school's own order.
+     *
+     * NOT ordered by sortOrder in the query, for two reasons. Firestore drops
+     * documents that lack the field it is ordering by, so one subject saved
+     * without a sortOrder would vanish from every screen rather than appear
+     * in the wrong place. And the order is sortSubjects()'s to decide -- see
+     * SubjectOrder.kt, which is where the order shown anywhere in the app
+     * comes from, because every screen reads its subjects through this one
+     * function.
+     */
+    suspend fun listSubjects(): List<Subject> = sortSubjects(
+        school().collection("subjects").get().await().documents.map {
             Subject(
                 subjectId = it.id,
                 subjectName = it.getString("subjectName").orEmpty(),
@@ -274,7 +285,8 @@ class ExamsRepository(
                 groupNames = (it.get("groupNames") as? List<String>).orEmpty(),
                 religions = (it.get("religions") as? List<String>).orEmpty(),
             )
-        }
+        },
+    )
 
     /** The components as Firestore hands them back: a list of plain maps. */
     @Suppress("UNCHECKED_CAST")

@@ -104,6 +104,28 @@ describe('layout', () => {
     expect(got.optional).toEqual(['HIGHER_MATHS', 'AGRICULTURE']);
   });
 
+  it('puts the religion column after Mathematics and before ICT', () => {
+    // Religion is the sixth subject of the school's order, not a column for
+    // the end of the sheet: the common columns are split around it.
+    const got = layout([tabulationFor('Science', 'Islam'), tabulationFor('Humanities', 'Hindu')]);
+    expect(got.religionAt).toBe(3);
+    expect(got.common.slice(0, got.religionAt).map((c) => c.subjectId))
+      .toEqual(['BANGLA', 'ENGLISH', 'MATHEMATICS']);
+    expect(got.common.slice(got.religionAt).map((c) => c.subjectId)).toEqual(['ICT']);
+  });
+
+  it('puts the religion column after common subjects it does not know', () => {
+    // An invented paper has no place in the order, so it keeps the place the
+    // school gave it — before the religion column rather than swallowing it.
+    const odd = tabulate([
+      subjectMarkFor(subject({ subjectId: 'MORAL_SCIENCE' }), null),
+      subjectMarkFor(subject({ subjectId: 'ISLAM', religions: ['Islam'], sortOrder: 2 }), null),
+    ]);
+    const got = layout([odd]);
+    expect(got.religion).toEqual(['ISLAM']);
+    expect(got.religionAt).toBe(0);
+  });
+
   it('names a subject once however many students sit it', () => {
     const got = layout([tabulationFor('Science', 'Islam'), tabulationFor('Science', 'Islam')]);
     expect(got.groupSlots[0]).toEqual(['PHYSICS']);

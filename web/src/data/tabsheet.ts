@@ -17,6 +17,7 @@
  */
 
 import type { SubjectGrade, SubjectMark, Tabulation } from './grading';
+import { UNRANKED, subjectRank } from './subjectorder';
 
 /** A graded unit as the tabulation holds it. */
 export type Cell = SubjectMark & SubjectGrade;
@@ -59,6 +60,17 @@ export type Layout = {
   /** The religion papers on this sheet, and the 4th subjects. Empty: none. */
   religion: string[];
   optional: string[];
+  /**
+   * Where the religion column goes: how many of the common columns come
+   * before it.
+   *
+   * It is not a column for the end of the sheet. Religion is the sixth
+   * subject of the school's order, after Mathematics and before ICT, and the
+   * sheet reads in that order like every other screen — see subjectorder.ts.
+   * Only the group columns and the 4th subject are gathered at the right,
+   * because those are as many columns as the widest stream needs.
+   */
+  religionAt: number;
 };
 
 /** Adds a name to a slot's list, keeping the order it was first seen in. */
@@ -79,9 +91,13 @@ export function layout(results: Tabulation[]): Layout {
   const groupSlots: string[][] = [];
   const religion: string[] = [];
   const optional: string[] = [];
+  // Kept to be ranked, not to be shown: every religion paper sits in the one
+  // slot, so the first one found places the column for all of them.
+  let relCell: Cell | null = null;
 
   for (const t of results) {
     const s = slot(t);
+    relCell = relCell ?? s.religion;
     for (const c of s.common) {
       if (seen.has(c.subjectId)) continue;
       seen.add(c.subjectId);
@@ -95,5 +111,10 @@ export function layout(results: Tabulation[]): Layout {
     note(optional, s.optional?.subjectName);
   }
 
-  return { common, groupSlots, religion, optional };
+  // A common subject the order has never heard of counts as coming after the
+  // religion paper, which is where it sits everywhere else in the app.
+  const relRank = relCell ? subjectRank(relCell) : UNRANKED;
+  const religionAt = common.filter((c) => subjectRank(c) < relRank).length;
+
+  return { common, groupSlots, religion, optional, religionAt };
 }

@@ -31,6 +31,7 @@ import {
 } from './grading';
 import { normalGroup } from './groups';
 import { normalReligion } from './religions';
+import { sortSubjects } from './subjectorder';
 import type { StudentDetail } from './people';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -165,15 +166,26 @@ export async function publishExam(examId: string, published: boolean) {
 export const subjectIdFor = (name: string) =>
   name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
+/**
+ * Every subject the school has, in the school's own order.
+ *
+ * NOT ordered by sortOrder in the query, for two reasons. Firestore drops
+ * documents that lack the field it is ordering by, so one subject saved
+ * without a sortOrder would vanish from every screen rather than appear in
+ * the wrong place. And the order is sortSubjects()'s to decide — see
+ * subjectorder.ts, which is where the order shown anywhere in the app comes
+ * from, because every screen reads its subjects through this one function.
+ */
 export async function listSubjects(): Promise<Subject[]> {
-  const snap = await getDocs(query(collection(school(), 'subjects'), orderBy('sortOrder')));
-  return snap.docs.map((d) => ({
+  const snap = await getDocs(query(collection(school(), 'subjects')));
+  return sortSubjects(snap.docs.map((d) => ({
     subjectId: d.id,
     ...(d.data() as Omit<Subject, 'subjectId'>),
+    sortOrder: (d.data().sortOrder as number) ?? 0,
     classNames: (d.data().classNames ?? []) as string[],
     groupNames: (d.data().groupNames ?? []) as string[],
     religions: (d.data().religions ?? []) as string[],
-  }));
+  })));
 }
 
 export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: string }) {
