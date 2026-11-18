@@ -30,9 +30,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceReportsRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
@@ -229,39 +232,46 @@ fun StudentsScreen(
 
                         val t = totals[s.studentId]
                         val d = owed[s.studentId]
-                        val bits = buildList {
+
+                        // Each piece is coloured on its OWN merit. Colouring
+                        // the whole line because money is owed paints 100%
+                        // attendance as an alarm, which is how this first
+                        // shipped: red has to mean one thing to be read at a
+                        // glance.
+                        val plain = MaterialTheme.colorScheme.onSurfaceVariant
+                        val chase = MaterialTheme.colorScheme.error
+                        val pieces = buildList<Pair<String, Boolean>> {
                             val pc = t?.percent
                             when {
                                 selected == null -> Unit
                                 t == null -> Unit
-                                pc == null -> add("register not taken")
+                                pc == null -> add("register not taken" to false)
                                 // The count as well as the percentage: nobody
                                 // should have to guess what it is a
                                 // percentage OF.
                                 else -> add(
                                     "present " + percent(pc) +
                                         " (" + t.present + " of " + t.marked +
-                                        (if (t.marked == 1) " day)" else " days)"),
+                                        (if (t.marked == 1) " day)" else " days)") to
+                                        (pc < 70),
                                 )
                             }
                             if (d != null) {
-                                add("paid " + money(d.paid))
-                                if (d.due > 0) add("due " + money(d.due))
+                                add("paid " + money(d.paid) to false)
+                                if (d.due > 0) add("due " + money(d.due) to true)
                             }
                         }
-                        if (bits.isNotEmpty()) {
-                            val thin = t?.percent?.let { it < 70 } ?: false
+                        if (pieces.isNotEmpty()) {
                             Text(
-                                bits.joinToString("  ·  "),
-                                style = MaterialTheme.typography.bodySmall,
-                                // Below 70%, or anything still owed, is what
-                                // the school chases -- so it is what is worth
-                                // seeing from across the room.
-                                color = if (thin || (d != null && d.due > 0)) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                buildAnnotatedString {
+                                    pieces.forEachIndexed { i, (text, chased) ->
+                                        if (i > 0) append("  ·  ")
+                                        withStyle(
+                                            SpanStyle(if (chased) chase else plain),
+                                        ) { append(text) }
+                                    }
                                 },
+                                style = MaterialTheme.typography.bodySmall,
                             )
                         }
                     }
