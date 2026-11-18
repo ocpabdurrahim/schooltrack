@@ -188,7 +188,15 @@ fun ReportCardScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Text(
-                                    "out of " + u.fullMarks.toInt(),
+                                    // A 4th subject with no mark is one the
+                                    // student did not take — nobody sits two —
+                                    // so it counts towards neither the total
+                                    // nor what the total is out of.
+                                    if (u.isOptional && u.marks == null && !u.absent) {
+                                        "4th subject — not sat"
+                                    } else {
+                                        "out of " + u.fullMarks.toInt()
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
