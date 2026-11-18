@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +48,10 @@ import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.ScanOutcome
 import io.github.ocpabdurrahim.schooltrack.data.ScanRepository
 import io.github.ocpabdurrahim.schooltrack.data.Status
+import io.github.ocpabdurrahim.schooltrack.data.playError
+import io.github.ocpabdurrahim.schooltrack.data.playSuccess
+import io.github.ocpabdurrahim.schooltrack.data.setSoundOn
+import io.github.ocpabdurrahim.schooltrack.data.soundOn
 import java.util.concurrent.Executors
 import kotlinx.coroutines.launch
 
@@ -74,6 +79,9 @@ fun ScanScreen(
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
 
     var outcome by remember { mutableStateOf<ScanOutcome?>(null) }
+    // Remembered per device, not per account: the gate phone wants the bell,
+    // the head's own phone in a quiet office may not.
+    var sound by remember { mutableStateOf(soundOn(context)) }
     var roster by remember { mutableStateOf("") }
     var lastCode by remember { mutableStateOf("") }
     var lastAt by remember { mutableStateOf(0L) }
@@ -85,7 +93,15 @@ fun ScanScreen(
         if (code == lastCode && now - lastAt < 2500) return
         lastCode = code
         lastAt = now
-        scope.launch { outcome = scans.scan(code, classId = null, date = today, email = email) }
+        scope.launch {
+            val got = scans.scan(code, classId = null, date = today, email = email)
+            outcome = got
+            // The sound IS the answer at a gate: nobody is looking at the
+            // screen with a queue of children pushing past.
+            if (sound) {
+                if (got is ScanOutcome.Refused) playError() else playSuccess()
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -98,6 +114,22 @@ fun ScanScreen(
             today + "  ·  whole school",
             style = MaterialTheme.typography.bodyMedium,
         )
+
+        Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Bell on a scan", style = MaterialTheme.typography.bodyMedium)
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Switch(
+                checked = sound,
+                onCheckedChange = {
+                    sound = it
+                    setSoundOn(context, it)
+                    if (it) playSuccess()   // so the choice is heard, not just read
+                },
+            )
+        }
 
         if (pending > 0) {
             Text(

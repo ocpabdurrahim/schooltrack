@@ -1,6 +1,7 @@
 ﻿import { Html5Qrcode } from 'html5-qrcode';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { playError, playSuccess, setSoundOn, soundOn } from '../data/play';
 import { useAuth } from '../auth';
 import {
   type SchoolClass, type ScanResult,
@@ -29,6 +30,9 @@ export default function Scan() {
   const [last, setLast] = useState<ScanResult | null>(null);
   const [counts, setCounts] = useState({ present: 0, total: 0 });
   const [camera, setCamera] = useState(false);
+  // Remembered per device, not per account: the gate laptop wants the bell,
+  // the head's own browser in a quiet office may not.
+  const [sound, setSound] = useState(soundOn());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const reader = useRef<Html5Qrcode | null>(null);
@@ -54,11 +58,11 @@ export default function Scan() {
       await openSession(date, email);
       const result = await scan(raw, classId || null, date, email, lateAfter || undefined);
       setLast(result);
-      beep(result.ok);
+      if (sound) (result.ok ? playSuccess : playError)();
       if (result.ok && !result.already) void tally();
     } catch {
       setLast({ ok: false, message: 'That was refused. Your account may not mark attendance.' });
-      beep(false);
+      if (sound) playError();
     }
   }
 
@@ -128,6 +132,19 @@ export default function Scan() {
             <input id="late" type="time" value={lateAfter}
                    onChange={(e) => setLateAfter(e.target.value)} />
           </div>
+          <div style={{ flex: '1 1 160px' }}>
+            <label htmlFor="snd">Sound</label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400 }}>
+              <input id="snd" type="checkbox" style={{ width: 'auto' }} checked={sound}
+                     onChange={(e) => {
+                       setSound(e.target.checked);
+                       setSoundOn(e.target.checked);
+                       // so the choice is heard, not just read
+                       if (e.target.checked) playSuccess();
+                     }} />
+              Bell on a scan
+            </label>
+          </div>
         </div>
       </div>
 
@@ -165,20 +182,4 @@ export default function Scan() {
       )}
     </div>
   );
-}
-
-/** High tone for a good scan, low buzz for a problem: the gate is noisy and
- *  nobody is looking at the screen. */
-function beep(ok: boolean) {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = ok ? 880 : 220;
-    gain.gain.value = 0.08;
-    osc.start();
-    setTimeout(() => { osc.stop(); void ctx.close(); }, ok ? 110 : 320);
-  } catch { /* no audio on this device — the colour still shows */ }
 }

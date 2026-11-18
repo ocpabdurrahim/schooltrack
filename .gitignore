@@ -58,3 +58,9 @@ Thumbs.db
 
 # Kotlin compiler session files, written while Gradle runs
 android/.kotlin/
+
+# Photographs of real children, dropped in to be put on cards. THIS REPO IS
+# PUBLIC: a student photo must never be committed, whatever folder it lands in.
+ID Cards/
+*.jpg
+*.jpeg
