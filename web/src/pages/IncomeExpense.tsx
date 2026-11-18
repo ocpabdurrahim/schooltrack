@@ -31,8 +31,13 @@ export default function IncomeExpense() {
 
   const income = rows.reduce((t, r) => t + r.income, 0);
   const expense = rows.reduce((t, r) => t + r.expense, 0);
-  const net = income - expense;
-  const peak = Math.max(1, ...rows.map((r) => Math.max(r.income, r.expense)));
+  // null all the way through when payroll is not this user's to read, so the
+  // screen can say "not shown" instead of printing a confident zero.
+  const salaryShown = rows.some((r) => r.salary !== null);
+  const salary = rows.reduce((t, r) => t + (r.salary ?? 0), 0);
+  const net = income - expense - salary;
+  const spentPerMonth = (r: MonthSummary) => r.expense + (r.salary ?? 0);
+  const peak = Math.max(1, ...rows.map((r) => Math.max(r.income, spentPerMonth(r))));
 
   return (
     <div className="wrap">
@@ -63,7 +68,13 @@ export default function IncomeExpense() {
             </div>
             <div className="tile">
               <div className="tile-value" style={{ color: 'var(--bad)' }}>{money(expense)}</div>
-              <div className="tile-label">spent</div>
+              <div className="tile-label">on vouchers</div>
+            </div>
+            <div className="tile">
+              <div className="tile-value" style={{ color: salaryShown ? 'var(--bad)' : 'var(--muted)' }}>
+                {salaryShown ? money(salary) : '—'}
+              </div>
+              <div className="tile-label">{salaryShown ? 'on salaries' : 'salaries not shown'}</div>
             </div>
             <div className="tile">
               <div className="tile-value" style={{ color: net < 0 ? 'var(--bad)' : 'var(--ink)' }}>
@@ -82,7 +93,12 @@ export default function IncomeExpense() {
                 <span>
                   <span style={{ color: 'var(--accent)' }}>{money(r.income)}</span>
                   {' − '}
-                  <span style={{ color: 'var(--bad)' }}>{money(r.expense)}</span>
+                  <span style={{ color: 'var(--bad)' }}>{money(spentPerMonth(r))}</span>
+                  {r.salary !== null && r.salary > 0 && (
+                    <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                      {' '}(incl. {money(r.salary)} salary)
+                    </span>
+                  )}
                   {' = '}
                   <strong style={{ color: r.net < 0 ? 'var(--bad)' : 'var(--ink)' }}>
                     {money(r.net)}
@@ -98,7 +114,7 @@ export default function IncomeExpense() {
               </div>
               <div style={{ height: 8, background: '#fdecea', borderRadius: 4, marginTop: 3, overflow: 'hidden' }}>
                 <div style={{
-                  width: `${(r.expense / peak) * 100}%`, height: '100%', background: 'var(--bad)',
+                  width: `${(spentPerMonth(r) / peak) * 100}%`, height: '100%', background: 'var(--bad)',
                 }} />
               </div>
             </div>
@@ -106,9 +122,19 @@ export default function IncomeExpense() {
 
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 20, marginBottom: 0 }}>
             Income is what was actually collected in the month, not what was billed —
-            unpaid dues are not income. Salaries appear here only once they are recorded
-            as an expense; paying them in the payroll screen does not post them to this
-            report by itself.
+            unpaid dues are not income. Salaries are counted in the month they were
+            <strong> paid</strong>, not the month they were earned, so that both sides of
+            a month are money that actually moved. They come straight from the payroll
+            screen: do not enter a salary as an expense voucher as well, or it will be
+            counted twice.
+            {!salaryShown && (
+              <>
+                {' '}
+                <strong>Salaries are not included in these figures</strong>, because what
+                each member of staff is paid is the head teacher's to see. The totals
+                above are fees against vouchers only.
+              </>
+            )}
           </p>
         </div>
       </div>

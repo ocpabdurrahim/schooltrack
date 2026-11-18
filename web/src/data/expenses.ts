@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { SCHOOL_ID, db } from '../firebase';
 import { type Payment, paymentsBetween } from './fees';
+import { salariesPaidBetween } from './payroll';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
 const stamp = <T extends object>(d: T) => ({ ...d, updatedAt: serverTimestamp() });
@@ -145,9 +146,36 @@ export function expenseBreakdown(rows: Expense[]) {
 export type MonthSummary = {
   month: string;        // YYYY-MM
   income: number;
-  expense: number;
+  expense: number;      // vouchers from the expense register
+  /**
+   * Salaries paid in the month — or NULL, meaning "not visible to whoever is
+   * looking", which is not the same as nothing having been paid.
+   *
+   * /salaryPayments is the head's alone: an accounts user may read fees and
+   * vouchers but not what each teacher earns. Rather than quietly widen that,
+   * the report says so, because two people seeing different totals for the
+   * same month with no explanation is worse than one of them seeing less.
+   */
+  salary: number | null;
   net: number;
 };
+
+/**
+ * What a month comes to.
+ *
+ * Salaries count as spending when they are visible. When they are not, `net`
+ * is still income minus vouchers — an honest partial figure, labelled as one
+ * by the screen, rather than a total that silently omits the largest cost a
+ * school has.
+ */
+export function summarise(
+  month: string,
+  income: number,
+  expense: number,
+  salary: number | null,
+): MonthSummary {
+  return { month, income, expense, salary, net: income - expense - (salary ?? 0) };
+}
 
 export const monthRange = (month: string) => {
   const [y, m] = month.split('-').map(Number);
@@ -164,13 +192,20 @@ export async function incomeExpense(months: string[]): Promise<MonthSummary[]> {
   const out: MonthSummary[] = [];
   for (const month of months) {
     const { from, to } = monthRange(month);
-    const [payments, expenses] = await Promise.all([
+    const [payments, expenses, salaries] = await Promise.all([
       paymentsBetween(from, to).catch(() => [] as Payment[]),
       expensesBetween(from, to).catch(() => [] as Expense[]),
+      // A refusal here is the ordinary answer for an accounts user, so it
+      // becomes null -- "not visible" -- rather than an empty month.
+      salariesPaidBetween(from, to).catch(() => null),
     ]);
     const income = payments.reduce((t, p) => t + (p.totalAmount || 0), 0);
     const expense = expenses.reduce((t, e) => t + (e.amount || 0), 0);
-    out.push({ month, income, expense, net: income - expense });
+    // null, not 0, when the read was refused: see MonthSummary.salary
+    const salary = salaries === null
+      ? null
+      : salaries.reduce((t, x) => t + (x.net || 0), 0);
+    out.push(summarise(month, income, expense, salary));
   }
   return out;
 }

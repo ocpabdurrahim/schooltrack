@@ -39,9 +39,28 @@ data class Expense(
 data class MonthSummary(
     val month: String,
     val income: Double,
-    val expense: Double,
+    val expense: Double,          // vouchers from the expense register
+    /**
+     * Salaries paid in the month -- or NULL, meaning "not visible to whoever
+     * is looking", which is not the same as nothing having been paid.
+     *
+     * /salaryPayments is the head's alone: an accounts user may read fees and
+     * vouchers but not what each teacher earns. Rather than quietly widen
+     * that, the report says so -- two people seeing different totals for the
+     * same month with no explanation is worse than one of them seeing less.
+     */
+    val salary: Double? = null,
 ) {
-    val net: Double get() = income - expense
+    /**
+     * Salaries count as spending when they are visible. When they are not,
+     * this is still income minus vouchers -- an honest partial figure,
+     * labelled as one by the screen, rather than a total that silently omits
+     * the largest cost a school has.
+     */
+    val net: Double get() = income - expense - (salary ?: 0.0)
+
+    /** What the month actually spent, as far as this user may see. */
+    val spent: Double get() = expense + (salary ?: 0.0)
 }
 
 fun expenseHeadIdFor(code: String): String =
@@ -82,6 +101,7 @@ fun expenseBreakdown(rows: List<Expense>): Pair<Double, List<Pair<String, Double
 class ExpensesRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
     private val fees: FeesRepository = FeesRepository(),
+    private val payroll: PayrollRepository = PayrollRepository(),
 ) {
     private fun school() = db.collection("schools").document(SCHOOL_ID)
     private fun stamp(d: Map<String, Any?>) = d + ("updatedAt" to FieldValue.serverTimestamp())
@@ -190,6 +210,12 @@ class ExpensesRepository(
         } catch (_: Exception) {
             0.0
         }
-        MonthSummary(month, income, expense)
+        // null, not 0.0, when the read was refused: see MonthSummary.salary
+        val salary = try {
+            payroll.salariesPaidBetween(from, to).sumOf { it.net }
+        } catch (_: Exception) {
+            null
+        }
+        MonthSummary(month, income, expense, salary)
     }
 }

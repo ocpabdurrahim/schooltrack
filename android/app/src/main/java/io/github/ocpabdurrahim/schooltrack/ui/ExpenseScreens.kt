@@ -306,8 +306,12 @@ fun IncomeExpenseScreen(
 
     val income = rows.sumOf { it.income }
     val expense = rows.sumOf { it.expense }
-    val net = income - expense
-    val peak = maxOf(1.0, rows.maxOfOrNull { maxOf(it.income, it.expense) } ?: 1.0)
+    // null all the way through when payroll is not this user's to read, so the
+    // screen can say "not shown" instead of printing a confident zero.
+    val salaryShown = rows.any { it.salary != null }
+    val salary = rows.sumOf { it.salary ?: 0.0 }
+    val net = income - expense - salary
+    val peak = maxOf(1.0, rows.maxOfOrNull { maxOf(it.income, it.spent) } ?: 1.0)
 
     AdminScaffold("Income and expense", "Fees collected against money spent", onBack) {
         Card(Modifier.fillMaxWidth()) {
@@ -341,7 +345,20 @@ fun IncomeExpenseScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                         Text(
-                            "spent",
+                            "on vouchers",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            if (salaryShown) money(salary) else "—",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = if (salaryShown) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            if (salaryShown) "on salaries" else "salaries not shown",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -369,20 +386,33 @@ fun IncomeExpenseScreen(
                         modifier = Modifier.padding(top = 10.dp),
                     )
                     Text(
-                        money(r.income) + " − " + money(r.expense) + " = " + money(r.net),
+                        money(r.income) + " − " + money(r.spent) +
+                            (r.salary?.takeIf { it > 0 }
+                                ?.let { "  (incl. " + money(it) + " salary)" } ?: "") +
+                            " = " + money(r.net),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (r.net < 0) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     // two bars on the same scale, so the months compare
                     Bar(r.income / peak, MaterialTheme.colorScheme.primary)
-                    Bar(r.expense / peak, MaterialTheme.colorScheme.error)
+                    Bar(r.spent / peak, MaterialTheme.colorScheme.error)
                 }
 
                 Text(
                     "Income is what was actually collected in the month, not what was " +
-                        "billed — unpaid dues are not income. Salaries appear here only once " +
-                        "they are recorded as an expense.",
+                        "billed — unpaid dues are not income. Salaries are counted in the " +
+                        "month they were PAID, not the month they were earned, so both " +
+                        "sides of a month are money that actually moved. They come straight " +
+                        "from the payroll screen: do not enter a salary as an expense " +
+                        "voucher as well, or it will be counted twice." +
+                        if (!salaryShown) {
+                            "  Salaries are NOT included in these figures: what each member " +
+                                "of staff is paid is the head teacher's to see. The totals " +
+                                "above are fees against vouchers only."
+                        } else {
+                            ""
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 14.dp),

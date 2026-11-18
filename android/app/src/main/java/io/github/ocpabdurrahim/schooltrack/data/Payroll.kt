@@ -170,6 +170,24 @@ class PayrollRepository(
         remarks = d.getString("remarks"),
     )
 
+    /**
+     * Salaries PAID between two dates.
+     *
+     * By `paidOn`, not by `month`: this school pays a month's salary in the
+     * month that follows, and the income side of the report is what was
+     * actually collected. Counting October's salary as October spending
+     * against November's fee income would make both months lie.
+     *
+     * ADMIN ONLY, like everything in /salaryPayments. A refusal is a normal
+     * answer for the accounts user, not a fault: the caller treats it as
+     * "not visible" rather than "zero".
+     */
+    suspend fun salariesPaidBetween(from: String, to: String): List<SalaryPayment> =
+        school().collection("salaryPayments")
+            .whereGreaterThanOrEqualTo("paidOn", from)
+            .whereLessThanOrEqualTo("paidOn", to)
+            .get().await().documents.mapNotNull { it.toObject(SalaryPayment::class.java) }
+
     suspend fun paymentsForMonth(month: String): List<SalaryPayment> =
         school().collection("salaryPayments").whereEqualTo("month", month)
             .get().await().documents.map(::toPayment)

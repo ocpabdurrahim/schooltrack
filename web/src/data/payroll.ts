@@ -135,6 +135,27 @@ export async function paymentsForMonth(month: string): Promise<SalaryPayment[]> 
   return snap.docs.map((d) => d.data() as SalaryPayment);
 }
 
+/**
+ * Salaries PAID between two dates.
+ *
+ * By `paidOn`, not by `month`: this school pays a month's salary in the month
+ * that follows, and the income side of the report is what was actually
+ * collected. Counting October's salary as October spending against November's
+ * fee income would make both months lie.
+ *
+ * ADMIN ONLY, like everything in /salaryPayments — see the rules. A refusal
+ * here is a normal answer for the accounts user, not a fault, and the caller
+ * is expected to treat it as "not visible" rather than "zero".
+ */
+export async function salariesPaidBetween(from: string, to: string): Promise<SalaryPayment[]> {
+  const snap = await getDocs(query(
+    collection(school(), 'salaryPayments'),
+    where('paidOn', '>=', from),
+    where('paidOn', '<=', to),
+  ));
+  return snap.docs.map((d) => d.data() as SalaryPayment);
+}
+
 export async function getPayment(id: string): Promise<SalaryPayment | null> {
   const snap = await getDoc(doc(school(), 'salaryPayments', id));
   return snap.exists() ? (snap.data() as SalaryPayment) : null;
