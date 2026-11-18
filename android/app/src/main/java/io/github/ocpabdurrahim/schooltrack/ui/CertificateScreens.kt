@@ -1,13 +1,20 @@
 package io.github.ocpabdurrahim.schooltrack.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
@@ -22,9 +29,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.CONDUCTS
 import io.github.ocpabdurrahim.schooltrack.data.DocumentType
@@ -32,6 +46,7 @@ import io.github.ocpabdurrahim.schooltrack.data.DocumentsRepository
 import io.github.ocpabdurrahim.schooltrack.data.FeesRepository
 import io.github.ocpabdurrahim.schooltrack.data.IssuedDocument
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.cardCode
 import io.github.ocpabdurrahim.schooltrack.data.qrBitmap
@@ -328,11 +343,11 @@ fun IdCardScreen(
     admin: AdminRepository = remember { AdminRepository() },
 ) {
     var student by remember { mutableStateOf<StudentDetail?>(null) }
-    var schoolName by remember { mutableStateOf("") }
+    var school by remember { mutableStateOf<SchoolSettings?>(null) }
     var problem by remember { mutableStateOf("") }
 
     LaunchedEffect(studentId) {
-        schoolName = admin.getSettings()?.instituteName.orEmpty()
+        school = admin.getSettings()
         student = try {
             people.getStudent(studentId)
         } catch (_: Exception) {
@@ -347,44 +362,200 @@ fun IdCardScreen(
     AdminScaffold("ID card", student?.fullName ?: studentId, onBack) {
         Problem(problem)
         student?.let { s ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(
-                    Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (schoolName.isNotEmpty()) {
-                        Text(schoolName, style = MaterialTheme.typography.titleMedium)
-                    }
-                    Text(s.fullName, style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        s.className + " - " + s.section + "  ·  Roll " + s.rollNo,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    bitmap?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = code,
-                            modifier = Modifier.padding(top = 16.dp).size(220.dp),
-                        )
-                    }
-                    Text(
-                        code,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    Text(
-                        "This is what the printed card carries. Hold a card that will not " +
-                            "scan beside this one to see whether the card or the scanner is " +
-                            "at fault. The cards themselves are printed from the web app.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                }
+            Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                IdCardFront(s, school)
+                IdCardBack(s, school, code, bitmap?.asImageBitmap())
             }
+
+            Text(
+                "This is the card the web app prints, at the size it prints it: 54 x 86 mm, " +
+                    "the size a lanyard holder takes. The photo box is filled in before " +
+                    "lamination. Hold a card that will not scan beside the code above to see " +
+                    "whether the card or the scanner is at fault.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The card itself.
+//
+// The twin of the printed card in web/src/pages/IdCards.tsx, down to the
+// proportions: CR80 PORTRAIT, 54 x 86 mm. The colours are written out rather
+// than taken from the theme because this is a picture of a physical object --
+// it must look the same in dark mode as the card in the child's hand does.
+
+private val CARD_INK = Color(0xFF10261E)
+private val CARD_ACCENT = Color(0xFF0F6B4A)
+private val CARD_ACCENT_2 = Color(0xFF15855C)
+private val CARD_SOFT = Color(0xFFEEF5F1)
+private val CARD_HAIR = Color(0xFFC3D5CC)
+private val CARD_FAINT = Color(0xFF9FB3AA)
+private val CARD_NOTE = Color(0xFF405249)
+
+/** 54 x 86 mm. Width over height, which is what aspectRatio wants. */
+private const val CARD_RATIO = 54f / 86f
+
+@Composable
+private fun CardFace(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .width(260.dp)
+            .aspectRatio(CARD_RATIO)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, CARD_HAIR, RoundedCornerShape(14.dp)),
+        content = content,
+    )
+}
+
+@Composable
+private fun CardRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, fontSize = 9.sp, color = CARD_FAINT)
+        Text(value, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = CARD_INK)
+    }
+}
+
+@Composable
+private fun IdCardFront(s: StudentDetail, school: SchoolSettings?) {
+    CardFace {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(Brush.linearGradient(listOf(CARD_ACCENT, CARD_ACCENT_2)))
+                .padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                school?.instituteName ?: "School",
+                color = Color.White, fontWeight = FontWeight.Bold,
+                fontSize = 13.sp, lineHeight = 15.sp, textAlign = TextAlign.Center,
+            )
+            Text(
+                listOfNotNull(
+                    school?.eiin?.let { "EIIN $it" } ?: "STUDENT IDENTITY CARD",
+                    school?.sessionLabel,
+                ).joinToString("  ·  ").uppercase(),
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 7.sp, letterSpacing = 0.8.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+
+        Column(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(width = 76.dp, height = 90.dp)
+                    .border(1.dp, CARD_HAIR, RoundedCornerShape(5.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("PHOTO", fontSize = 8.sp, letterSpacing = 1.6.sp, color = CARD_FAINT)
+            }
+
+            Text(
+                s.fullName,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CARD_INK,
+                lineHeight = 17.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 9.dp),
+            )
+            Text(
+                s.className + " - " + s.section,
+                color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .padding(top = 5.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(CARD_ACCENT)
+                    .padding(horizontal = 9.dp, vertical = 2.dp),
+            )
+
+            Column(Modifier.fillMaxWidth().padding(top = 9.dp)) {
+                HorizontalDivider(color = CARD_HAIR)
+                CardRow("Roll", s.rollNo.toString())
+                s.regNo?.takeIf { it.isNotBlank() }?.let { CardRow("Reg", it) }
+                s.groupName?.takeIf { it.isNotBlank() }?.let { CardRow("Group", it) }
+                s.dob?.takeIf { it.isNotBlank() }?.let { CardRow("Date of birth", it) }
+                s.bloodGroup?.takeIf { it.isNotBlank() }?.let { CardRow("Blood", it) }
+            }
+        }
+
+        Text(
+            cardCode(s.studentId),
+            modifier = Modifier.fillMaxWidth().background(CARD_SOFT).padding(vertical = 6.dp),
+            textAlign = TextAlign.Center, fontSize = 9.sp, letterSpacing = 1.4.sp,
+            fontFamily = FontFamily.Monospace, color = CARD_INK,
+        )
+    }
+}
+
+@Composable
+private fun IdCardBack(
+    s: StudentDetail,
+    school: SchoolSettings?,
+    code: String,
+    qr: ImageBitmap?,
+) {
+    CardFace {
+        Text(
+            school?.instituteName ?: "School",
+            modifier = Modifier.fillMaxWidth().background(CARD_SOFT).padding(vertical = 7.dp),
+            textAlign = TextAlign.Center, fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold, color = CARD_INK,
+        )
+
+        Column(
+            Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            qr?.let {
+                Image(bitmap = it, contentDescription = code, modifier = Modifier.size(124.dp))
+            }
+            Text(
+                code,
+                fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                fontFamily = FontFamily.Monospace, color = CARD_INK,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(
+                buildString {
+                    append("Scan at the gate to mark attendance.")
+                    s.fatherName?.takeIf { it.isNotBlank() }?.let { append("\nFather: " + it) }
+                    s.mobileNo?.takeIf { it.isNotBlank() }?.let { append("\nMobile: " + it) }
+                    school?.address?.takeIf { it.isNotBlank() }?.let { append("\n" + it) }
+                    append("\nIf found, please return it to the school office.")
+                },
+                fontSize = 8.sp, lineHeight = 12.sp, color = CARD_NOTE,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 7.dp),
+            )
+        }
+
+        Column(
+            Modifier.fillMaxWidth().padding(bottom = 13.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            HorizontalDivider(Modifier.width(96.dp), color = CARD_INK)
+            Text(
+                school?.headTeacher ?: "Head teacher",
+                fontSize = 8.sp, color = CARD_FAINT,
+                modifier = Modifier.padding(top = 3.dp),
+            )
         }
     }
 }
