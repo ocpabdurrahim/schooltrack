@@ -319,6 +319,114 @@ table.sheet tbody tr:last-child td { border-bottom: 0; }
 }
 
 /* ---------------------------------------------------------------------------
+   Student ID cards — CR80 PORTRAIT, 54 x 86 mm
+
+   Portrait because that is what a lanyard holder is, and what every school
+   around this one issues. The sizes are in MILLIMETRES on purpose: a card is
+   a physical object, and a card laid out in pixels comes off the printer the
+   wrong size on a different machine.
+
+   The colours are fixed, not themed. A card must print identically whatever
+   the screen is set to, so these do not follow light/dark at all — and
+   print-color-adjust keeps the header band from being thrown away by the
+   browser's "economise on ink" default.
+
+   At A4 with the 12mm page margin there is room for exactly 3 across and 3
+   down: nine cards a sheet.
+   --------------------------------------------------------------------------- */
+
+.idc-wrap { --ink: #10261e; --accent: #0f6b4a; --accent-2: #15855c; --soft: #eef5f1; --hair: #c3d5cc; }
+
+/* nine to a sheet, the backs on the sheet that follows */
+/* 4mm down the page, not 6: three rows of 86mm plus the gaps must clear the
+   273mm an A4 page leaves at a 12mm margin, and 270 of 273 is close enough
+   for a browser's rounding to throw the third row onto a page of its own. */
+.idc-sheet {
+  display: grid; grid-template-columns: repeat(3, 54mm);
+  gap: 4mm 6mm; justify-content: start;
+}
+/* front and back side by side, one student to a row */
+.idc-pair { display: flex; gap: 4mm; margin-bottom: 3mm; }   /* 3 x 89mm fits a page */
+.idc-pair, .idc-card { break-inside: avoid; page-break-inside: avoid; }
+
+.idc-card {
+  width: 54mm; height: 86mm; box-sizing: border-box;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 0.3mm solid var(--hair); border-radius: 3mm;
+  background: #fff; color: var(--ink);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.idc-card.blank { border: 0; background: none; }
+
+.idc-head {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #fff; padding: 2.8mm 2.5mm 2.4mm; text-align: center;
+}
+.idc-head b { display: block; font-size: 8.4pt; line-height: 1.15; }
+.idc-head span {
+  display: block; margin-top: 0.8mm; font-size: 5.2pt;
+  letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.92;
+}
+
+/* Centred, not top-aligned: a school where nobody records a date of birth
+   gets three detail rows instead of five, and a card that hangs its content
+   from the top looks unfinished rather than uncluttered. */
+.idc-body {
+  flex: 1; padding: 2.4mm 3mm 0; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+
+.idc-photo {
+  width: 23mm; height: 27mm; box-sizing: border-box;
+  border: 0.3mm dashed var(--hair); border-radius: 1.5mm;
+  display: flex; align-items: center; justify-content: center;
+  color: #9fb3aa; font-size: 5pt; letter-spacing: 0.16em;
+}
+
+.idc-name {
+  margin-top: 2mm; font-size: 9pt; font-weight: 700; line-height: 1.15; text-align: center;
+}
+.idc-role {
+  margin-top: 0.8mm; font-size: 6pt; font-weight: 600; letter-spacing: 0.04em;
+  color: #fff; background: var(--accent); border-radius: 999px; padding: 0.6mm 2.2mm;
+}
+
+.idc-rows { width: 100%; margin-top: 2.2mm; }
+.idc-rows > div {
+  display: flex; justify-content: space-between; gap: 2mm;
+  font-size: 5.8pt; padding: 0.75mm 0; border-bottom: 0.2mm dotted var(--hair);
+}
+.idc-rows > div:first-child { border-top: 0.2mm solid var(--hair); }
+.idc-rows i { font-style: normal; color: #6b8079; letter-spacing: 0.04em; }
+.idc-rows b { font-weight: 600; text-align: right; }
+
+.idc-foot {
+  margin-top: auto; background: var(--soft); text-align: center;
+  padding: 1.3mm 1mm; font-size: 5.4pt; letter-spacing: 0.1em;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  border-top: 0.2mm solid var(--hair);
+}
+
+/* ---- the back ---- */
+.idc-back-top { background: var(--soft); text-align: center; padding: 1.8mm; font-size: 5.6pt; font-weight: 600; }
+.idc-qr { display: block; width: 29mm; height: 29mm; margin: 2.5mm auto 1.2mm; }
+.idc-code {
+  text-align: center; font-size: 6pt; font-weight: 700; letter-spacing: 0.06em;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.idc-note { margin-top: 1.8mm; font-size: 5.3pt; line-height: 1.5; text-align: center; color: #405249; }
+.idc-note strong { color: var(--ink); }
+.idc-sign { margin-top: auto; padding-bottom: 2.5mm; text-align: center; }
+.idc-sign i { display: block; width: 26mm; margin: 0 auto 0.9mm; border-top: 0.3mm solid var(--ink); }
+.idc-sign span { font-size: 5.2pt; color: #6b8079; letter-spacing: 0.06em; }
+
+@media print {
+  /* each grid is one side of one sheet */
+  .idc-sheet { break-after: page; page-break-after: always; }
+  .idc-sheet:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* ---------------------------------------------------------------------------
    The student list
 
    One table that becomes a stack of cards on a phone: the head teacher reads
