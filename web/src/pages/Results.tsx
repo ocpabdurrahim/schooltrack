@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { type SchoolSettings, getSettings } from '../data/admin';
 import { type SchoolClass, listClasses } from '../data/attendance';
+import { shortGroup } from '../data/groups';
 import {
   type Exam,
   type StudentResult,
@@ -19,7 +20,7 @@ import {
   totalMarks,
 } from '../data/exams';
 import { type SubjectGrade, type SubjectMark, enteredSoFar, gpaText } from '../data/grading';
-import { shortName, shortNames } from '../data/shortnames';
+import { shortNames } from '../data/shortnames';
 import { layout, slot } from '../data/tabsheet';
 import { findStudents } from '../data/people';
 
@@ -40,14 +41,15 @@ type View = 'tabulation' | 'sheet';
 /**
  * One mark on the tabulation sheet.
  *
- * `named` is for the slot columns — REL, Grp 1, 4th — where the heading cannot
- * say which subject the cell holds because it is a different one on every row.
- *
  * Four things look alike here and must not: a mark, a mark not entered yet, a
  * subject half entered (the two Bangla papers are one subject out of 200), and
  * a paper this student does not sit at all.
+ *
+ * The cell does not name its subject. A slot column is headed with the
+ * subjects it holds — PHY/CIV — and the stream beside the student's name says
+ * which of them this row is.
  */
-function Mark({ cell, named = false }: { cell?: SubjectMark & SubjectGrade; named?: boolean }) {
+function Mark({ cell }: { cell?: SubjectMark & SubjectGrade }) {
   if (!cell) {
     return (
       <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--line)' }}>·</td>
@@ -60,10 +62,7 @@ function Mark({ cell, named = false }: { cell?: SubjectMark & SubjectGrade; name
       color: cell.letter === 'F' ? 'var(--bad)' : sofar !== null ? 'var(--muted)' : undefined,
     }}>
       {cell.absent ? 'abs' : cell.marks ?? (sofar !== null ? `(${sofar})` : '—')}
-      {named && (
-        <span style={{ color: 'var(--muted)', fontSize: 11 }}> {shortName(cell.subjectName)}</span>
-      )}
-      {!named && !cell.absent && cell.marks !== null && (
+      {!cell.absent && cell.marks !== null && (
         <span style={{ color: 'var(--muted)' }}> {cell.letter}</span>
       )}
     </td>
@@ -125,7 +124,24 @@ export default function Results() {
   // columns as the widest of them needs, and none at all for a class that has
   // not been streamed.
   const shape = layout(rows.map((r) => r.tabulation));
-  const commonShort = shortNames(shape.common.map((c) => c.subjectName));
+  // Every heading on the sheet is shortened together, so no two columns can
+  // come out with the same name however alike the subjects are.
+  const heads = shortNames([
+    ...shape.common.map((c) => c.subjectName),
+    ...shape.religion,
+    ...shape.groupSlots.flat(),
+    ...shape.optional,
+  ]);
+  const short = new Map(
+    [...shape.common.map((c) => c.subjectName), ...shape.religion,
+      ...shape.groupSlots.flat(), ...shape.optional].map((name, i) => [name, heads[i]]),
+  );
+  /** A slot's heading: the subjects it holds, shortened and joined. */
+  const slotHead = (names: string[]) => names.map((n) => short.get(n) ?? n).join('/');
+  const commonShort = shape.common.map((c) => short.get(c.subjectName) ?? c.subjectName);
+  // The stream column earns its place only when the slots hold more than one
+  // subject each — in an unstreamed class it would be an empty column.
+  const streamed = shape.groupSlots.some((names) => names.length > 1);
   const complete = rows.filter((r) => !r.tabulation.incomplete).length;
   const passed = rows.filter((r) => (r.tabulation.gpa ?? 0) > 0).length;
   const stats = subjectStats(rows, columns);
@@ -249,21 +265,26 @@ export default function Results() {
                   <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '6px 4px' }}>Roll</th>
                     <th style={{ padding: '6px 4px' }}>Name</th>
+                    {streamed && <th style={{ padding: '6px 4px' }}>Grp</th>}
                     {shape.common.map((c, i) => (
                       <th key={c.subjectId} style={{ padding: '6px 4px', textAlign: 'center' }}>
                         {commonShort[i]}
                       </th>
                     ))}
-                    {shape.religion && (
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>REL</th>
+                    {shape.religion.length > 0 && (
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>
+                        {slotHead(shape.religion)}
+                      </th>
                     )}
-                    {Array.from({ length: shape.groupSlots }, (_, i) => (
+                    {shape.groupSlots.map((names, i) => (
                       <th key={`grp${i}`} style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        Grp {i + 1}
+                        {slotHead(names)}
                       </th>
                     ))}
-                    {shape.optional && (
-                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>4th</th>
+                    {shape.optional.length > 0 && (
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>
+                        {slotHead(shape.optional)}*
+                      </th>
                     )}
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>GPA</th>
@@ -280,6 +301,11 @@ export default function Results() {
                         <td style={{ padding: '5px 4px' }}>
                           <Link to={`/students/${r.student.studentId}`}>{r.student.fullName}</Link>
                         </td>
+                        {streamed && (
+                          <td style={{ padding: '5px 4px', color: 'var(--muted)' }}>
+                            {shortGroup(r.student.groupName)}
+                          </td>
+                        )}
 
                         {/* The subjects everybody sits, so the heading says which. */}
                         {shape.common.map((c) => (
@@ -291,11 +317,11 @@ export default function Results() {
 
                         {/* A slot holds whichever paper THIS student sits, so the
                             cell has to say which one it is. */}
-                        {shape.religion && <Mark cell={mine.religion ?? undefined} named />}
-                        {Array.from({ length: shape.groupSlots }, (_, i) => (
-                          <Mark key={`grp${i}`} cell={mine.group[i]} named />
+                        {shape.religion.length > 0 && <Mark cell={mine.religion ?? undefined} />}
+                        {shape.groupSlots.map((_, i) => (
+                          <Mark key={`grp${i}`} cell={mine.group[i]} />
                         ))}
-                        {shape.optional && <Mark cell={mine.optional ?? undefined} named />}
+                        {shape.optional.length > 0 && <Mark cell={mine.optional ?? undefined} />}
 
                         <td style={{ padding: '5px 4px', textAlign: 'right' }}>
                           {totalMarks(r.tabulation) ?? '—'}
@@ -319,12 +345,13 @@ export default function Results() {
               </table>
 
               <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
-                REL is the student&rsquo;s own religion paper, Grp 1 to {shape.groupSlots || 1} their
-                group subjects and 4th their optional one — each cell names the subject it
-                holds, because a Science row and a Humanities row sit side by side here.
-                A dash is a mark not entered; that student has no total, no GPA and no
-                position. A number in brackets, like (50), means part of that subject is in
-                and part is not — the two Bangla papers are one subject out of 200.
+                A column headed PHY/CIV holds Physics for the Science rows and Civics for
+                the Humanities ones — the <strong>Grp</strong> column beside the name says
+                which. * is the 4th subject: it adds to the total, and to the GPA only
+                above 2.00. A dash is a mark not entered; that student has no total, no GPA
+                and no position. A number in brackets, like (50), means part of that subject
+                is in and part is not — the two Bangla papers are one subject out of 200. A
+                dot is a paper that student does not sit.
               </p>
 
               {/* Per-subject statistics, which cannot live in the columns any

@@ -59,3 +59,20 @@ fun groupOptions(stored: String?): List<String> {
     val v = normalGroup(stored)
     return if (v.isEmpty() || v in GROUPS) GROUPS else GROUPS + v
 }
+
+/**
+ * The stream in three letters, for a column on a sheet that has no room for
+ * "Business Studies".
+ *
+ * A tabulation sheet needs it because a slot column headed PHY/CIV holds
+ * Physics on one row and Civics on the next, and the mark alone does not say
+ * which — the stream does.
+ */
+fun shortGroup(stored: String?): String {
+    val v = normalGroup(stored)
+    return when {
+        v.isEmpty() -> ""
+        v == "Business Studies" -> "Bus"
+        else -> v.take(3)
+    }
+}

@@ -49,11 +49,22 @@ export function slot(t: Tabulation): Slotted {
 export type Layout = {
   /** Column headings for the shared subjects, in order. */
   common: { subjectId: string; subjectName: string }[];
-  /** How many group columns the widest student in this section needs. */
-  groupSlots: number;
-  religion: boolean;
-  optional: boolean;
+  /**
+   * One entry per group column, naming every subject that turns up in it on
+   * this sheet — Physics for the Science rows, Civics for the Humanities
+   * ones. The heading is those names shortened and joined, so the column says
+   * what it holds instead of saying "Grp 1".
+   */
+  groupSlots: string[][];
+  /** The religion papers on this sheet, and the 4th subjects. Empty: none. */
+  religion: string[];
+  optional: string[];
 };
+
+/** Adds a name to a slot's list, keeping the order it was first seen in. */
+function note(into: string[], name?: string) {
+  if (name && !into.includes(name)) into.push(name);
+}
 
 /**
  * The sheet's shape, from the students actually on it.
@@ -65,9 +76,9 @@ export type Layout = {
 export function layout(results: Tabulation[]): Layout {
   const common: { subjectId: string; subjectName: string }[] = [];
   const seen = new Set<string>();
-  let groupSlots = 0;
-  let religion = false;
-  let optional = false;
+  const groupSlots: string[][] = [];
+  const religion: string[] = [];
+  const optional: string[] = [];
 
   for (const t of results) {
     const s = slot(t);
@@ -76,9 +87,12 @@ export function layout(results: Tabulation[]): Layout {
       seen.add(c.subjectId);
       common.push({ subjectId: c.subjectId, subjectName: c.subjectName });
     }
-    groupSlots = Math.max(groupSlots, s.group.length);
-    religion = religion || s.religion !== null;
-    optional = optional || s.optional !== null;
+    s.group.forEach((c, i) => {
+      while (groupSlots.length <= i) groupSlots.push([]);
+      note(groupSlots[i], c.subjectName);
+    });
+    note(religion, s.religion?.subjectName);
+    note(optional, s.optional?.subjectName);
   }
 
   return { common, groupSlots, religion, optional };

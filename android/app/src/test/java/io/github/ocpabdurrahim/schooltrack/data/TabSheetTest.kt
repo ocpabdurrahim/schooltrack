@@ -111,14 +111,43 @@ class TabSheetTest {
             listOf("BANGLA", "ENGLISH", "MATHEMATICS", "ICT"),
             got.common.map { it.first },
         )
-        assertEquals(4, got.groupSlots)   // Science needs four; Humanities uses two
-        assertTrue(got.religion)
-        assertTrue(got.optional)
+        assertEquals(4, got.groupSlots.size)   // Science needs four; Humanities uses two
+    }
+
+    @Test
+    fun tellsEachSlotWhichSubjectsItHoldsSoTheHeadingCanSaySo() {
+        // This is where the column heading PHY/HIST comes from.
+        val got = layout(
+            listOf(tabulationFor("Science", "Islam"), tabulationFor("Humanities", "Hindu")),
+        )
+        assertEquals(
+            listOf(
+                listOf("PHYSICS", "HISTORY"),
+                listOf("CHEMISTRY", "GEOGRAPHY"),
+                listOf("BIOLOGY"),
+                listOf("BGS"),
+            ),
+            got.groupSlots,
+        )
+        assertEquals(listOf("ISLAM", "HINDU"), got.religion)
+        assertEquals(listOf("HIGHER_MATHS", "AGRICULTURE"), got.optional)
+    }
+
+    @Test
+    fun namesASubjectOnceHoweverManyStudentsSitIt() {
+        val got = layout(
+            listOf(tabulationFor("Science", "Islam"), tabulationFor("Science", "Islam")),
+        )
+        assertEquals(listOf("PHYSICS"), got.groupSlots[0])
+        assertEquals(listOf("ISLAM"), got.religion)
     }
 
     @Test
     fun givesASectionOfOneStreamExactlyThatStreamsWidth() {
-        assertEquals(2, layout(listOf(tabulationFor("Humanities", "Islam"))).groupSlots)
+        assertEquals(
+            listOf(listOf("HISTORY"), listOf("GEOGRAPHY")),
+            layout(listOf(tabulationFor("Humanities", "Islam"))).groupSlots,
+        )
     }
 
     @Test
@@ -131,9 +160,9 @@ class TabSheetTest {
         )
         val got = layout(listOf(plain))
         assertEquals(2, got.common.size)
-        assertEquals(0, got.groupSlots)
-        assertFalse(got.religion)
-        assertFalse(got.optional)
+        assertTrue(got.groupSlots.isEmpty())
+        assertTrue(got.religion.isEmpty())
+        assertTrue(got.optional.isEmpty())
     }
 
     // ----------------------------------------------------------------- names
@@ -174,6 +203,14 @@ class TabSheetTest {
     fun copesWithASubjectNobodyThoughtOf() {
         assertEquals("POTT", shortName("Pottery"))
         assertEquals("?", shortName(""))
+    }
+
+    @Test
+    fun abbreviatesTheStreamForItsOwnColumn() {
+        assertEquals("Sci", shortGroup("Science"))
+        assertEquals("Hum", shortGroup("Humanities"))
+        assertEquals("Bus", shortGroup("Business Studies"))
+        assertEquals("", shortGroup(null))
     }
 
     @Test

@@ -88,13 +88,31 @@ describe('layout', () => {
     const got = layout([tabulationFor('Science', 'Islam'), tabulationFor('Humanities', 'Hindu')]);
     expect(got.common.map((c) => c.subjectId))
       .toEqual(['BANGLA', 'ENGLISH', 'MATHEMATICS', 'ICT']);
-    expect(got.groupSlots).toBe(4);     // Science needs four; Humanities uses two of them
-    expect(got.religion).toBe(true);
-    expect(got.optional).toBe(true);
+    expect(got.groupSlots).toHaveLength(4);   // Science needs four; Humanities uses two
+  });
+
+  it('tells each slot which subjects it holds, so the heading can say so', () => {
+    // This is where the column heading PHY/HIST comes from.
+    const got = layout([tabulationFor('Science', 'Islam'), tabulationFor('Humanities', 'Hindu')]);
+    expect(got.groupSlots).toEqual([
+      ['PHYSICS', 'HISTORY'],
+      ['CHEMISTRY', 'GEOGRAPHY'],
+      ['BIOLOGY'],
+      ['BGS'],
+    ]);
+    expect(got.religion).toEqual(['ISLAM', 'HINDU']);
+    expect(got.optional).toEqual(['HIGHER_MATHS', 'AGRICULTURE']);
+  });
+
+  it('names a subject once however many students sit it', () => {
+    const got = layout([tabulationFor('Science', 'Islam'), tabulationFor('Science', 'Islam')]);
+    expect(got.groupSlots[0]).toEqual(['PHYSICS']);
+    expect(got.religion).toEqual(['ISLAM']);
   });
 
   it('gives a section of one stream exactly that stream’s width', () => {
-    expect(layout([tabulationFor('Humanities', 'Islam')]).groupSlots).toBe(2);
+    expect(layout([tabulationFor('Humanities', 'Islam')]).groupSlots)
+      .toEqual([['HISTORY'], ['GEOGRAPHY']]);
   });
 
   it('has no group or religion columns when nothing is streamed', () => {
@@ -104,8 +122,8 @@ describe('layout', () => {
     ]);
     const got = layout([plain]);
     expect(got.common).toHaveLength(2);
-    expect(got.groupSlots).toBe(0);
-    expect(got.religion).toBe(false);
-    expect(got.optional).toBe(false);
+    expect(got.groupSlots).toEqual([]);
+    expect(got.religion).toEqual([]);
+    expect(got.optional).toEqual([]);
   });
 });

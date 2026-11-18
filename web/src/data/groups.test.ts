@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GROUPS, groupOptions, normalGroup } from './groups';
+import { GROUPS, groupOptions, normalGroup, shortGroup } from './groups';
 
 /** The same cases exist in android/.../data/GroupsTest.kt. */
 
@@ -49,5 +49,18 @@ describe('groupOptions', () => {
 
   it('keeps an unknown group on the end so saving cannot wipe it', () => {
     expect(groupOptions('Vocational')).toEqual([...GROUPS, 'Vocational']);
+  });
+});
+
+describe('shortGroup', () => {
+  it('abbreviates the stream for its own column on a sheet', () => {
+    expect(shortGroup('Science')).toBe('Sci');
+    expect(shortGroup('Humanities')).toBe('Hum');
+    expect(shortGroup('Business Studies')).toBe('Bus');
+  });
+
+  it('is nothing for a student with no stream recorded', () => {
+    expect(shortGroup(null)).toBe('');
+    expect(shortGroup('')).toBe('');
   });
 });

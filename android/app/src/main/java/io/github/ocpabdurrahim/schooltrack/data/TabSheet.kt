@@ -42,10 +42,16 @@ fun slot(t: Tabulation) = Slotted(
 data class Layout(
     /** Column headings for the shared subjects, in order. */
     val common: List<Pair<String, String>>,   // subjectId to subjectName
-    /** How many group columns the widest student in this section needs. */
-    val groupSlots: Int,
-    val religion: Boolean,
-    val optional: Boolean,
+    /**
+     * One entry per group column, naming every subject that turns up in it on
+     * this sheet — Physics for the Science rows, Civics for the Humanities
+     * ones. The heading is those names shortened and joined, so the column
+     * says what it holds instead of saying "Grp 1".
+     */
+    val groupSlots: List<List<String>>,
+    /** The religion papers on this sheet, and the 4th subjects. Empty: none. */
+    val religion: List<String>,
+    val optional: List<String>,
 )
 
 /**
@@ -58,19 +64,27 @@ data class Layout(
 fun layout(results: List<Tabulation>): Layout {
     val common = mutableListOf<Pair<String, String>>()
     val seen = mutableSetOf<String>()
-    var groupSlots = 0
-    var religion = false
-    var optional = false
+    val groupSlots = mutableListOf<MutableList<String>>()
+    val religion = mutableListOf<String>()
+    val optional = mutableListOf<String>()
+
+    /** Adds a name to a slot's list, keeping the order it was first seen in. */
+    fun note(into: MutableList<String>, name: String?) {
+        if (name != null && name !in into) into.add(name)
+    }
 
     for (t in results) {
         val s = slot(t)
         for (c in s.common) {
             if (seen.add(c.mark.subjectId)) common.add(c.mark.subjectId to c.mark.subjectName)
         }
-        groupSlots = maxOf(groupSlots, s.group.size)
-        religion = religion || s.religion != null
-        optional = optional || s.optional != null
+        s.group.forEachIndexed { i, c ->
+            while (groupSlots.size <= i) groupSlots.add(mutableListOf())
+            note(groupSlots[i], c.mark.subjectName)
+        }
+        note(religion, s.religion?.mark?.subjectName)
+        note(optional, s.optional?.mark?.subjectName)
     }
 
-    return Layout(common, groupSlots, religion, optional)
+    return Layout(common, groupSlots.map { it.toList() }, religion, optional)
 }

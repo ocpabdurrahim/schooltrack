@@ -57,3 +57,18 @@ export function groupOptions(stored: string | null | undefined): string[] {
   if (v !== '' && !list.includes(v)) list.push(v);
   return list;
 }
+
+/**
+ * The stream in three letters, for a column on a sheet that has no room for
+ * "Business Studies".
+ *
+ * A tabulation sheet needs it because a slot column headed PHY/CIV holds
+ * Physics on one row and Civics on the next, and the mark alone does not say
+ * which — the stream does.
+ */
+export function shortGroup(stored: string | null | undefined): string {
+  const v = normalGroup(stored);
+  if (v === '') return '';
+  if (v === 'Business Studies') return 'Bus';
+  return v.slice(0, 3);
+}
