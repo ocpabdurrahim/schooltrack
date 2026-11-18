@@ -52,7 +52,10 @@ class MenuTest {
     fun `the office gets the student records but no money`() {
         assertEquals(listOf("Students", "Attendance", "Exams"), groups(staff("OFFICE")))
         assertEquals(
-            listOf("All students", "Add a student", "Add many students", "Certificates"),
+            listOf(
+                "All students", "Add a student", "Add many students",
+                "Update from a list", "Certificates",
+            ),
             items(staff("OFFICE"), "Students"),
         )
     }

@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 enum class Screen {
     Home, Register, Scan, Students, Student, Children,
-    Setup, Classes, StaffAdmin, Users, StudentEdit, StudentsBatch,
+    Setup, Classes, StaffAdmin, Users, StudentEdit, StudentsBatch, StudentsUpdate,
     ExamSetup, MarkEntry, QuickMarks, Results, ReportCard,
     Routine, SeatPlan, AdmitCards,
     MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance, StudentResults, StudentFees,
@@ -138,6 +138,9 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     onOpen = { openStudent = it; go(Screen.Student) },
                     onBack = { back() },
                 )
+
+                screen == Screen.StudentsUpdate && current.canEditStudents ->
+                    StudentsUpdateScreen(onBack = { back() })
 
                 screen == Screen.StudentEdit && current.canEditStudents -> StudentEditScreen(
                     studentId = editStudent,

@@ -209,7 +209,16 @@ function assign(row: StudentRow, field: Field | undefined, cell: string) {
 }
 
 /** Reads a pasted list of students. Nothing is checked against the school yet. */
-export function parseStudentRows(text: string): StudentRow[] {
+export function parseStudentRows(
+  text: string,
+  /**
+   * False when the list is UPDATING students who are already here. A list of
+   * Roll and Group is a perfectly good instruction — "these 28 are Science" —
+   * and refusing it for having no name column would send the office back to
+   * the edit form 78 times.
+   */
+  nameRequired = true,
+): StudentRow[] {
   const lines = text.split(/\r?\n/)
     .map((raw, i) => ({ no: i + 1, raw }))
     .filter((l) => l.raw.trim() !== '');
@@ -247,7 +256,9 @@ export function parseStudentRows(text: string): StudentRow[] {
       }
     }
 
-    if (row.fullName === '' && row.problem === '') row.problem = 'No name on this line.';
+    if (nameRequired && row.fullName === '' && row.problem === '') {
+      row.problem = 'No name on this line.';
+    }
     return row;
   });
 }
@@ -449,3 +460,89 @@ export function applyMarkPaste(
   if (out.filled === 0 && out.problem === '') out.problem = 'None of those rolls are in this section.';
   return out;
 }
+
+
+// ---------------------------------------------------------------------------
+// updating students who are already here
+//
+// The same list a section was created from is the list that fixes it later:
+// the office keeps one spreadsheet, adds a Group column to it, and expects the
+// app to take the groups. Without this the only way to record 78 groups is 78
+// visits to the edit form, which is the same as not recording them — and a
+// student with no group sits every paper in the class, including the three
+// their stream does not take.
+
+/** The fields a list may change. Not the roll: that is what matches the row. */
+export type Editable = Exclude<Field, 'rollNo'>;
+
+export const UPDATABLE: Editable[] = [
+  'fullName', 'regNo', 'groupName', 'religion', 'gender', 'dob',
+  'fatherName', 'motherName', 'bloodGroup', 'mobileNo',
+];
+
+export type Change = { field: Editable; from: string; to: string };
+
+/** What this app already holds for a student, as far as a list can change it. */
+export type Existing = { studentId: string; rollNo: number } & Partial<
+  Record<Editable, string>
+>;
+
+export type Update = {
+  row: StudentRow;
+  /** Null when no student in this section has that roll. */
+  studentId: string | null;
+  /** Only the fields this row would actually alter. Empty: nothing to do. */
+  changes: Change[];
+  problem: string;
+};
+
+/**
+ * Pairs each line of a list with the student it updates, by roll.
+ *
+ * Nothing is written and nothing is created: a roll that is not in this
+ * section is reported, never added, because a list pasted against the wrong
+ * section would otherwise quietly double the school.
+ *
+ * A blank column changes nothing. A list that carries only Roll and Group
+ * leaves every name, mobile number and date of birth exactly as it was, which
+ * is what makes it safe to paste the same file twice.
+ */
+export function matchByRoll(rows: StudentRow[], here: Existing[]): Update[] {
+  const byRoll = new Map(here.map((s) => [s.rollNo, s]));
+
+  return rows.map((row) => {
+    if (row.problem) return { row, studentId: null, changes: [], problem: row.problem };
+    if (row.rollNo === null) {
+      return {
+        row, studentId: null, changes: [],
+        problem: 'This line has no roll number, so there is nothing to match it to.',
+      };
+    }
+
+    const found = byRoll.get(row.rollNo);
+    if (!found) {
+      return {
+        row, studentId: null, changes: [],
+        problem: `No roll ${row.rollNo} in this section.`,
+      };
+    }
+
+    const changes: Change[] = [];
+    for (const field of UPDATABLE) {
+      const to = String(row[field] ?? '').trim();
+      if (to === '') continue;                       // a blank column says nothing
+      const from = String(found[field] ?? '').trim();
+      if (from !== to) changes.push({ field, from, to });
+    }
+    return { row, studentId: found.studentId, changes, problem: '' };
+  });
+}
+
+/**
+ * How many of these rows would change the student's NAME.
+ *
+ * One or two are corrections. Forty mean the list belongs to another section,
+ * and the office is one click from renaming a class.
+ */
+export const renames = (updates: Update[]) =>
+  updates.filter((u) => u.changes.some((c) => c.field === 'fullName')).length;

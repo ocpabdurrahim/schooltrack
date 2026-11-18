@@ -215,7 +215,16 @@ private fun assign(row: StudentRow, field: Field?, cell: String): StudentRow {
 private val LOOSE_ROLL = Regex("^(\\d+)\\s+(.+)$")
 
 /** Reads a pasted list of students. Nothing is checked against the school yet. */
-fun parseStudentRows(text: String): List<StudentRow> {
+fun parseStudentRows(
+    text: String,
+    /**
+     * False when the list is UPDATING students who are already here. A list of
+     * Roll and Group is a perfectly good instruction — "these 28 are Science" —
+     * and refusing it for having no name column would send the office back to
+     * the edit form 78 times.
+     */
+    nameRequired: Boolean = true,
+): List<StudentRow> {
     val lines = text.split(Regex("\r?\n"))
         .mapIndexed { i, raw -> (i + 1) to raw }
         .filter { it.second.isNotBlank() }
@@ -266,7 +275,7 @@ fun parseStudentRows(text: String): List<StudentRow> {
             }
         }
 
-        if (row.fullName.isEmpty() && row.problem.isEmpty()) {
+        if (nameRequired && row.fullName.isEmpty() && row.problem.isEmpty()) {
             row = row.copy(problem = "No name on this line.")
         }
         row
@@ -502,3 +511,117 @@ fun applyMarkPaste(
         problem = if (entries.isEmpty()) "None of those rolls are in this section." else "",
     )
 }
+
+
+// ---------------------------------------------------------------------------
+// updating students who are already here
+//
+// The same list a section was created from is the list that fixes it later:
+// the office keeps one spreadsheet, adds a Group column to it, and expects the
+// app to take the groups. Without this the only way to record 78 groups is 78
+// visits to the edit form, which is the same as not recording them — and a
+// student with no group sits every paper in the class, including the three
+// their stream does not take.
+
+/** The fields a list may change. Not the roll: that is what matches the row. */
+enum class Editable { FULL_NAME, REG_NO, GROUP_NAME, RELIGION, GENDER, DOB, FATHER, MOTHER, BLOOD, MOBILE }
+
+data class Change(val field: Editable, val from: String, val to: String)
+
+/** What this app already holds for a student, as far as a list can change it. */
+data class Existing(
+    val studentId: String,
+    val rollNo: Long,
+    val fullName: String = "",
+    val regNo: String = "",
+    val groupName: String = "",
+    val religion: String = "",
+    val gender: String = "",
+    val dob: String = "",
+    val fatherName: String = "",
+    val motherName: String = "",
+    val bloodGroup: String = "",
+    val mobileNo: String = "",
+)
+
+data class Update(
+    val row: StudentRow,
+    /** Null when no student in this section has that roll. */
+    val studentId: String?,
+    /** Only the fields this row would actually alter. Empty: nothing to do. */
+    val changes: List<Change>,
+    val problem: String,
+)
+
+private fun valueOf(field: Editable, row: StudentRow) = when (field) {
+    Editable.FULL_NAME -> row.fullName
+    Editable.REG_NO -> row.regNo
+    Editable.GROUP_NAME -> row.groupName
+    Editable.RELIGION -> row.religion
+    Editable.GENDER -> row.gender
+    Editable.DOB -> row.dob
+    Editable.FATHER -> row.fatherName
+    Editable.MOTHER -> row.motherName
+    Editable.BLOOD -> row.bloodGroup
+    Editable.MOBILE -> row.mobileNo
+}
+
+private fun valueOf(field: Editable, s: Existing) = when (field) {
+    Editable.FULL_NAME -> s.fullName
+    Editable.REG_NO -> s.regNo
+    Editable.GROUP_NAME -> s.groupName
+    Editable.RELIGION -> s.religion
+    Editable.GENDER -> s.gender
+    Editable.DOB -> s.dob
+    Editable.FATHER -> s.fatherName
+    Editable.MOTHER -> s.motherName
+    Editable.BLOOD -> s.bloodGroup
+    Editable.MOBILE -> s.mobileNo
+}
+
+/**
+ * Pairs each line of a list with the student it updates, by roll.
+ *
+ * Nothing is written and nothing is created: a roll that is not in this
+ * section is reported, never added, because a list pasted against the wrong
+ * section would otherwise quietly double the school.
+ *
+ * A blank column changes nothing. A list that carries only Roll and Group
+ * leaves every name, mobile number and date of birth exactly as it was, which
+ * is what makes it safe to paste the same file twice.
+ */
+fun matchByRoll(rows: List<StudentRow>, here: List<Existing>): List<Update> {
+    val byRoll = here.associateBy { it.rollNo }
+
+    return rows.map { row ->
+        when {
+            row.problem.isNotEmpty() -> Update(row, null, emptyList(), row.problem)
+            row.rollNo == null -> Update(
+                row, null, emptyList(),
+                "This line has no roll number, so there is nothing to match it to.",
+            )
+            else -> {
+                val found = byRoll[row.rollNo]
+                if (found == null) {
+                    Update(row, null, emptyList(), "No roll " + row.rollNo + " in this section.")
+                } else {
+                    val changes = Editable.entries.mapNotNull { field ->
+                        val to = valueOf(field, row).trim()
+                        val from = valueOf(field, found).trim()
+                        if (to.isEmpty() || from == to) null else Change(field, from, to)
+                    }
+                    Update(row, found.studentId, changes, "")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * How many of these rows would change the student's NAME.
+ *
+ * One or two are corrections. Forty mean the list belongs to another section,
+ * and the office is one click from renaming a class.
+ */
+fun renames(updates: List<Update>) =
+    updates.count { u -> u.changes.any { it.field == Editable.FULL_NAME } }

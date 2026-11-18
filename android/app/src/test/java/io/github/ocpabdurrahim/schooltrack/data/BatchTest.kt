@@ -1,10 +1,14 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The same cases exist in web/src/data/batch.test.ts. */
+private const val NEWLINE = "\n"
+
 class BatchTest {
 
     // -----------------------------------------------------------------------
@@ -363,5 +367,93 @@ class BatchTest {
     fun `reads a decimal mark`() {
         val fill = applyMarkPaste(parseMarkPaste("1 77.5"), section, 100L)
         assertEquals("77.5", fill.entries["76"]!!.marks)
+    }
+
+    // ----------------------------------------------------------------------
+    // updating students who are already here
+    //
+    // Written from the real case: a section of 78 was created from a list, the
+    // Group column was added to that list afterwards, and 77 students sat every
+    // paper in the class — Physics, History and both religion papers — because
+    // nothing recorded which stream they were in.
+
+    private val here = listOf(
+        Existing("238", 1, fullName = "Samia Putul", gender = "Female"),
+        Existing("239", 2, fullName = "Afroza Akter", groupName = "Science"),
+        Existing("240", 3, fullName = "Sohan"),
+    )
+
+    // nameRequired = false: a list of Roll and Group has no name column, and
+    // for an update it does not need one.
+    private fun list(text: String) = matchByRoll(parseStudentRows(text, false), here)
+
+    @Test
+    fun pairsEachLineWithTheStudentOfThatRoll() {
+        val got = list("Roll,Name,Group@1,Samia Putul,Science@3,Sohan,Humanities".replace("@", NEWLINE))
+        assertEquals(listOf("238", "240"), got.map { it.studentId })
+        assertEquals(listOf("", ""), got.map { it.problem })
+    }
+
+    @Test
+    fun recordsOnlyWhatTheRowWouldActuallyChange() {
+        val got = list("Roll,Name,Group@1,Samia Putul,Science".replace("@", NEWLINE))
+        assertEquals(listOf(Change(Editable.GROUP_NAME, "", "Science")), got[0].changes)
+    }
+
+    @Test
+    fun saysNothingToDoWhenTheValueIsAlreadyThere() {
+        val got = list("Roll,Name,Group@2,Afroza Akter,Science".replace("@", NEWLINE))
+        assertEquals(emptyList<Change>(), got[0].changes)
+    }
+
+    @Test
+    fun leavesABlankColumnAloneSoItCannotWipeWhatIsStored() {
+        // Only Roll and Group on this list: the gender already on roll 1 stays.
+        val got = list("Roll,Group@1,Science".replace("@", NEWLINE))
+        assertEquals(listOf(Change(Editable.GROUP_NAME, "", "Science")), got[0].changes)
+        assertFalse(got[0].changes.any { it.field == Editable.GENDER })
+    }
+
+    @Test
+    fun reportsARollThisSectionDoesNotHaveAndNeverCreatesIt() {
+        val got = list("Roll,Name,Group@9,Nobody,Science".replace("@", NEWLINE))
+        assertNull(got[0].studentId)
+        assertEquals("No roll 9 in this section.", got[0].problem)
+        assertEquals(emptyList<Change>(), got[0].changes)
+    }
+
+    @Test
+    fun refusesALineWithNoRollAtAll() {
+        val row = parseStudentRows("Ayesha Khatun")[0].copy(rollNo = null)
+        val got = matchByRoll(listOf(row), here)
+        assertNull(got[0].studentId)
+        assertTrue(got[0].problem.contains("no roll number"))
+    }
+
+    @Test
+    fun countsTheRowsThatWouldRenameSomebody() {
+        // One is a correction. Forty mean the list belongs to another section.
+        assertEquals(0, renames(list("Roll,Name,Group@1,Samia Putul,Science".replace("@", NEWLINE))))
+        assertEquals(
+            2,
+            renames(
+                list(
+                    "Roll,Name,Group@1,Different Child,Science@2,Another One,Science"
+                        .replace("@", NEWLINE),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun normalisesAsItGoesSoSciIsStoredAsScience() {
+        assertEquals(
+            listOf(Change(Editable.GROUP_NAME, "", "Science")),
+            list("Roll,Group@3,sci".replace("@", NEWLINE))[0].changes,
+        )
+        assertEquals(
+            listOf(Change(Editable.RELIGION, "", "Islam")),
+            list("Roll,Religion@3,muslim".replace("@", NEWLINE))[0].changes,
+        )
     }
 }
