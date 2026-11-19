@@ -54,12 +54,30 @@ Rebuild it after any change to `workbook.py`:
 
     .venv/Scripts/python.exe make_fixture.py
 
-## What is not done
+## Where it actually stands
 
-**`reader.py` — the reading itself.** Everything around it works: the
-spreadsheet is written, the app accepts it, the contract is tested. The hole
-in the middle is turning a photograph into rows, and it is **blocked on real
-photographs** in `samples/`.
+Run `selftest.py` for a number rather than an opinion. Two results, and the
+difference between them is the whole story:
+
+**On a clean generated sheet — 97% correct, ~2% wrong.** The pipeline is
+sound: the grid is found, the columns line up, the roll sequence is settled
+from the printed run, the spreadsheet is written and the app accepts it.
+
+**On a real photographed sheet — the grid is found correctly (15 columns,
+3 blocks, 37 rules) but almost nothing is read.** Not wrong: BLANK. It
+refuses rather than inventing, which is the behaviour that was designed for,
+but a reader that holds everything is no use to anybody.
+
+The difference between those two numbers is not the grid. It is the
+**recogniser**: RapidOCR's models are trained on PRINTED text, and they read
+rendered digits beautifully and this teacher's handwriting not at all. That
+is the thing to change — a handwriting model, or a small digit classifier
+trained on digits written by hand — and it is a different problem from the
+one solved so far, not a tuning exercise on this one.
+
+What is already worth keeping either way: the grid finding, the trimming of
+desk and shadow from the page, the roll-sequence check that stopped marks
+landing against the wrong child, and the rule that an unsure box is blank.
 
 ## Samples
 
