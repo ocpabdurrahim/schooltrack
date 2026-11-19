@@ -25,9 +25,17 @@ export type Integrations = {
    * "work it out next time".
    */
   geminiModel: string;
+  /**
+   * The runners-up, best first, so a busy model is something to step around
+   * rather than wait out. Empty on a key saved before this existed, which is
+   * why geminiModel is still kept and still used first.
+   */
+  geminiModels: string[];
 };
 
-export const NO_INTEGRATIONS: Integrations = { geminiApiKey: '', geminiModel: '' };
+export const NO_INTEGRATIONS: Integrations = {
+  geminiApiKey: '', geminiModel: '', geminiModels: [],
+};
 
 const ref = () => doc(db, 'schools', SCHOOL_ID, 'integrations', 'gemini');
 
@@ -46,6 +54,7 @@ export async function getIntegrations(): Promise<Integrations> {
     return {
       geminiApiKey: String(d.geminiApiKey ?? ''),
       geminiModel: String(d.geminiModel ?? ''),
+      geminiModels: Array.isArray(d.geminiModels) ? d.geminiModels.map(String) : [],
     };
   } catch {
     return NO_INTEGRATIONS;
@@ -57,6 +66,7 @@ export async function saveIntegrations(patch: Partial<Integrations>): Promise<vo
   const data: Record<string, unknown> = { updatedAt: serverTimestamp() };
   if (patch.geminiApiKey !== undefined) data.geminiApiKey = patch.geminiApiKey.trim();
   if (patch.geminiModel !== undefined) data.geminiModel = patch.geminiModel.trim();
+  if (patch.geminiModels !== undefined) data.geminiModels = patch.geminiModels.map((m) => m.trim());
   await setDoc(ref(), data, { merge: true });
 }
 

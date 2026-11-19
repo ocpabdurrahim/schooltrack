@@ -45,7 +45,7 @@ import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.IntegrationsRepository
 import io.github.ocpabdurrahim.schooltrack.data.listModels
 import io.github.ocpabdurrahim.schooltrack.data.maskKey
-import io.github.ocpabdurrahim.schooltrack.data.pickVisionModel
+import io.github.ocpabdurrahim.schooltrack.data.rankVisionModels
 import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
 import io.github.ocpabdurrahim.schooltrack.data.STAFF_STATUS
@@ -278,15 +278,28 @@ fun SchoolSetupScreen(
                             scope.launch {
                                 try {
                                     val key = newKey.trim()
-                                    val picked = pickVisionModel(listModels(key))
-                                        ?: throw IllegalStateException(
+                                    val ranked = rankVisionModels(listModels(key))
+                                    if (ranked.isEmpty()) {
+                                        throw IllegalStateException(
                                             "That key works, but has no model on it that " +
                                                 "can read a picture.",
                                         )
-                                    integrations.save(apiKey = key, model = picked)
+                                    }
+                                    val picked = ranked.first()
+                                    integrations.save(
+                                        apiKey = key, model = picked, models = ranked,
+                                    )
                                     keyOnFile = key; model = picked; newKey = ""
+                                    // The runners-up matter to say out loud: the
+                                    // best model is also the busiest.
                                     keyNote = "Saved, and checked against Google. " +
-                                        "Sheets will be read by " + picked + "."
+                                        "Sheets will be read by " + picked +
+                                        if (ranked.size > 1) {
+                                            ", falling back to " +
+                                                ranked.drop(1).joinToString(", ") + " if it is busy."
+                                        } else {
+                                            ". It is the only model on this key that can read a picture."
+                                        }
                                 } catch (e: Exception) {
                                     keyProblem = e.message ?: "That key could not be checked."
                                 }

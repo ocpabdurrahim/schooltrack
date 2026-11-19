@@ -27,6 +27,12 @@ data class Integrations(
      * the discovery happens once rather than before every sheet.
      */
     val geminiModel: String = "",
+    /**
+     * The runners-up, best first, so a busy model is something to step around
+     * rather than wait out. Empty on a key saved before this existed, which is
+     * why geminiModel is still kept and still used first.
+     */
+    val geminiModels: List<String> = emptyList(),
 )
 
 /**
@@ -64,16 +70,23 @@ class IntegrationsRepository(
         Integrations(
             geminiApiKey = snap.getString("geminiApiKey").orEmpty(),
             geminiModel = snap.getString("geminiModel").orEmpty(),
+            geminiModels = (snap.get("geminiModels") as? List<*>)
+                ?.mapNotNull { it as? String }.orEmpty(),
         )
     } catch (_: Exception) {
         Integrations()
     }
 
     /** Only the fields given are touched, so remembering a model cannot wipe a key. */
-    suspend fun save(apiKey: String? = null, model: String? = null) {
+    suspend fun save(
+        apiKey: String? = null,
+        model: String? = null,
+        models: List<String>? = null,
+    ) {
         val data = mutableMapOf<String, Any>("updatedAt" to FieldValue.serverTimestamp())
         apiKey?.let { data["geminiApiKey"] = it.trim() }
         model?.let { data["geminiModel"] = it.trim() }
+        models?.let { list -> data["geminiModels"] = list.map { it.trim() } }
         ref().set(data, SetOptions.merge()).await()
     }
 }

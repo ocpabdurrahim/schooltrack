@@ -36,7 +36,24 @@ const NOT_A_READER = /embedding|aqa|imagen|veo|tts|audio|image-generation|learnl
  * nothing but loses to anything stable.
  */
 export function pickVisionModel(models: ModelInfo[]): string | null {
-  const scored = models
+  return rankVisionModels(models)[0] ?? null;
+}
+
+/** How many are kept as fallbacks. Enough to route around a busy one. */
+export const MODELS_KEPT = 4;
+
+/**
+ * Every usable model on the account, best first.
+ *
+ * The scoring always produced this order; it used to be thrown away and only
+ * the winner kept. That was wrong in the one case that matters: the newest
+ * flash model is both the best choice AND the one everybody else is calling,
+ * so the model most likely to be picked is the model most likely to answer
+ * "experiencing high demand". Keeping the runners-up means a busy model is
+ * something to step around rather than something to wait out.
+ */
+export function rankVisionModels(models: ModelInfo[]): string[] {
+  return models
     .filter((m) => m.methods.includes('generateContent'))
     .filter((m) => !NOT_A_READER.test(m.name))
     .map((m) => {
@@ -50,9 +67,20 @@ export function pickVisionModel(models: ModelInfo[]): string | null {
       if (version) score += Number(version[1]) * 10 + Number(version[2]);
       return { name, score };
     })
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .map((m) => m.name)
+    .slice(0, MODELS_KEPT);
+}
 
-  return scored[0]?.name ?? null;
+/**
+ * Whether this failure is worth asking a DIFFERENT model about.
+ *
+ * Busy, broken or gone — none of which the next model need be. A 400 is a bad
+ * key or a bad request and would fail on every model alike; a 429 is Google
+ * asking for less, and asking a second model is still asking more.
+ */
+export function shouldTryAnotherModel(status: number): boolean {
+  return status >= 500 || status === 404;
 }
 
 export async function listModels(apiKey: string): Promise<ModelInfo[]> {
@@ -74,9 +102,14 @@ export async function listModels(apiKey: string): Promise<ModelInfo[]> {
  */
 export const RETRY_WAITS_MS = [900, 2600];
 
-export function retryAfter(status: number, attempt: number): number | null {
+export function retryAfter(
+  status: number,
+  attempt: number,
+  budget = RETRY_WAITS_MS.length,
+): number | null {
   if (status < 500) return null;
-  return attempt < RETRY_WAITS_MS.length ? RETRY_WAITS_MS[attempt] : null;
+  const allowed = Math.min(budget, RETRY_WAITS_MS.length);
+  return attempt < allowed ? RETRY_WAITS_MS[attempt] : null;
 }
 
 /**
@@ -138,7 +171,12 @@ const sleep = (ms: number) => new Promise((r) => { setTimeout(r, ms); });
  * wrong with the sheet, and a teacher at the end of a marking day should not
  * have to be the retry mechanism.
  */
-async function send(url: string, init: RequestInit = {}, uploadBytes = 0): Promise<Response> {
+async function send(
+  url: string,
+  init: RequestInit = {},
+  uploadBytes = 0,
+  budget = RETRY_WAITS_MS.length,
+): Promise<Response> {
   for (let attempt = 0; ; attempt += 1) {
     let res: Response;
     try {
@@ -149,7 +187,7 @@ async function send(url: string, init: RequestInit = {}, uploadBytes = 0): Promi
       await sleep(again);
       continue;
     }
-    const wait = retryAfter(res.status, attempt);
+    const wait = retryAfter(res.status, attempt, budget);
     if (wait === null) return res;
     await sleep(wait);
   }
@@ -276,6 +314,13 @@ export const REPLY_SCHEMA = {
 // ---------------------------------------------------------------------------
 // what comes back
 
+/** Only the parts of Google's reply this file reads. */
+type GenerateReply = {
+  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+  promptFeedback?: { blockReason?: string };
+  error?: { message?: string };
+};
+
 /** A cell as the model may have written it: a number, a string, or nothing. */
 function cellValue(raw: unknown): number | null {
   if (raw === null || raw === undefined) return null;
@@ -365,11 +410,13 @@ export type SheetImage = { mimeType: string; base64: string };
  */
 export async function readSheets(
   apiKey: string,
-  model: string,
+  model: string | string[],
   images: SheetImage[],
   componentNames: string[],
 ): Promise<ScanRead> {
   if (images.length === 0) throw new Error('There is no photograph to read.');
+  const models = (Array.isArray(model) ? model : [model]).filter((m) => m !== '');
+  if (models.length === 0) throw new Error('No model has been chosen to read with.');
 
   const payload = JSON.stringify({
     contents: [{
@@ -390,18 +437,36 @@ export async function readSheets(
     },
   });
 
-  const res = await send(
-    `${API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-    },
-    payload.length,
-  );
+  let res!: Response;
+  let body: GenerateReply | null = null;
+  let used = models[0];
 
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(apiError(res.status, body, model));
+  for (let i = 0; i < models.length; i += 1) {
+    used = models[i];
+    const last = i === models.length - 1;
+    // Only the last one is worth waiting out. While there is another model to
+    // ask, a busy one should be stepped around at once rather than slept on.
+    res = await send(
+      `${API}/models/${encodeURIComponent(used)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      },
+      payload.length,
+      last ? undefined : 0,
+    );
+    body = await res.json().catch(() => null);
+    if (res.ok) break;
+    if (!last && shouldTryAnotherModel(res.status)) continue;
+    break;
+  }
+
+  if (!res.ok) {
+    const others = models.slice(0, models.indexOf(used)).join(', ');
+    const also = others ? ` Also tried: ${others}.` : '';
+    throw new Error(`${apiError(res.status, body, used)}${also}`);
+  }
 
   const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (typeof text !== 'string' || text.trim() === '') {
@@ -412,4 +477,22 @@ export async function readSheets(
     );
   }
   return parseScanReply(text);
+}
+
+/**
+ * The models to try, in order, from what was remembered.
+ *
+ * The single `geminiModel` is honoured first even when a list exists: it is
+ * what the Setup screen showed the person, and a key saved before the list
+ * existed has nothing else. Duplicates and blanks are dropped so a stored
+ * pair of ("gemini-3.8-flash", [gemini-3.8-flash, ...]) does not ask the same
+ * busy model twice.
+ */
+export function modelsToTry(remembered: string, list: string[]): string[] {
+  const out: string[] = [];
+  for (const m of [remembered, ...list]) {
+    const name = m.trim();
+    if (name !== '' && !out.includes(name)) out.push(name);
+  }
+  return out;
 }

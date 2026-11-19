@@ -291,6 +291,62 @@ class GeminiTest {
         assertTrue(noAnswerError("Timeout error", 0).contains("120 seconds"))
     }
 
+    // ------------------------------------------------- more than one model
+
+    @Test
+    fun `ranks them best first, not just the winner`() {
+        val got = rankVisionModels(
+            listOf(m("models/gemini-2.5-pro"), m("models/gemini-3.8-flash"), m("models/gemini-2.5-flash")),
+        )
+        assertEquals("gemini-3.8-flash", got[0])
+        assertTrue(got.contains("gemini-2.5-flash"))
+        assertTrue(got.contains("gemini-2.5-pro"))
+    }
+
+    @Test
+    fun `keeps the first of the list as the one pickVisionModel would choose`() {
+        val list = listOf(m("models/gemini-2.5-flash"), m("models/gemini-3.8-flash"))
+        assertEquals(pickVisionModel(list), rankVisionModels(list).first())
+    }
+
+    @Test
+    fun `does not remember an unbounded pile of them`() {
+        val many = (0 until 20).map { m("models/gemini-2.$it-flash") }
+        assertEquals(MODELS_KEPT, rankVisionModels(many).size)
+    }
+
+    @Test
+    fun `asks another model when this one is busy, broken or gone`() {
+        assertTrue(shouldTryAnotherModel(503)) // high demand — the real case
+        assertTrue(shouldTryAnotherModel(500))
+        assertTrue(shouldTryAnotherModel(404)) // withdrawn since it was remembered
+    }
+
+    @Test
+    fun `does not ask another model when every model would fail the same way`() {
+        assertTrue(!shouldTryAnotherModel(400)) // a bad key is bad everywhere
+        assertTrue(!shouldTryAnotherModel(403))
+        assertTrue(!shouldTryAnotherModel(429)) // asking more is the wrong answer
+    }
+
+    @Test
+    fun `puts the remembered model first and never asks it twice`() {
+        assertEquals(
+            listOf("gemini-3.8-flash", "gemini-2.5-flash"),
+            modelsToTry("gemini-3.8-flash", listOf("gemini-3.8-flash", "gemini-2.5-flash")),
+        )
+        assertEquals(listOf("gemini-3.8-flash"), modelsToTry("gemini-3.8-flash", emptyList()))
+        assertEquals(listOf("gemini-2.5-flash"), modelsToTry("", listOf("gemini-2.5-flash")))
+        assertEquals(emptyList<String>(), modelsToTry("", emptyList()))
+    }
+
+    @Test
+    fun `does not sleep on a busy model while another is still untried`() {
+        // Waiting out a model we are about to abandon is pure delay.
+        assertNull(retryAfter(503, 0, budget = 0))
+        assertTrue(retryAfter(503, 0) != null)
+    }
+
     // ------------------------------------------------------------- masking
 
     @Test

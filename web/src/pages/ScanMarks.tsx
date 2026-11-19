@@ -14,7 +14,7 @@ import {
 import { type StudentDetail, findStudents } from '../data/people';
 import { partsAndTotal } from '../data/markentry';
 import { getIntegrations, saveIntegrations } from '../data/integrations';
-import { listModels, pickVisionModel, readSheets } from '../data/gemini';
+import { listModels, modelsToTry, rankVisionModels, readSheets } from '../data/gemini';
 import { type SheetShot, fileToSheetShot, sheetSizeLabel } from '../data/sheetphoto';
 import {
   type Chosen,
@@ -142,15 +142,27 @@ export default function ScanMarks() {
   }
 
   /** Works out which model to spend the key on, once, and remembers it. */
-  async function modelFor(apiKey: string, stored: string): Promise<string> {
-    if (stored) return stored;
-    const picked = pickVisionModel(await listModels(apiKey));
-    if (!picked) {
+  /**
+   * Which models to try, best first.
+   *
+   * More than one, because the best model on an account is also the busiest:
+   * a sheet should step around "experiencing high demand" rather than ask the
+   * teacher to come back later.
+   */
+  async function modelsFor(apiKey: string, stored: string, list: string[]): Promise<string[]> {
+    const remembered = modelsToTry(stored, list);
+    // One model and no runners-up is what a key saved before fallbacks looks
+    // like. Rather than make somebody go and re-save it, the list is filled in
+    // here, once — the cost is a single extra call the first time.
+    if (remembered.length > 1) return remembered;
+    const ranked = rankVisionModels(await listModels(apiKey));
+    if (!ranked.length) {
       throw new Error('This key has no model on it that can read a picture.');
     }
     // A teacher may not write here; that is fine, it is only a cache.
-    saveIntegrations({ geminiModel: picked }).catch(() => {});
-    return picked;
+    saveIntegrations({ geminiModel: stored || ranked[0], geminiModels: ranked }).catch(() => {});
+    // The model already shown on Setup stays first; the rest are the fallbacks.
+    return modelsToTry(stored, ranked);
   }
 
   async function readIt() {
@@ -162,9 +174,9 @@ export default function ScanMarks() {
         setHasKey(false);
         throw new Error('No Gemini key is set up yet.');
       }
-      const model = await modelFor(keys.geminiApiKey, keys.geminiModel);
+      const models = await modelsFor(keys.geminiApiKey, keys.geminiModel, keys.geminiModels);
       const got = await readSheets(
-        keys.geminiApiKey, model, shots.map((s) => ({ mimeType: s.mimeType, base64: s.base64 })),
+        keys.geminiApiKey, models, shots.map((s) => ({ mimeType: s.mimeType, base64: s.base64 })),
         components.map((c) => c.name),
       );
       setRead(got);

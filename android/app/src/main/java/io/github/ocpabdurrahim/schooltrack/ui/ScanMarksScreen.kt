@@ -63,7 +63,8 @@ import io.github.ocpabdurrahim.schooltrack.data.newSheetPhotoUri
 import io.github.ocpabdurrahim.schooltrack.data.matchComponent
 import io.github.ocpabdurrahim.schooltrack.data.normalColumn
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
-import io.github.ocpabdurrahim.schooltrack.data.pickVisionModel
+import io.github.ocpabdurrahim.schooltrack.data.modelsToTry
+import io.github.ocpabdurrahim.schooltrack.data.rankVisionModels
 import io.github.ocpabdurrahim.schooltrack.data.readSheets
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
@@ -439,17 +440,35 @@ fun ScanMarksScreen(
                                     hasKey = false
                                     throw IllegalStateException("No Gemini key is set up yet.")
                                 }
-                                val model = k.geminiModel.ifEmpty {
-                                    val picked = pickVisionModel(listModels(k.geminiApiKey))
-                                        ?: throw IllegalStateException(
+                                // More than one, because the best model on an
+                                // account is also the busiest: a sheet should
+                                // step around "high demand" rather than ask the
+                                // teacher to come back later.
+                                val remembered = modelsToTry(k.geminiModel, k.geminiModels)
+                                // One model and no runners-up is what a key
+                                // saved before fallbacks looks like. Rather
+                                // than make somebody re-save it, the list is
+                                // filled in here, once.
+                                val models = if (remembered.size > 1) {
+                                    remembered
+                                } else {
+                                    val ranked = rankVisionModels(listModels(k.geminiApiKey))
+                                    if (ranked.isEmpty()) {
+                                        throw IllegalStateException(
                                             "This key has no model on it that can read a picture.",
                                         )
-                                    // A teacher may not write here; it is only a cache.
-                                    runCatching { keys.save(model = picked) }
-                                    picked
+                                    }
+                                    // A teacher may not write here; only a cache.
+                                    runCatching {
+                                        keys.save(
+                                            model = k.geminiModel.ifEmpty { ranked.first() },
+                                            models = ranked,
+                                        )
+                                    }
+                                    modelsToTry(k.geminiModel, ranked)
                                 }
                                 val got = readSheets(
-                                    k.geminiApiKey, model,
+                                    k.geminiApiKey, models,
                                     shots.map { SheetImage(it.mimeType, it.base64) },
                                     c.components.map { it.name },
                                 )

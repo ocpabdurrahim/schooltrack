@@ -46,7 +46,48 @@ private val NOT_A_READER =
  * worse here than a slow one. Newer beats older; a preview beats nothing but
  * loses to anything stable.
  */
-fun pickVisionModel(models: List<ModelInfo>): String? {
+fun pickVisionModel(models: List<ModelInfo>): String? = rankVisionModels(models).firstOrNull()
+
+/** How many are kept as fallbacks. Enough to route around a busy one. */
+const val MODELS_KEPT = 4
+
+/**
+ * Whether this failure is worth asking a DIFFERENT model about.
+ *
+ * Busy, broken or gone — none of which the next model need be. A 400 is a bad
+ * key or a bad request and would fail on every model alike; a 429 is Google
+ * asking for less, and asking a second model is still asking more.
+ */
+fun shouldTryAnotherModel(status: Int): Boolean = status >= 500 || status == 404
+
+/**
+ * The models to try, in order, from what was remembered.
+ *
+ * The single stored model is honoured first even when a list exists: it is
+ * what the Setup screen showed the person, and a key saved before the list
+ * existed has nothing else. Duplicates and blanks are dropped so a busy model
+ * is never asked twice.
+ */
+fun modelsToTry(remembered: String, list: List<String>): List<String> {
+    val out = mutableListOf<String>()
+    for (m in listOf(remembered) + list) {
+        val name = m.trim()
+        if (name.isNotEmpty() && name !in out) out.add(name)
+    }
+    return out
+}
+
+/**
+ * Every usable model on the account, best first.
+ *
+ * The scoring always produced this order; it used to be thrown away and only
+ * the winner kept. That was wrong in the one case that matters: the newest
+ * flash model is both the best choice AND the one everybody else is calling,
+ * so the model most likely to be picked is the model most likely to answer
+ * "experiencing high demand". Keeping the runners-up means a busy model is
+ * something to step around rather than something to wait out.
+ */
+fun rankVisionModels(models: List<ModelInfo>): List<String> {
     val scored = models
         .filter { "generateContent" in it.methods }
         .filterNot { NOT_A_READER.containsMatchIn(it.name) }
@@ -64,7 +105,7 @@ fun pickVisionModel(models: List<ModelInfo>): String? {
         }
         .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
 
-    return scored.firstOrNull()?.first
+    return scored.map { it.first }.take(MODELS_KEPT)
 }
 
 /**
@@ -253,9 +294,10 @@ data class SheetImage(val mimeType: String, val base64: String)
  */
 val RETRY_WAITS_MS = listOf(900L, 2600L)
 
-fun retryAfter(status: Int, attempt: Int): Long? {
+fun retryAfter(status: Int, attempt: Int, budget: Int = RETRY_WAITS_MS.size): Long? {
     if (status < 500) return null
-    return if (attempt < RETRY_WAITS_MS.size) RETRY_WAITS_MS[attempt] else null
+    val allowed = minOf(budget, RETRY_WAITS_MS.size)
+    return if (attempt < allowed) RETRY_WAITS_MS[attempt] else null
 }
 
 /** How long one attempt is given before it is abandoned. */
@@ -356,7 +398,19 @@ private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
  * have to be the retry mechanism. Already on a background thread, so sleeping
  * here blocks nothing the teacher can see.
  */
-private fun call(url: String, payload: String?, model: String = ""): String {
+/**
+ * A refusal from Google, carrying the status so the caller can decide whether
+ * another model is worth asking. Without the status it could only be a string
+ * to show, and "busy" would be indistinguishable from "bad key".
+ */
+class GeminiHttpException(val status: Int, message: String) : IllegalStateException(message)
+
+private fun call(
+    url: String,
+    payload: String?,
+    model: String = "",
+    budget: Int = RETRY_WAITS_MS.size,
+): String {
     val uploadBytes = payload?.length ?: 0
     var attempt = 0
     while (true) {
@@ -374,8 +428,8 @@ private fun call(url: String, payload: String?, model: String = ""): String {
         }
         val (status, text) = result
         if (status in 200..299) return text
-        val wait = retryAfter(status, attempt)
-            ?: throw IllegalStateException(apiError(status, text, model))
+        val wait = retryAfter(status, attempt, budget)
+            ?: throw GeminiHttpException(status, apiError(status, text, model))
         Thread.sleep(wait)
         attempt += 1
     }
@@ -426,11 +480,12 @@ suspend fun listModels(apiKey: String): List<ModelInfo> = withContext(Dispatcher
  */
 suspend fun readSheets(
     apiKey: String,
-    model: String,
+    models: List<String>,
     images: List<SheetImage>,
     componentNames: List<String>,
 ): ScanRead = withContext(Dispatchers.IO) {
     if (images.isEmpty()) throw IllegalStateException("There is no photograph to read.")
+    if (models.isEmpty()) throw IllegalStateException("No model has been chosen to read with.")
 
     val parts = JSONArray().put(JSONObject().put("text", buildPrompt(componentNames)))
     for (i in images) {
@@ -455,9 +510,30 @@ suspend fun readSheets(
         )
         .toString()
 
-    val body = JSONObject(
-        call("$API/models/${enc(model)}:generateContent?key=${enc(apiKey)}", payload, model),
-    )
+    var answer: String? = null
+    for ((i, mdl) in models.withIndex()) {
+        val last = i == models.lastIndex
+        try {
+            // Only the last one is worth waiting out. While there is another
+            // model to ask, a busy one should be stepped around at once
+            // rather than slept on.
+            answer = call(
+                "$API/models/${enc(mdl)}:generateContent?key=${enc(apiKey)}",
+                payload,
+                mdl,
+                if (last) RETRY_WAITS_MS.size else 0,
+            )
+            break
+        } catch (e: GeminiHttpException) {
+            if (!last && shouldTryAnotherModel(e.status)) continue
+            val others = models.take(i).joinToString(", ")
+            throw IllegalStateException(
+                e.message.orEmpty() + if (others.isNotEmpty()) " Also tried: $others." else "",
+            )
+        }
+    }
+
+    val body = JSONObject(answer.orEmpty())
     val text = body.optJSONArray("candidates")
         ?.optJSONObject(0)
         ?.optJSONObject("content")

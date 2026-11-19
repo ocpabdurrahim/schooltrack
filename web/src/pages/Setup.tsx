@@ -6,7 +6,7 @@ import {
   saveSettings,
 } from '../data/admin';
 import { getIntegrations, maskKey, saveIntegrations } from '../data/integrations';
-import { listModels, pickVisionModel } from '../data/gemini';
+import { listModels, rankVisionModels } from '../data/gemini';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -47,13 +47,23 @@ export default function Setup() {
     if (!key) return;
     setKeyBusy(true); setKeyNote(''); setKeyProblem('');
     try {
-      const picked = pickVisionModel(await listModels(key));
-      if (!picked) throw new Error('That key works, but has no model on it that can read a picture.');
-      await saveIntegrations({ geminiApiKey: key, geminiModel: picked });
+      const ranked = rankVisionModels(await listModels(key));
+      if (!ranked.length) throw new Error('That key works, but has no model on it that can read a picture.');
+      const picked = ranked[0];
+      await saveIntegrations({ geminiApiKey: key, geminiModel: picked, geminiModels: ranked });
       setKeyOnFile(key);
       setModel(picked);
       setNewKey('');
-      setKeyNote(`Saved, and checked against Google. Sheets will be read by ${picked}.`);
+      // The runners-up matter to say out loud: the best model is also the
+      // busiest, and knowing there is somewhere to fall back to is the
+      // difference between "come back later" and "it sorted itself out".
+      const spare = ranked.length - 1;
+      setKeyNote(
+        `Saved, and checked against Google. Sheets will be read by ${picked}`
+        + (spare > 0
+          ? `, falling back to ${ranked.slice(1).join(', ')} if it is busy.`
+          : '. It is the only model on this key that can read a picture.'),
+      );
     } catch (err) {
       setKeyProblem(err instanceof Error ? err.message : 'That key could not be checked.');
     }
