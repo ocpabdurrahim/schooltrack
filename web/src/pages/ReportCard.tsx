@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { type SchoolSettings, getSettings } from '../data/admin';
+import { type ClassRow, type SchoolSettings, getSettings, listAllClasses } from '../data/admin';
 import {
   type Exam,
   type Subject,
   getExam,
   listSubjects,
+  marksForExam,
   marksForStudent,
   sheetFor,
 } from '../data/exams';
 import { type Tabulation, gpaText } from '../data/grading';
+import { type Sitting, satAs, sittingName } from '../data/sitting';
 import {
   type AttendanceSummary,
   type StudentDetail,
   attendanceFor,
-  findStudents,
   getStudent,
   startOfYear,
 } from '../data/people';
@@ -39,6 +40,8 @@ export default function ReportCard() {
   const [position, setPosition] = useState<number | null>(null);
   const [outOf, setOutOf] = useState(0);
   const [attendance, setAttendance] = useState<AttendanceSummary | null>(null);
+  const [sat, setSat] = useState<Sitting | null>(null);
+  const [classes, setClasses] = useState<ClassRow[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'forbidden'>('loading');
 
   const mine = access.kind !== 'guardian' || access.studentIds.includes(studentId);
@@ -59,21 +62,51 @@ export default function ReportCard() {
         // A parent must not read a result that is still being entered.
         if (access.kind === 'guardian' && !e.published) { setState('forbidden'); return; }
 
-        const classmates = await findStudents(s.classId, '').catch(() => [s]);
         const marks = await marksForStudent(s.studentId);
         const own = sheetFor([s], subjects, marks, examId)[0];
         setTabulation(own.tabulation);
+
+        // Where this exam was SAT, from its own marks — not where the student
+        // is now. Everything below that names a class uses this.
+        const where = satAs(marks.filter((m) => m.examId === examId));
+        setSat(where);
+        // listAllClasses, not the active ones: a class that has been moved up
+        // is archived, and its name is exactly what an older report needs.
+        setClasses(await listAllClasses().catch(() => []));
+
+        // The position belongs to the cohort that SAT it, so the classmates
+        // are read from the class on the marks. After a promotion that class
+        // holds different children, who have no marks for this exam —
+        // sheetFor refuses to rank an incomplete result, so they fall out of
+        // the ranking rather than flattering the position.
+        // The cohort comes from the MARKS, not from the class roster.
+        //
+        // A roster is who is in the class TODAY, which is the wrong question
+        // about an exam sat last year: a student who has been moved up is
+        // missing from it, and a new intake is in it. Both were visible —
+        // the promoted student lost their position entirely, and the
+        // classmates they beat were ranked "of 4" for an exam five of them
+        // sat. Everyone whose marks for this exam carry this class sat it,
+        // and nobody else did.
+        const cohortMarks = await marksForExam(examId, where?.classId ?? s.classId);
+        const ids = [...new Set(cohortMarks.map((m) => m.studentId))];
+        const classmates = (await Promise.all(ids.map((id) => getStudent(id))))
+          .filter(Boolean) as StudentDetail[];
 
         // position needs the section; a guardian cannot read it, so it is
         // simply left off their copy rather than failing the page
         if (classmates.length > 1) {
           try {
-            const all = await Promise.all(
-              classmates.map((c) => marksForStudent(c.studentId)),
-            );
-            const sheet = sheetFor(classmates, subjects, all.flat(), examId);
-            setPosition(sheet.find((r) => r.student.studentId === s.studentId)?.position ?? null);
-            setOutOf(classmates.length);
+            const sheet = sheetFor(classmates, subjects, cohortMarks, examId);
+            // Out of how many SAT it, not how many are on the roster. A
+            // section of 40 where two were absent all week is a position out
+            // of 38, and after a promotion it stops the old exam being
+            // ranked against next year's intake.
+            const ranked = sheet.filter((r) => r.position !== null).length;
+            setPosition(ranked > 1
+              ? sheet.find((r) => r.student.studentId === s.studentId)?.position ?? null
+              : null);
+            setOutOf(ranked);
           } catch { /* no position on this copy */ }
         }
 
@@ -129,7 +162,16 @@ export default function ReportCard() {
           </div>
 
           <div className="row"><span>Name</span><span>{student.fullName}</span></div>
-          <div className="row"><span>Class</span><span>{student.className} - {student.section} · Roll {student.rollNo}</span></div>
+          {/* The class this exam was SAT in. A promoted student's older
+              report used to print their new class here, which is the right
+              marks under the wrong heading. */}
+          <div className="row">
+            <span>Class</span>
+            <span>
+              {sittingName(sat, classes, `${student.className} - ${student.section}`) || '—'}
+              {' · Roll '}{sat?.rollNo ?? student.rollNo}
+            </span>
+          </div>
           {student.fatherName && (
             <div className="row"><span>Father</span><span>{student.fatherName}</span></div>
           )}

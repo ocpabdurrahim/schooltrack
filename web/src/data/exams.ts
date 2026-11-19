@@ -31,6 +31,7 @@ import {
 } from './grading';
 import { normalGroup } from './groups';
 import { normalReligion } from './religions';
+import { type Sitting, satAs } from './sitting';
 import { sortSubjects } from './subjectorder';
 import type { StudentDetail } from './people';
 
@@ -433,12 +434,22 @@ export function sheetFor(
   return rows.sort((a, b) => a.student.rollNo - b.student.rollNo);
 }
 
-/** Everything one student has sat, newest exam first. */
+/** One exam a student has sat, with the class they sat it in. */
+export type SatExam = { exam: Exam; tabulation: Tabulation; sat: Sitting | null };
+
+/**
+ * Everything one student has sat, newest exam first.
+ *
+ * Each line carries the class and roll THE MARKS were entered under, not the
+ * student's class today. A report listing several years cannot have one true
+ * class in its heading, and a promoted student's older results were printing
+ * under their new one.
+ */
 export async function resultsForStudent(
   student: StudentDetail,
   exams: Exam[],
   subjects: Subject[],
-): Promise<{ exam: Exam; tabulation: Tabulation }[]> {
+): Promise<SatExam[]> {
   const marks = await marksForStudent(student.studentId);
   return exams
     .map((exam) => {
@@ -446,9 +457,9 @@ export async function resultsForStudent(
       if (!mine.length) return null;
       const subjectMarks: SubjectMark[] = subjectsForStudent(subjects, student)
         .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
-      return { exam, tabulation: tabulate(subjectMarks) };
+      return { exam, tabulation: tabulate(subjectMarks), sat: satAs(mine) };
     })
-    .filter(Boolean) as { exam: Exam; tabulation: Tabulation }[];
+    .filter(Boolean) as SatExam[];
 }
 
 export async function getExam(examId: string): Promise<Exam | null> {
@@ -505,17 +516,17 @@ export type ResultLine = {
   outOf: number;
   percent: number | null;
   sortOrder: number;
+  /** The class and roll THIS exam was sat under, from its own marks. */
+  sat: Sitting | null;
 };
 
-export function resultLines(
-  results: { exam: Exam; tabulation: Tabulation }[],
-): ResultLine[] {
+export function resultLines(results: SatExam[]): ResultLine[] {
   return [...results]
     .sort((a, b) =>
       a.exam.examYear.localeCompare(b.exam.examYear) ||
       (a.exam.sortOrder ?? 0) - (b.exam.sortOrder ?? 0) ||
       a.exam.examId.localeCompare(b.exam.examId))
-    .map(({ exam, tabulation }) => {
+    .map(({ exam, tabulation, sat }) => {
       const { obtained, outOf } = marksTotal(tabulation.subjects);
       return {
         examId: exam.examId,
@@ -532,6 +543,7 @@ export function resultLines(
         percent: obtained === null || outOf === 0
           ? null
           : Math.round((obtained / outOf) * 1000) / 10,
+        sat,
       };
     });
 }

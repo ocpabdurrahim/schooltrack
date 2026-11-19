@@ -86,8 +86,8 @@ data class ResultRow(
      */
     val marks: Double?,
     val absent: Boolean,
-    val classId: String,
-    val rollNo: Long,
+    override val classId: String,
+    override val rollNo: Long,
     val fullMarks: Double,
     val isOptional: Boolean,
     /** What was entered per component. Null on a paper marked whole. */
@@ -98,7 +98,7 @@ data class ResultRow(
      * keyed in at the top, where a mistyped mark is still worth catching.
      */
     val updatedAt: Long? = null,
-)
+) : Entered
 
 data class StudentResult(
     val student: StudentDetail,
@@ -494,12 +494,17 @@ data class ResultLine(
     val outOf: Double,
     val percent: Double?,
     val sortOrder: Long,
+    /** The class and roll THIS exam was sat under, from its own marks. */
+    val sat: Sitting? = null,
 )
 
-fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
+/** One exam a student has sat, with the class they sat it in. */
+data class SatExam(val exam: Exam, val tabulation: Tabulation, val sat: Sitting? = null)
+
+fun resultLines(results: List<SatExam>): List<ResultLine> =
     results
-        .sortedWith(compareBy({ it.first.examYear }, { it.first.sortOrder }, { it.first.examId }))
-        .map { (exam, tabulation) ->
+        .sortedWith(compareBy({ it.exam.examYear }, { it.exam.sortOrder }, { it.exam.examId }))
+        .map { (exam, tabulation, sat) ->
             val (obtained, outOf) = marksTotal(tabulation.subjects.map { it.mark })
             ResultLine(
                 examId = exam.examId,
@@ -518,6 +523,7 @@ fun resultLines(results: List<Pair<Exam, Tabulation>>): List<ResultLine> =
                 } else {
                     (obtained / outOf * 1000).roundToInt() / 10.0
                 },
+                sat = sat,
             )
         }
 

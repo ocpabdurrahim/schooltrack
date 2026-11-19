@@ -31,16 +31,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
+import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
+import io.github.ocpabdurrahim.schooltrack.data.MAX_GPA
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.ResultLine
+import io.github.ocpabdurrahim.schooltrack.data.SatExam
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.Tabulation
-import io.github.ocpabdurrahim.schooltrack.data.MAX_GPA
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.resultLines
+import io.github.ocpabdurrahim.schooltrack.data.satAs
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
+import io.github.ocpabdurrahim.schooltrack.data.sittingName
 import kotlin.math.max
 
 /**
@@ -65,7 +70,8 @@ fun StudentResultsScreen(
     examsRepo: ExamsRepository = remember { ExamsRepository() },
 ) {
     var student by remember { mutableStateOf<StudentDetail?>(null) }
-    var results by remember { mutableStateOf<List<Pair<Exam, Tabulation>>>(emptyList()) }
+    var results by remember { mutableStateOf<List<SatExam>>(emptyList()) }
+    var classes by remember { mutableStateOf<List<ClassRow>>(emptyList()) }
     var problem by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(true) }
 
@@ -84,10 +90,23 @@ fun StudentResultsScreen(
                 val exams = examsRepo.listExams()
                 val subjects = examsRepo.listSubjects()
                 val marks = examsRepo.marksForStudent(studentId)
+                // listAllClasses, not the active ones: a class that has been
+                // moved up is archived, and its name is exactly what an older
+                // result needs.
+                classes = try {
+                    AdminRepository().listAllClasses()
+                } catch (_: Exception) {
+                    emptyList()
+                }
                 exams.mapNotNull { exam ->
-                    if (marks.none { it.examId == exam.examId }) return@mapNotNull null
+                    val mine = marks.filter { it.examId == exam.examId }
+                    if (mine.isEmpty()) return@mapNotNull null
                     if (isGuardian && !exam.published) return@mapNotNull null
-                    exam to sheetFor(listOf(s), subjects, marks, exam.examId).first().tabulation
+                    SatExam(
+                        exam,
+                        sheetFor(listOf(s), subjects, marks, exam.examId).first().tabulation,
+                        satAs(mine),
+                    )
                 }
             } catch (_: Exception) {
                 problem = "Those results could not be read."
@@ -98,11 +117,22 @@ fun StudentResultsScreen(
     }
 
     val lines = resultLines(results)
-    val byExam = results.associate { it.first.examId to it.second }
+    val byExam = results.associate { it.exam.examId to it.tabulation }
+
+    // Where each exam was SAT, named. The student's current class is the
+    // fallback and nothing more — it is used only for marks that never
+    // recorded a class, which is data stored before the field existed.
+    val now = student?.let { "${it.className} - ${it.section}" } ?: ""
+    fun satName(line: ResultLine) = sittingName(line.sat, classes, now)
+    fun satRoll(line: ResultLine) = line.sat?.rollNo ?: student?.rollNo
 
     AdminScaffold(
         title = "Results report",
-        subtitle = student?.let { "${it.fullName} · ${it.className} - ${it.section} · Roll ${it.rollNo}" },
+        // "now in", because each row below is headed with the class that
+        // exam was SAT in, and the two differ once a student is moved up.
+        subtitle = student?.let {
+            "${it.fullName} · now in ${it.className} - ${it.section} · Roll ${it.rollNo}"
+        },
         onBack = onBack,
     ) {
         Problem(problem)
@@ -144,6 +174,16 @@ fun StudentResultsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = Muted,
                         )
+                        // The class this exam was sat in, which is not the
+                        // student's class once they have been moved up.
+                        val where = satName(line)
+                        if (where.isNotBlank()) {
+                            Text(
+                                where + (satRoll(line)?.let { " · Roll $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                            )
+                        }
                     }
                     Text(
                         gpaText(line.gpa),

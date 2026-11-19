@@ -149,8 +149,8 @@ describe('resultLines, the results a parent reads', () => {
 
   it('runs oldest year first, so a report reads forwards', () => {
     const lines = resultLines([
-      { exam: exam('final-2026', 'Final', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 80, Maths: 80 }) },
-      { exam: exam('half-2025', 'Half yearly', '2025'), tabulation: tabulationFor({ Bangla: 60, English: 60, Maths: 60 }) },
+      { exam: exam('final-2026', 'Final', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 80, Maths: 80 }), sat: null },
+      { exam: exam('half-2025', 'Half yearly', '2025'), tabulation: tabulationFor({ Bangla: 60, English: 60, Maths: 60 }), sat: null },
     ]);
     expect(lines.map((l) => l.examYear)).toEqual(['2025', '2026']);
   });
@@ -160,8 +160,8 @@ describe('resultLines, the results a parent reads', () => {
     // the year — the whole reason the order field exists.
     const marks = { Bangla: 70, English: 70, Maths: 70 };
     const lines = resultLines([
-      { exam: exam('annual-2026', 'Annual', '2026', true, 2), tabulation: tabulationFor(marks) },
-      { exam: exam('half-yearly-2026', 'Half yearly', '2026', true, 1), tabulation: tabulationFor(marks) },
+      { exam: exam('annual-2026', 'Annual', '2026', true, 2), tabulation: tabulationFor(marks), sat: null },
+      { exam: exam('half-yearly-2026', 'Half yearly', '2026', true, 1), tabulation: tabulationFor(marks), sat: null },
     ]);
     expect(lines.map((l) => l.examName)).toEqual(['Half yearly', 'Annual']);
   });
@@ -169,8 +169,8 @@ describe('resultLines, the results a parent reads', () => {
   it('falls back to the exam id when no order was ever set', () => {
     const marks = { Bangla: 70, English: 70, Maths: 70 };
     const lines = resultLines([
-      { exam: exam('half-yearly-2026', 'Half yearly', '2026'), tabulation: tabulationFor(marks) },
-      { exam: exam('annual-2026', 'Annual', '2026'), tabulation: tabulationFor(marks) },
+      { exam: exam('half-yearly-2026', 'Half yearly', '2026'), tabulation: tabulationFor(marks), sat: null },
+      { exam: exam('annual-2026', 'Annual', '2026'), tabulation: tabulationFor(marks), sat: null },
     ]);
     expect(lines.map((l) => l.examId)).toEqual(['annual-2026', 'half-yearly-2026']);
     expect(lines.every((l) => l.sortOrder === 0)).toBe(true);
@@ -178,7 +178,7 @@ describe('resultLines, the results a parent reads', () => {
 
   it('gives the marks out of the full marks of every subject sat', () => {
     const [line] = resultLines([
-      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60, Agri: 90 }) },
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60, Agri: 90 }), sat: null },
     ]);
     expect(line.obtained).toBe(300);
     expect(line.outOf).toBe(400);       // the optional subject counts here
@@ -190,7 +190,7 @@ describe('resultLines, the results a parent reads', () => {
     // Half an exam shown as a percentage reads as a bad result rather than an
     // unfinished one, and a parent cannot tell the difference.
     const [line] = resultLines([
-      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70 }) },
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70 }), sat: null },
     ]);
     expect(line.incomplete).toBe(true);
     expect(line.obtained).toBeNull();
@@ -203,6 +203,7 @@ describe('resultLines, the results a parent reads', () => {
       {
         exam: exam('e', 'Exam', '2026'),
         tabulation: tabulationFor({ Bangla: 80, English: 20, Maths: 70, Agri: 50 }),
+        sat: null,
       },
     ]);
     expect(line.letter).toBe('F');
@@ -222,7 +223,7 @@ describe('resultLines, the results a parent reads', () => {
     // The objection is answered a better way now: the result sheet, the mark
     // sheets and this report all call marksTotal(), so they cannot disagree.
     const [line] = resultLines([
-      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }) },
+      { exam: exam('e', 'Exam', '2026'), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }), sat: null },
     ]);
     expect(line.incomplete).toBe(false);
     expect(line.gpa).not.toBeNull();
@@ -233,7 +234,7 @@ describe('resultLines, the results a parent reads', () => {
 
   it('carries whether the exam is published, which is what a parent may see', () => {
     const lines = resultLines([
-      { exam: exam('e', 'Exam', '2026', false), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }) },
+      { exam: exam('e', 'Exam', '2026', false), tabulation: tabulationFor({ Bangla: 80, English: 70, Maths: 60 }), sat: null },
     ]);
     expect(lines[0].published).toBe(false);
   });

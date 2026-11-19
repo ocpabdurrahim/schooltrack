@@ -176,8 +176,8 @@ class SheetsTest {
         val marks = mapOf("Bangla" to 70.0, "English" to 70.0, "Maths" to 70.0)
         val lines = resultLines(
             listOf(
-                exam("annual-2026", "Annual", "2026", sortOrder = 2) to tabulationFor(marks),
-                exam("half-yearly-2026", "Half yearly", "2026", sortOrder = 1) to tabulationFor(marks),
+                SatExam(exam("annual-2026", "Annual", "2026", sortOrder = 2), tabulationFor(marks)),
+                SatExam(exam("half-yearly-2026", "Half yearly", "2026", sortOrder = 1), tabulationFor(marks)),
             ),
         )
         assertEquals(listOf("Half yearly", "Annual"), lines.map { it.examName })
@@ -188,8 +188,8 @@ class SheetsTest {
         val marks = mapOf("Bangla" to 70.0, "English" to 70.0, "Maths" to 70.0)
         val lines = resultLines(
             listOf(
-                exam("half-yearly-2026", "Half yearly", "2026") to tabulationFor(marks),
-                exam("annual-2026", "Annual", "2026") to tabulationFor(marks),
+                SatExam(exam("half-yearly-2026", "Half yearly", "2026"), tabulationFor(marks)),
+                SatExam(exam("annual-2026", "Annual", "2026"), tabulationFor(marks)),
             ),
         )
         assertEquals(listOf("annual-2026", "half-yearly-2026"), lines.map { it.examId })
@@ -200,10 +200,14 @@ class SheetsTest {
     fun `the results run oldest year first, so a report reads forwards`() {
         val lines = resultLines(
             listOf(
-                exam("final-2026", "Final", "2026") to
+                SatExam(
+                    exam("final-2026", "Final", "2026"),
                     tabulationFor(mapOf("Bangla" to 80.0, "English" to 80.0, "Maths" to 80.0)),
-                exam("half-2025", "Half yearly", "2025") to
+                ),
+                SatExam(
+                    exam("half-2025", "Half yearly", "2025"),
                     tabulationFor(mapOf("Bangla" to 60.0, "English" to 60.0, "Maths" to 60.0)),
+                ),
             ),
         )
         assertEquals(listOf("2025", "2026"), lines.map { it.examYear })
@@ -213,8 +217,11 @@ class SheetsTest {
     fun `the marks are out of the full marks of every subject sat`() {
         val line = resultLines(
             listOf(
-                exam("e", "Exam", "2026") to tabulationFor(
-                    mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0, "Agri" to 90.0),
+                SatExam(
+                    exam("e", "Exam", "2026"),
+                    tabulationFor(
+                        mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0, "Agri" to 90.0),
+                    ),
                 ),
             ),
         ).first()
@@ -226,7 +233,7 @@ class SheetsTest {
     @Test
     fun `the total and the percentage are withheld while a mark is missing`() {
         val line = resultLines(
-            listOf(exam("e", "Exam", "2026") to tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0))),
+            listOf(SatExam(exam("e", "Exam", "2026"), tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0)))),
         ).first()
         assertEquals(true, line.incomplete)
         assertNull(line.obtained)
@@ -238,8 +245,11 @@ class SheetsTest {
     fun `the marks still show when one compulsory subject failed the exam`() {
         val line = resultLines(
             listOf(
-                exam("e", "Exam", "2026") to tabulationFor(
-                    mapOf("Bangla" to 80.0, "English" to 20.0, "Maths" to 70.0, "Agri" to 50.0),
+                SatExam(
+                    exam("e", "Exam", "2026"),
+                    tabulationFor(
+                        mapOf("Bangla" to 80.0, "English" to 20.0, "Maths" to 70.0, "Agri" to 50.0),
+                    ),
                 ),
             ),
         ).first()
@@ -263,8 +273,10 @@ class SheetsTest {
         // mark sheets and this report all call marksTotal().
         val line = resultLines(
             listOf(
-                exam("e", "Exam", "2026") to
+                SatExam(
+                    exam("e", "Exam", "2026"),
                     tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0)),
+                ),
             ),
         ).first()
         assertEquals(false, line.incomplete)
@@ -278,8 +290,10 @@ class SheetsTest {
     fun `whether the exam is published is carried, since that is what a parent may see`() {
         val line = resultLines(
             listOf(
-                exam("e", "Exam", "2026", published = false) to
+                SatExam(
+                    exam("e", "Exam", "2026", published = false),
                     tabulationFor(mapOf("Bangla" to 80.0, "English" to 70.0, "Maths" to 60.0)),
+                ),
             ),
         ).first()
         assertEquals(false, line.published)

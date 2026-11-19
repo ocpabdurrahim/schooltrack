@@ -22,16 +22,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceSummary
+import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.Sitting
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.Tabulation
-import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.UnitLine
-import io.github.ocpabdurrahim.schooltrack.data.markSheet
 import io.github.ocpabdurrahim.schooltrack.data.asSitter
+import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.markSheet
+import io.github.ocpabdurrahim.schooltrack.data.satAs
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
+import io.github.ocpabdurrahim.schooltrack.data.sittingName
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
 
 /**
@@ -59,6 +63,8 @@ fun ReportCardScreen(
     var tabulation by remember { mutableStateOf<Tabulation?>(null) }
     var position by remember { mutableStateOf<Int?>(null) }
     var outOf by remember { mutableStateOf(0) }
+    var sat by remember { mutableStateOf<Sitting?>(null) }
+    var classes by remember { mutableStateOf<List<ClassRow>>(emptyList()) }
     var attendance by remember { mutableStateOf<AttendanceSummary?>(null) }
     var problem by remember { mutableStateOf("") }
 
@@ -89,13 +95,37 @@ fun ReportCardScreen(
             // phone and the paper can never disagree.
             lines = markSheet(subjects, s.asSitter(), mine.filter { it.examId == examId })
 
+            // Where this exam was SAT, from its own marks — not where the
+            // student is now. Everything below that names a class uses this.
+            val where = satAs(mine.filter { it.examId == examId })
+            sat = where
+            classes = try {
+                AdminRepository().listAllClasses()
+            } catch (_: Exception) {
+                emptyList()
+            }
+
             try {
-                val classmates = people.findStudents(s.classId, "")
+                // The cohort comes from the MARKS, not from the class roster.
+                //
+                // A roster is who is in the class TODAY, which is the wrong
+                // question about an exam sat last year: a student who has been
+                // moved up is missing from it, and a new intake is in it.
+                // Everyone whose marks for this exam carry this class sat it,
+                // and nobody else did.
+                val marks = exams.marksForExam(examId, where?.classId ?: s.classId)
+                val ids = marks.map { it.studentId }.distinct()
+                val classmates = ids.mapNotNull { people.getStudent(it) }
                 if (classmates.size > 1) {
-                    val marks = exams.marksForExam(examId, s.classId)
                     val sheet = sheetFor(classmates, subjects, marks, examId)
-                    position = sheet.firstOrNull { it.student.studentId == studentId }?.position
-                    outOf = classmates.size
+                    val ranked = sheet.count { it.position != null }
+                    position = if (ranked > 1) {
+                        sheet.firstOrNull { it.student.studentId == studentId }?.position
+                    } else {
+                        null
+                    }
+                    // Out of how many SAT it, not how many are on the roster.
+                    outOf = ranked
                 }
             } catch (_: Exception) {
                 // no position on this copy
@@ -154,7 +184,15 @@ fun ReportCardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text("Class", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(s.className + " - " + s.section + " · Roll " + s.rollNo)
+                        // The class this exam was SAT in. A promoted
+                        // student's older report used to print their new class
+                        // here, which is the right marks under the wrong
+                        // heading.
+                        Text(
+                            (sittingName(sat, classes, s.className + " - " + s.section)
+                                .ifBlank { "—" }) +
+                                " · Roll " + (sat?.rollNo ?: s.rollNo),
+                        )
                     }
                     HorizontalDivider(Modifier.padding(vertical = 10.dp))
 
