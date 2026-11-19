@@ -138,16 +138,29 @@ def read_sheet(
                 roll = None
 
             parts: dict[str, int | None] = {}
+            empty: dict[str, bool] = {}
             unsure = False
             line = rows[r]
+
+            # The row's own Total first: it caps every part on the row. No
+            # part of a mark can exceed the mark, so a CQ of 201 beside a
+            # total of 33 is a misreading and not a result -- and that needs
+            # no setting up, no knowledge of the subject's full marks, and no
+            # trusting whoever typed the column names.
+            total_cell = line[base + per_block - 1].crop(gray)
+            written, _ = read_number(total_cell)
+
             for i, name in enumerate(component_names, start=1):
                 if base + i >= len(line):
                     continue
-                value, _ = read_number(
-                    line[base + i].crop(gray), maximum=maxima.get(name),
-                )
+                cell = line[base + i].crop(gray)
+                empty[name] = is_blank(cell)
+                cap = maxima.get(name)
+                if written is not None:
+                    cap = written if cap is None else min(cap, written)
+                value, _ = read_number(cell, maximum=cap)
                 parts[name] = value
-                if value is None:
+                if value is None and not empty[name]:
                     unsure = True
 
             if all(v is None for v in parts.values()):
@@ -164,10 +177,19 @@ def read_sheet(
             # A held row is BLANK in the spreadsheet for somebody to fill in.
             # That is the right way round: a blank costs a moment, and a
             # plausible wrong mark costs a grade and is invisible.
-            total_cell = line[base + per_block - 1].crop(gray)
-            written, _ = read_number(total_cell)
             got = [v for v in parts.values() if v is not None]
             held = ""
+
+            # The checksum runs when every part is ACCOUNTED FOR -- read, or
+            # genuinely empty on the paper -- not only when every part was
+            # read. That distinction is the whole thing: this form has a Prac
+            # column that nobody ever fills in, so "every part read" was
+            # never true and the checksum never ran once. A CQ of 201 beside
+            # a written total of 33 sailed through.
+            accounted = all(
+                parts.get(n) is not None or empty.get(n, False)
+                for n in component_names
+            )
 
             # "No total was written" and "the total could not be read" are
             # different things and must not be treated alike. An EMPTY total
@@ -177,7 +199,7 @@ def read_sheet(
             # check available, which is no reason to throw the row away.
             if written is None and is_blank(total_cell):
                 held = "no total written beside it"
-            elif written is not None and len(got) == len(component_names)                     and sum(got) != written:
+            elif written is not None and accounted and sum(got) != written:
                 held = f"the parts come to {sum(got)}, but the total written is {written}"
 
             if held:

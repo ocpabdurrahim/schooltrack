@@ -28,6 +28,11 @@ from pathlib import Path
 # a person to fill in than a number nobody checked.
 CONFIDENT = 0.55
 
+# What a straight printed line gets mistaken for. Built with re.escape so the
+# awkward members -- the backslash, the quote -- cannot break the pattern.
+RULE_LOOKALIKES = " 	|iIlL!:;.,'\"`-_/\\"
+RULE_EDGE = re.compile(f"^[{re.escape(RULE_LOOKALIKES)}]+")
+
 
 MODELS = Path(__file__).resolve().parent / "models"
 
@@ -77,7 +82,48 @@ def prepare(cell: np.ndarray) -> np.ndarray | None:
     # Otsu rather than a fixed level: the page is grey in the shadows and
     # white in the light, and the ink is darker than its own surroundings.
     _, binary = cv2.threshold(big, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    binary = _rub_out_rules(binary)
     return cv2.copyMakeBorder(binary, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+
+
+def _rub_out_rules(binary: np.ndarray) -> np.ndarray:
+    """
+    Erases what is left of the printed box from inside the crop.
+
+    A sliver of the ruling almost always survives, and an OCR engine reads a
+    straight vertical line as a 1. That is how 20 became 201 and 23 became
+    123 -- the mark read perfectly, with the edge of its own box stuck to it.
+
+    Cropping harder is the obvious answer and the wrong one: it clips real
+    digits, which is how 56 became 5 earlier. A rule is not merely near the
+    edge, it is a line that crosses the WHOLE cell, and a digit stroke never
+    does. So they are told apart by that, not by where they are.
+    """
+    ink = binary < 128           # True where there is something written
+    h, w = ink.shape
+    out = binary.copy()
+
+    # A printed rule and a handwritten 1 are both a tall vertical stroke, so
+    # height alone cannot tell them apart -- erasing every full-height column
+    # would rub out the 1s. What separates them is WHERE: the rule is the edge
+    # of the box and hugs the margin, while a mark is written in the middle.
+    # So only the margins are swept, and a 1 in the middle of its box is safe.
+    margin_x = max(1, int(w * 0.18))
+    margin_y = max(1, int(h * 0.18))
+
+    tall = ink.sum(axis=0) > h * 0.55
+    wide = ink.sum(axis=1) > w * 0.55
+
+    edge_x = np.zeros(w, bool)
+    edge_x[:margin_x] = True
+    edge_x[w - margin_x:] = True
+    edge_y = np.zeros(h, bool)
+    edge_y[:margin_y] = True
+    edge_y[h - margin_y:] = True
+
+    out[:, tall & edge_x] = 255
+    out[wide & edge_y, :] = 255
+    return out
 
 
 def is_blank(cell: np.ndarray, ink_fraction: float = 0.012) -> bool:
@@ -90,8 +136,14 @@ def is_blank(cell: np.ndarray, ink_fraction: float = 0.012) -> bool:
     """
     if cell is None or cell.size == 0:
         return True
-    _, binary = cv2.threshold(cell, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    return float(np.count_nonzero(binary)) / binary.size < ink_fraction
+    _, binary = cv2.threshold(cell, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # The box's own ruling is not writing. Without rubbing it out first, every
+    # empty cell on the sheet looks like it has something in it, and "nothing
+    # was written here" -- which is what holds a row that has marks but no
+    # total -- can never be true.
+    binary = _rub_out_rules(binary)
+    ink = np.count_nonzero(binary < 128)
+    return float(ink) / binary.size < ink_fraction
 
 
 def read_number(cell: np.ndarray, maximum: int | None = None) -> tuple[int | None, float]:
@@ -127,7 +179,18 @@ def read_number(cell: np.ndarray, maximum: int | None = None) -> tuple[int | Non
     #
     # A cell holding something that is not simply a number is a cell this
     # cannot read, and the honest answer is to leave it blank for a person.
-    cleaned = text.strip().strip(r".,:;|/\-_ ")
+    # The edge of the box, stuck to the number, is still the commonest thing
+    # in these readings: "i 31", ":06", "|02", ". 11". Those leading marks are
+    # the printed rule, not ink the teacher left, and refusing the whole cell
+    # over them is why the Total column almost never read -- which in turn is
+    # why the checksum that should catch a bad mark never ran.
+    #
+    # ONLY the characters a straight line can be mistaken for, and only at the
+    # ends. Never a digit: stripping a leading "1" would turn 113 into 13 and
+    # invent a mark. Any other letter is still a flat refusal, because a 6
+    # read as "G" is a misreading of the mark itself.
+    cleaned = RULE_EDGE.sub("", text)
+    cleaned = RULE_EDGE.sub("", cleaned[::-1])[::-1]
     if not re.fullmatch(r"\d{1,3}", cleaned):
         return None, score
     digits = cleaned
