@@ -16,6 +16,13 @@ describe('who sees which menus', () => {
       .toEqual(['Students', 'Attendance', 'Exams', 'Fees', 'Finance', 'Setup']);
   });
 
+  it('lets only an administrator move a class up', () => {
+    // It rewrites every child's class and roll number. A teacher entering
+    // marks has no business with it.
+    expect(items(staffAs('ADMIN'), 'Exams')).toContain('Move a class up');
+    expect(items(staffAs('TEACHER'), 'Exams')).not.toContain('Move a class up');
+  });
+
   it('gives a teacher no money and no setup at all', () => {
     // Not an empty Fees menu — no Fees menu. A teacher cannot read a payment,
     // so every item in it would refuse.

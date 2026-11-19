@@ -149,6 +149,7 @@ fun ExamsScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
+                                (if (e.isFinal) "final  ·  " else "") +
                                 (if (e.sortOrder > 0) "#${e.sortOrder}  ·  " else "") +
                                     e.periodLabel + if (e.published) "  ·  published" else "",
                                 style = MaterialTheme.typography.bodySmall,
@@ -177,6 +178,32 @@ fun ExamsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = exam.isFinal,
+                        onCheckedChange = { exam = exam.copy(isFinal = it) },
+                    )
+                    Column(Modifier.padding(start = 4.dp)) {
+                        Text(
+                            "The final exam of the year",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Annual for most classes, Test for Class Ten. Once it is " +
+                                "published, its merit list can move a class up: first in " +
+                                "merit becomes roll 1 of the next class. A tick rather " +
+                                "than a guess from the name, because an exam named " +
+                                "slightly differently next year would otherwise silently " +
+                                "stop promoting the school.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
                 Text(
                     "Period label: " + periodLabelFor(
                         exam.examName.ifBlank { "EXAM" }, exam.examYear,

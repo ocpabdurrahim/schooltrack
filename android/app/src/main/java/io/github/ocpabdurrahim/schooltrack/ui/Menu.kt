@@ -71,6 +71,8 @@ private val ALL = listOf(
             MenuItem("Scan a mark sheet", Screen.ScanMarks, Need.STAFF,
                 "photograph the filled-in paper form"),
             MenuItem("Results", Screen.Results, Need.STAFF, "result sheet and tabulation"),
+            MenuItem("Move a class up", Screen.Promote, Need.ADMIN,
+                "merit list becomes next year's roll numbers"),
             MenuItem("Seat plan", Screen.SeatPlan, Need.STAFF),
             MenuItem("Admit cards", Screen.AdmitCards, Need.RECORDS),
             MenuItem("Exam routine", Screen.Routine, Need.ADMIN),

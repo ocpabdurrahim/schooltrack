@@ -129,6 +129,60 @@ class AdminRepository(
     // -----------------------------------------------------------------------
     // classes
 
+    /**
+     * Carries out a promotion plan.
+     *
+     * One batch: forty children change class and roll number together, or none
+     * of them do. A promotion half-written would be far worse than one not
+     * written at all — a class where some rolls are next year's and some are
+     * last year's is not something a teacher could unpick.
+     *
+     * Only the students actually moving are touched. Somebody staying down is
+     * left exactly as they are rather than written back unchanged, so their
+     * record keeps the date it last really changed.
+     */
+    suspend fun carryOutPromotion(
+        moves: List<Move>,
+        classes: List<ClassRow>,
+    ): Pair<Int, Int> {
+        val batch = db.batch()
+        var promoted = 0
+        var archived = 0
+
+        for (m in moves) {
+            val ref = school().collection("students").document(m.studentId)
+            when {
+                m.what == What.ARCHIVED -> {
+                    // 'I' is the status every listing already filters on, so an
+                    // archived student drops out of registers, mark entry and
+                    // fee collection without anything else having to know
+                    // about leaving.
+                    batch.set(ref, stamp(mapOf("status" to "I")), SetOptions.merge())
+                    archived += 1
+                }
+                m.what == What.UP && m.toClassId != null && m.toRoll != null -> {
+                    val into = classes.firstOrNull { it.classId == m.toClassId } ?: continue
+                    batch.set(
+                        ref,
+                        stamp(
+                            mapOf(
+                                "classId" to into.classId,
+                                "className" to into.className,
+                                "section" to into.section,
+                                "rollNo" to m.toRoll.toLong(),
+                            ),
+                        ),
+                        SetOptions.merge(),
+                    )
+                    promoted += 1
+                }
+            }
+        }
+
+        batch.commit().await()
+        return promoted to archived
+    }
+
     suspend fun listAllClasses(): List<ClassRow> =
         school().collection("classes").orderBy("sortOrder").get().await().documents.map {
             ClassRow(

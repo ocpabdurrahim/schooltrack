@@ -25,6 +25,14 @@ class MenuTest {
     }
 
     @Test
+    fun `only an administrator can move a class up`() {
+        // It rewrites every child's class and roll number. A teacher entering
+        // marks has no business with it.
+        assertTrue("Move a class up" in items(staff("ADMIN"), "Exams"))
+        assertTrue("Move a class up" !in items(staff("TEACHER"), "Exams"))
+    }
+
+    @Test
     fun `a teacher gets no money and no setup at all`() {
         // Not an empty Fees section — no Fees section. A teacher cannot read a
         // payment, so every item in it would refuse.

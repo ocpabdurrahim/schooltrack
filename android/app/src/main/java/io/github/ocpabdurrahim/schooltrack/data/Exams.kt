@@ -28,6 +28,16 @@ data class Exam(
      * order for exams entered before this field existed.
      */
     val sortOrder: Long = 0,
+    /**
+     * The last exam of the year for the classes that sit it: Annual for most,
+     * Test for Class Ten. Publishing it is what makes moving the class up
+     * possible — the merit list of this exam decides next year's roll numbers.
+     *
+     * A tick rather than a guess from the name or the sort order. "Annual Exam
+     * 2027" typed slightly differently, or an exam added after the last one,
+     * would otherwise silently change which exam promotes the school.
+     */
+    val isFinal: Boolean = false,
 )
 
 data class Subject(
@@ -225,6 +235,7 @@ class ExamsRepository(
                     periodLabel = it.getString("periodLabel").orEmpty(),
                     published = it.getBoolean("published") ?: false,
                     sortOrder = it.getLong("sortOrder") ?: 0,
+                    isFinal = it.getBoolean("isFinal") ?: false,
                 )
             }
             .sortedWith(
@@ -243,6 +254,7 @@ class ExamsRepository(
                     "periodLabel" to periodLabelFor(e.examName, e.examYear),
                     "published" to e.published,
                     "sortOrder" to e.sortOrder,
+                    "isFinal" to e.isFinal,
                 ),
             ),
             SetOptions.merge(),
