@@ -737,3 +737,31 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   .scan { font-size: 13px; }
   .scan input.tiny { width: 58px; }
 }
+
+/* A grid you type into. Dense on purpose: it is standing in for a page of a
+   register, and a form with forty roomy rows is a form nobody scrolls. */
+.grid.sheet th {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 6px 4px;
+}
+.grid.sheet td { padding: 2px 4px; }
+.grid.sheet input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+/* The box only shows itself when it is being used, so the grid reads as a
+   table rather than as a wall of empty boxes. */
+.grid.sheet input:hover { border-color: var(--line-soft); }
+.grid.sheet input:focus {
+  border-color: var(--accent);
+  background: var(--surface, #fff);
+  outline: none;
+}
+.grid.sheet tr:nth-child(even) td { background: var(--line-soft); }

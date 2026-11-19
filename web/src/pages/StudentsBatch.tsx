@@ -4,11 +4,30 @@ import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { type StudentRow, parseStudentRows, prepareStudentRows } from '../data/batch';
 import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
 import { findStudents } from '../data/people';
+import SheetGrid, { type Column } from '../components/SheetGrid';
+import { type Cells, blankGrid, clipboardCells, gridToList, withSpareRows } from '../data/gridedit';
+
+/**
+ * The form's columns, in the order the office reads them off a register.
+ *
+ * The keys are the headings the list parser already understands, so the grid
+ * is a nicer way to TYPE the list and not a second way to interpret it.
+ */
+const COLUMNS: Column[] = [
+  { key: 'roll', label: 'Roll', size: 4, hint: 'Left empty, the next free number is given out' },
+  { key: 'name', label: 'Name', size: 18 },
+  { key: 'father', label: "Father's name", size: 16 },
+  { key: 'mother', label: "Mother's name", size: 16 },
+  { key: 'mobile', label: 'Mobile', size: 12 },
+  { key: 'dob', label: 'Date of birth', size: 10, hint: '05/03/2012 is read as 5 March' },
+  { key: 'reg no', label: 'Reg no', size: 10 },
+  { key: 'group', label: 'Group', size: 10, hint: 'Science, Humanities, Business Studies' },
+  { key: 'religion', label: 'Religion', size: 8 },
+  { key: 'sex', label: 'Sex', size: 6 },
+  { key: 'blood', label: 'Blood', size: 6 },
+];
 
 type Shown = StudentRow & { state: 'ready' | 'stopped' | 'saved' | 'failed'; studentId?: string };
-
-const EXAMPLE = `1\tAyesha Khatun\tKarim Mia\tFatema Begum\t01711000000
-2\tRakib Hasan\tJashim Uddin\tSalma Akter\t01811000000`;
 
 /**
  * A whole section typed in at once.
@@ -22,10 +41,43 @@ const EXAMPLE = `1\tAyesha Khatun\tKarim Mia\tFatema Begum\t01711000000
  * saves first and reports afterwards leaves someone deleting forty records by
  * hand, and this app does not delete students at all.
  */
+const HEADINGS = COLUMNS.map((c) => c.key);
+
+/**
+ * A file's rows, lined up under this form's columns.
+ *
+ * A heading row in the file is honoured where it names a column this form
+ * has, so a sheet whose columns are in another order still lands in the right
+ * boxes. Without one the columns are taken in the form's own order, which is
+ * the order the paste box used before this grid replaced it.
+ */
+function intoColumns(text: string): Cells {
+  const lines = clipboardCells(text.replace(/	/g, '	'));
+  if (!lines.length) return blankGrid(8, COLUMNS.length);
+
+  const head = lines[0].map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
+  const known = HEADINGS.map((h) => h.replace(/[^a-z]/g, ''));
+  const named = head.filter((h) => known.includes(h)).length >= 2;
+
+  const body = named ? lines.slice(1) : lines;
+  const at = named
+    ? head.map((h) => known.indexOf(h))
+    : HEADINGS.map((_, i) => i);
+
+  return body.map((line) => {
+    const row = Array.from({ length: COLUMNS.length }, () => '');
+    line.forEach((value, j) => {
+      const col = named ? at[j] : j;
+      if (col >= 0 && col < row.length) row[col] = value;
+    });
+    return row;
+  });
+}
+
 export default function StudentsBatch() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [classId, setClassId] = useState('');
-  const [text, setText] = useState('');
+  const [cells, setCells] = useState<Cells>(() => blankGrid(8, COLUMNS.length));
   const [rows, setRows] = useState<Shown[] | null>(null);
   const [taken, setTaken] = useState<number[] | null>(null);
   const [fromFile, setFromFile] = useState('');
@@ -59,7 +111,9 @@ export default function StudentsBatch() {
     try {
       const loaded = await readSheetFile(file);
       if (!loaded.trim()) { setProblem(`There is nothing in ${file.name}.`); return; }
-      setText(loaded);
+      // Into the grid, where it can be looked at and corrected, rather than
+      // into a box of text where a wrong column is invisible until it saves.
+      setCells(withSpareRows(intoColumns(loaded)));
       setFromFile(file.name);
     } catch (err) {
       setProblem(err instanceof Error ? err.message : 'That file could not be read.');
@@ -76,8 +130,13 @@ export default function StudentsBatch() {
       const here = await findStudents(classId, '');
       const rolls = here.map((s) => s.rollNo);
       setTaken(rolls);
-      const parsed = prepareStudentRows(parseStudentRows(text), rolls);
-      if (parsed.length === 0) { setProblem('There is nothing in the box.'); setRows(null); return; }
+      // The parser counts lines in the text it was handed, and gridToList
+      // puts a heading line at the top of that text — so line 2 is the row
+      // the person can see numbered 1. Pointing them at the wrong row is
+      // worse than not pointing at all, so the count is put back.
+      const parsed = prepareStudentRows(parseStudentRows(gridToList(HEADINGS, cells)), rolls)
+        .map((r) => ({ ...r, line: r.line - 1 }));
+      if (parsed.length === 0) { setProblem('Nothing has been filled in yet.'); setRows(null); return; }
       setRows(parsed.map((r) => ({ ...r, state: r.problem ? 'stopped' : 'ready' })));
     } catch {
       setProblem('Could not read this section. Only the head or the office may add students.');
@@ -160,34 +219,35 @@ export default function StudentsBatch() {
         <label htmlFor="file">A file, if you have one</label>
         <input id="file" type="file" accept={SHEET_ACCEPT} onChange={pickFile} />
         <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
-          An Excel file (.xlsx) or a CSV. The first sheet is read, into the box
-          below, where it can be corrected before anything is saved. An old .xls
-          has to be saved again as .xlsx or CSV first.
+          An Excel file (.xlsx) or a CSV. The first sheet is read into the
+          form below, where it can be corrected before anything is saved. A
+          heading row naming the columns is honoured, so a sheet whose columns
+          are in another order still lands in the right boxes. An old .xls has
+          to be saved again as .xlsx or CSV first.
         </p>
 
-        <label htmlFor="list">
-          The list
+        <label>
+          The students
           {fromFile && <span style={{ color: 'var(--accent)' }}> · read from {fromFile}</span>}
         </label>
-        <textarea
-          id="list"
-          className="mono"
-          rows={10}
-          value={text}
-          placeholder={EXAMPLE}
-          onChange={(e) => { setText(e.target.value); setFromFile(''); }}
+
+        <SheetGrid
+          columns={COLUMNS}
+          cells={cells}
+          disabled={busy || reading}
+          onChange={(next) => { setCells(next); setFromFile(''); setRows(null); setDone(false); }}
         />
 
         <p style={{ color: 'var(--muted)', fontSize: 13, margin: '10px 0 0' }}>
-          Columns separated by tabs (what a paste out of Excel gives), by commas,
-          or by two spaces. Without a heading line, a list that starts with a
-          number is read as <strong>roll, name, father, mother, mobile, date of
-          birth</strong>, and one that starts with a name as <strong>name,
-          father, mother, mobile, date of birth</strong> — rolls are then given
-          out after the highest one in the section. A column of names on their
-          own works. To use another order, put a heading line at the top naming
-          the columns: <em>name, father, mobile, blood, group, reg no, sex, dob</em>.
-          A date like 05/03/2012 is read as 5 March.
+          Type straight into the boxes, or <strong>paste a block out of
+          Excel</strong> — it lands from the box you are in and the form grows
+          to fit. <strong>Enter</strong> moves down, <strong>Tab</strong> across,
+          and a spare row appears as you fill the last one.
+        </p>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          Only the name is needed. Leave <strong>Roll</strong> empty and the next
+          free number in the section is given out, after the highest one already
+          there. A date like 05/03/2012 is read as 5 March.
         </p>
 
         <button onClick={read} disabled={reading || busy}>
@@ -290,7 +350,10 @@ export default function StudentsBatch() {
                 {' '}They are in the register now, so reading this same list again
                 would add them a second time.
               </p>
-              <button onClick={() => { setText(''); setRows(null); setDone(false); }}>
+              <button onClick={() => {
+                setCells(blankGrid(8, COLUMNS.length));
+                setRows(null); setDone(false); setFromFile('');
+              }}>
                 Start another list
               </button>
               <Link to="/students" style={{ marginLeft: 14, fontSize: 14 }}>all students</Link>
