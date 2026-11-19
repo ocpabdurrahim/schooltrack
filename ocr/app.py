@@ -224,7 +224,7 @@ class App:
                         self.messages.put((
                             "say",
                             f"      roll {where if where is not None else '?'}: "
-                            f"held — {r['held']}",
+                            f"{r['held']}",
                         ))
                 self.messages.put(("step", i))
 
@@ -279,11 +279,12 @@ class App:
             self.say(f"    {outcome['unread']} box(es) left EMPTY because it was "
                      "not sure. They are blank in the spreadsheet on purpose — "
                      "a zero would be a failing mark nobody wrote.")
-        if outcome.get("held"):
-            self.say(f"    {outcome['held']} row(s) held back because the parts "
-                     "did not add up to the total the teacher wrote, or there "
-                     "was no total beside them. Those are the rows worth "
-                     "checking against the paper first.")
+        flagged = sum(1 for r in rows if r.get("held"))
+        if flagged:
+            self.say(f"    {flagged} row(s) have a note in the Check column: a "
+                     "part worked out from the teacher's total, or parts that "
+                     "do not add up to it. The marks are still there — those "
+                     "are simply the rows to check against the paper first.")
         if outcome["failed"]:
             self.say(f"    {len(outcome['failed'])} sheet(s) could not be read at "
                      "all: " + ", ".join(outcome["failed"]))

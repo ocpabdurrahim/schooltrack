@@ -123,6 +123,7 @@ def marks_grid(
     heading: list[Cell] = ["Roll", *component_names]
     if with_total:
         heading.append("Total")
+    heading.append("Check")
 
     grid: list[list[Cell]] = [heading]
     for row in rows:
@@ -134,9 +135,19 @@ def marks_grid(
             line.append(v)
             if isinstance(v, int):
                 got.append(v)
+
         if with_total:
-            # Only when every part is there: a total over a half-read row is
-            # a checksum that agrees with a mistake.
-            line.append(sum(got) if len(got) == len(component_names) else None)
+            # The TEACHER'S total, as written on the paper, not one computed
+            # from the parts. A computed total always agrees with the parts,
+            # which makes it worthless as a check; the paper's total is the
+            # independent second opinion, and a row where the two disagree is
+            # visible at a glance in the spreadsheet.
+            written = row.get("written_total")
+            if written is None and len(got) == len(component_names):
+                written = sum(got)
+            line.append(written)
+
+        # Why this row is worth a look, in words, in the sheet itself.
+        line.append(row.get("held") or "")
         grid.append(line)
     return grid

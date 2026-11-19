@@ -179,13 +179,12 @@ def read_sheet(
             # plausible wrong mark costs a grade and is invisible.
             got = [v for v in parts.values() if v is not None]
             held = ""
+            worked_out = ""
 
             # The checksum runs when every part is ACCOUNTED FOR -- read, or
             # genuinely empty on the paper -- not only when every part was
-            # read. That distinction is the whole thing: this form has a Prac
-            # column that nobody ever fills in, so "every part read" was
-            # never true and the checksum never ran once. A CQ of 201 beside
-            # a written total of 33 sailed through.
+            # read. This form has a Prac column nobody fills in, so "every
+            # part read" was never true and the checksum never once ran.
             accounted = all(
                 parts.get(n) is not None or empty.get(n, False)
                 for n in component_names
@@ -204,13 +203,30 @@ def read_sheet(
 
             if held:
                 result.held += 1
-                parts = {name: None for name in parts}
                 unsure = True
+                # The values are KEPT, not blanked.
+                #
+                # Blanking was the safe default and it cost more than it
+                # saved: most held rows were read perfectly well and the
+                # teacher had to type them in again from the paper. The row
+                # is flagged instead, the teacher's own total is written
+                # beside it, and a row whose parts do not add up to it is
+                # obvious at a glance in the spreadsheet.
+                #
+                # The one exception stays blanked: marks beside an EMPTY
+                # total box are usually not marks at all -- a crease, a
+                # smudge, the edge of the ruling -- and letting those through
+                # puts a mark against a child who did not sit the paper.
+                if held == "no total written beside it":
+                    parts = {name: None for name in parts}
 
             result.rows.append({
                 "roll": roll, "parts": parts, "unsure": unsure,
-                "written_total": written, "held": held,
+                "written_total": written, "held": held or worked_out,
+                "empty": dict(empty),
             })
+
+    _fill_from_totals(result, component_names)
 
     if debug_dir is not None:
         _write_debug(photo, gray, cells, debug_dir)
@@ -222,6 +238,51 @@ def read_sheet(
             "the writing may be too faint or the photograph too small."
         )
     return result
+
+
+def _fill_from_totals(result: SheetRead, component_names: list[str]) -> None:
+    """
+    Works one missing part out of the teacher's own total.
+
+    Not a guess: the other parts were read, the total was read, and
+    subtraction does the rest. It recovers marks that are perfectly legible
+    on the paper and that the engine simply would not commit to.
+
+    Two things make it safe, and both needed the WHOLE SHEET to be seen
+    first, which is why this is not done row by row as the rows are read:
+
+      * a column nobody used anywhere on the sheet is not a candidate. This
+        form has a Prac column that is blank on every row, and without this
+        the arithmetic cheerfully put Prac = 0 on three rows -- a zero is a
+        mark, and a failing one -- and, worse, stole the shortfall from the
+        CQ that was actually missing;
+      * only ever ONE missing part. With two there is nothing to pin them
+        down and any split of the remainder would be invention.
+    """
+    used = {
+        name for name in component_names
+        if any(row["parts"].get(name) is not None for row in result.rows)
+    }
+    if not used:
+        return
+
+    for row in result.rows:
+        written, parts = row.get("written_total"), row["parts"]
+        if written is None or row.get("held"):
+            continue
+        missing = [n for n in used if parts.get(n) is None]
+        if len(missing) != 1:
+            continue
+        rest = sum(v for n, v in parts.items() if n != missing[0] and v is not None)
+        value = written - rest
+        # A derived zero means the box really was empty, not that the child
+        # scored nothing. Left blank, as an unread box always is.
+        if value <= 0 or value > written:
+            continue
+        parts[missing[0]] = value
+        row["unsure"] = True
+        row["held"] = (f"{missing[0]} worked out from the total: "
+                       f"{written} less {rest}")
 
 
 def _settle_rolls(seen: list[tuple[int, int]]) -> tuple[int | None, int]:
