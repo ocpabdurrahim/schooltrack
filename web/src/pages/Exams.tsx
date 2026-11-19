@@ -14,7 +14,9 @@ import { GROUPS } from '../data/groups';
 import { RELIGIONS } from '../data/religions';
 import type { Component } from '../data/grading';
 
-const blankExam = { examName: '', examYear: currentYear(), published: false, sortOrder: 0 };
+const blankExam = {
+  examName: '', examYear: currentYear(), published: false, sortOrder: 0, isFinal: false,
+};
 const blankSubject = {
   subjectName: '', subjectCode: '', classNames: [] as string[],
   fullMarks: 100, isOptional: false, sortOrder: 0,
@@ -158,6 +160,9 @@ export default function Exams() {
           <div className="row" key={e.examId}>
             <span style={{ color: 'var(--ink)' }}>
               {e.examName} {e.examYear}
+              {e.isFinal && (
+                <span className="pill" style={{ marginLeft: 8 }}>final</span>
+              )}
               {e.sortOrder > 0 && (
                 <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 13 }}>#{e.sortOrder}</span>
               )}
@@ -165,7 +170,7 @@ export default function Exams() {
             </span>
             <span>
               <code style={{ color: 'var(--muted)', marginRight: 12 }}>{e.periodLabel}</code>
-              <button className="link" onClick={() => { setExam(e); setProblem(''); }}>edit</button>
+              <button className="link" onClick={() => { setExam({ ...e, isFinal: e.isFinal === true }); setProblem(''); }}>edit</button>
             </span>
           </div>
         ))}
@@ -199,6 +204,25 @@ export default function Exams() {
           after it in the year. Left at 0, the report falls back to that
           alphabetical order and does not call it progress.
         </p>
+        <label className="choice" style={{ marginTop: 10 }}>
+          <input
+            type="checkbox"
+            checked={exam.isFinal === true}
+            onChange={(e) => setExam({ ...exam, isFinal: e.target.checked })}
+          />
+          <span>
+            <strong>The final exam of the year</strong>
+            <br />
+            <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+              Annual for most classes, Test for Class Ten. Once it is published,
+              its merit list can move a class up: first in merit becomes roll 1
+              of the next class. A tick rather than a guess from the name,
+              because an exam named slightly differently next year would
+              otherwise silently stop promoting the school.
+            </span>
+          </span>
+        </label>
+
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8, marginBottom: 0 }}>
           Period label: <code>{periodLabelFor(exam.examName || 'EXAM', exam.examYear)}</code> —
           the same text the fee module uses, so an exam fee and its exam match.

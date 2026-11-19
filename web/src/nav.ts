@@ -58,6 +58,8 @@ const ALL: NavGroup[] = [
       { label: 'Scan a mark sheet', to: '/marks/scan', needs: 'staff',
         hint: 'photograph the filled-in paper form' },
       { label: 'Results', to: '/results', needs: 'staff', hint: 'result sheet and tabulation' },
+      { label: 'Move a class up', to: '/promote', needs: 'admin',
+        hint: "merit list becomes next year's roll numbers" },
       { label: 'Mark sheets', to: '/marks/sheets', needs: 'staff',
         hint: 'one per student, detailed or brief' },
       { label: 'Seat plan', to: '/exams/seat-plan', needs: 'staff' },

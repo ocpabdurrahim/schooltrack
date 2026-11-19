@@ -20,6 +20,7 @@ import Login from './pages/Login';
 import LowAttendance from './pages/LowAttendance';
 import MarkEntry from './pages/MarkEntry';
 import MarkSheets from './pages/MarkSheets';
+import Promote from './pages/Promote';
 import ScanMarks from './pages/ScanMarks';
 import QuickMarks from './pages/QuickMarks';
 import PaySalary from './pages/PaySalary';
@@ -126,6 +127,7 @@ export default function App() {
         <Route path="/marks" element={staffOnly(<MarkEntry />)} />
         <Route path="/marks/quick" element={staffOnly(<QuickMarks />)} />
         <Route path="/marks/scan" element={staffOnly(<ScanMarks />)} />
+        <Route path="/promote" element={adminOnly(<Promote />)} />
         <Route path="/results" element={staffOnly(<Results />)} />
         <Route path="/marks/sheets" element={staffOnly(<MarkSheets />)} />
         {/* a guardian may open their own child's published report */}

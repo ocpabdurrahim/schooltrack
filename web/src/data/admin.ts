@@ -16,9 +16,11 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { SCHOOL_ID, db } from '../firebase';
 import type { StudentDetail } from './people';
+import type { Move } from './promotion';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
 
@@ -170,6 +172,52 @@ export type StaffRow = {
   staffStatus: 'ACTIVE' | 'ON_LEAVE' | 'LEFT';
   joinDate?: string;
 };
+
+/**
+ * Carries out a promotion plan.
+ *
+ * One batch: forty children change class and roll number together, or none of
+ * them do. A promotion half-written would be far worse than one not written
+ * at all — a class where some rolls are next year's and some are last year's
+ * is not something a teacher could unpick.
+ *
+ * Only the students who are actually moving are touched. Somebody staying
+ * down is left exactly as they are rather than written back unchanged, so
+ * their record keeps the date it last really changed.
+ */
+export async function carryOutPromotion(
+  moves: Move[],
+  classes: ClassRow[],
+): Promise<{ promoted: number; archived: number }> {
+  const batch = writeBatch(db);
+  let promoted = 0;
+  let archived = 0;
+
+  for (const m of moves) {
+    const ref = doc(school(), 'students', m.studentId);
+    if (m.what === 'ARCHIVED') {
+      // 'I' is the status every listing already filters on, so an archived
+      // student drops out of registers, mark entry and fee collection without
+      // anything else having to know about leaving.
+      batch.set(ref, { status: 'I', updatedAt: serverTimestamp() }, { merge: true });
+      archived += 1;
+    } else if (m.what === 'UP' && m.toClassId && m.toRoll !== null) {
+      const into = classes.find((c) => c.classId === m.toClassId);
+      if (!into) continue;
+      batch.set(ref, {
+        classId: into.classId,
+        className: into.className,
+        section: into.section,
+        rollNo: m.toRoll,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      promoted += 1;
+    }
+  }
+
+  await batch.commit();
+  return { promoted, archived };
+}
 
 export async function listStaff(): Promise<StaffRow[]> {
   const snap = await getDocs(query(collection(school(), 'staff'), orderBy('fullName')));

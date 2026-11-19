@@ -51,6 +51,16 @@ export type Exam = {
    * order for exams entered before this field existed.
    */
   sortOrder: number;
+  /**
+   * The last exam of the year for the classes that sit it: Annual for most,
+   * Test for Class Ten. Publishing it is what makes moving the class up
+   * possible — the merit list of this exam decides next year's roll numbers.
+   *
+   * A tick rather than a guess from the name or the sort order. "Annual Exam
+   * 2027" typed slightly differently, or an exam added after the last one,
+   * would otherwise silently change which exam promotes the school.
+   */
+  isFinal?: boolean;
 };
 
 export type Subject = {
@@ -133,6 +143,7 @@ export async function listExams(): Promise<Exam[]> {
       examId: d.id,
       ...(d.data() as Omit<Exam, 'examId' | 'sortOrder'>),
       sortOrder: (d.data().sortOrder as number) ?? 0,
+      isFinal: d.data().isFinal === true,
     }))
     .sort((a, b) =>
       b.examYear.localeCompare(a.examYear) ||
@@ -150,6 +161,7 @@ export async function saveExam(e: Omit<Exam, 'examId' | 'periodLabel'> & { examI
       periodLabel: periodLabelFor(e.examName, e.examYear),
       published: e.published,
       sortOrder: Number(e.sortOrder) || 0,
+      isFinal: e.isFinal === true,
     }),
     { merge: true },
   );
