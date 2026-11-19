@@ -56,28 +56,48 @@ Rebuild it after any change to `workbook.py`:
 
 ## Where it actually stands
 
-Run `selftest.py` for a number rather than an opinion. Two results, and the
-difference between them is the whole story:
+Run `selftest.py` for a number rather than an opinion, and score a real
+photograph the same way. Three numbers, not equally important:
 
-**On a clean generated sheet — 97% correct, ~2% wrong.** The pipeline is
-sound: the grid is found, the columns line up, the roll sequence is settled
-from the printed run, the spreadsheet is written and the app accepts it.
+    correct   what it got right
+    blank     what it would not commit to -- SAFE, a person fills these in
+    WRONG     what it got wrong and did not know -- the only dangerous one
 
-**On a real photographed sheet — the grid is found correctly (15 columns,
-3 blocks, 37 rules) but almost nothing is read.** Not wrong: BLANK. It
-refuses rather than inventing, which is the behaviour that was designed for,
-but a reader that holds everything is no use to anybody.
+    clean generated sheet    92% correct,  2% wrong
+    real photographed sheet  45% correct,  7% wrong
 
-The difference between those two numbers is not the grid. It is the
-**recogniser**: RapidOCR's models are trained on PRINTED text, and they read
-rendered digits beautifully and this teacher's handwriting not at all. That
-is the thing to change — a handwriting model, or a small digit classifier
-trained on digits written by hand — and it is a different problem from the
-one solved so far, not a tuning exercise on this one.
+Not good enough to trust yet. But the reason is worth writing down, because
+it is not the one everybody assumes.
 
-What is already worth keeping either way: the grid finding, the trimming of
-desk and shadow from the page, the roll-sequence check that stopped marks
-landing against the wrong child, and the rule that an unsure box is blank.
+## It was never the handwriting
+
+The obvious theory was that a printed-text recogniser cannot read a
+teacher's handwriting, and the obvious fix was a handwriting model. Looking
+at the actual cell crops killed that theory in one glance: the marks were
+perfectly legible, and the two columns to the left of them were the DESK.
+
+The photograph contains a desk, the pile of paper underneath, and a shadow.
+Those are long, straight and dark, which is the whole definition of a printed
+rule to anything looking for one. Two of them down the left margin became two
+extra columns, so every column shifted by two: the tablecloth was read as the
+Roll column, Roll as CQ, CQ as MCQ. The grid looked immaculate and the marks
+came out as nonsense.
+
+Cropping to the page first -- find the big bright thing, cut to it -- took
+the real sheet from **0% to 33%** without touching the recogniser.
+Regularising the column grid took it to **45%**.
+
+So the recogniser is reading handwriting. It is the geometry that is still
+losing marks, and that is where the remaining work is:
+
+  * the EMPTY block's rules are the faintest on the page (nothing was written
+    to darken them) and are still being missed, so a third of the sheet is
+    dropped;
+  * the Roll/CQ boundary lands slightly inside the digits, so 56 reads as 5
+    and 34 as 4 -- always that one column.
+
+A handwriting model may still be worth having afterwards. It is not what is
+costing the marks today.
 
 ## Samples
 

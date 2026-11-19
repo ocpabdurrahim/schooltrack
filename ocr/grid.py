@@ -42,15 +42,22 @@ class Cell:
     w: int
     h: int
 
-    def crop(self, image: np.ndarray, inset: float = 0.12) -> np.ndarray:
+    def crop(self, image: np.ndarray, inset_x: float = 0.05,
+             inset_y: float = 0.12) -> np.ndarray:
         """
         The inside of the box.
 
-        Inset because the printed rule itself is not part of what is written
-        in the box, and a stray line along the edge is read as a 1 more often
-        than you would like.
+        Inset because the printed rule is not part of what is written in the
+        box, and a stray line along the edge reads as a 1 more often than you
+        would like.
+
+        Far less off the SIDES than the top and bottom, and the asymmetry is
+        not fussiness: a two-digit mark fills its box across and a tenth off
+        each side took 56 down to 5 and 34 down to 4. Vertically there is
+        room to spare, and the rules above and below are the ones most likely
+        to be mistaken for ink.
         """
-        dx, dy = int(self.w * inset), int(self.h * inset)
+        dx, dy = int(self.w * inset_x), int(self.h * inset_y)
         return image[self.y + dy: self.y + self.h - dy, self.x + dx: self.x + self.w - dx]
 
 
@@ -212,7 +219,7 @@ def find_cells(gray: np.ndarray) -> tuple[list[Cell], dict]:
     # Roll is deliberately narrower than Total -- and applying the same rule
     # to them collapses real columns and loses whole blocks.
     across = _lines(ink, horizontal=True, min_fraction=0.12)
-    down = _lines(ink, horizontal=False, min_fraction=0.09)
+    down = _lines(ink, horizontal=False, min_fraction=0.05)
 
     rows = _positions(across, axis=1, gap=max(8, h // 120), evenly_spaced=True)
     cols = _positions(down, axis=0, gap=max(8, w // 150))
@@ -228,7 +235,7 @@ def find_cells(gray: np.ndarray) -> tuple[list[Cell], dict]:
     #
     # The horizontal rules say where the table is: they are printed INSIDE it
     # and span it. Anything outside their reach is not part of the form.
-    cols = _within(cols, _extent(across, axis=0), w)
+    cols = _regularise(_within(cols, _extent(across, axis=0), w))
     rows = _within(rows, _extent(down, axis=1), h)
 
     note = {"horizontal_rules": len(rows), "vertical_rules": len(cols),
@@ -244,6 +251,49 @@ def find_cells(gray: np.ndarray) -> tuple[list[Cell], dict]:
                 continue
             cells.append(Cell(row=r, col=c, x=x, y=y, w=xx - x, h=yy - y))
     return cells, note
+
+
+def _regularise(positions: list[int]) -> list[int]:
+    """
+    Makes the column lines a grid again: no duplicates, no holes.
+
+    Two things go wrong on a real photograph and they pull in opposite
+    directions. A thick rule is found twice, a few pixels apart, which splits
+    one column into two slivers and cuts a two-digit mark in half. And the
+    faintest rules — always the EMPTY block's, since nothing was written to
+    darken them — are not found at all, which silently merges five columns
+    into one and loses a third of the sheet.
+
+    The form's columns are near enough one width, so that width is the
+    measure for both: anything far below it is one rule seen twice, and a gap
+    far above it is a rule that was missed and can be put back.
+    """
+    if len(positions) < 4:
+        return positions
+
+    gaps = sorted(b - a for a, b in zip(positions, positions[1:]))
+    usual = gaps[len(gaps) // 2]
+    if usual <= 0:
+        return positions
+
+    kept = [positions[0]]
+    for p in positions[1:]:
+        if p - kept[-1] < usual * 0.45:
+            kept[-1] = (kept[-1] + p) // 2   # the same rule, twice
+        else:
+            kept.append(p)
+
+    filled = [kept[0]]
+    for p in kept[1:]:
+        span = p - filled[-1]
+        missing = int(round(span / usual)) - 1
+        # Only fill a gap that is a whole number of columns wide. A gap that
+        # is 1.4 columns is not a missing rule, it is simply a wider column.
+        if 1 <= missing <= 6 and abs(span / usual - round(span / usual)) < 0.22:
+            step = span / (missing + 1)
+            filled.extend(int(filled[-1] + step * (i + 1)) for i in range(missing))
+        filled.append(p)
+    return filled
 
 
 def _extent(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
@@ -267,6 +317,45 @@ def _within(positions: list[int], extent: tuple[int, int] | None, size: int) -> 
     return [p for p in positions if lo - slack <= p <= hi + slack]
 
 
+def crop_to_page(gray: np.ndarray) -> np.ndarray:
+    """
+    Throws away everything that is not the sheet of paper.
+
+    This has to happen BEFORE looking for rules, and leaving it out was the
+    bug that made a legible sheet unreadable. A photograph taken on a desk
+    contains the desk, the edge of the pile underneath, and a shadow — and
+    those are long, straight and dark, which is the entire definition of a
+    printed rule as far as the next step is concerned. Two of them down the
+    left margin became two extra columns, so every column shifted by two: the
+    tablecloth was read as the Roll column, Roll as CQ, CQ as MCQ. The grid
+    looked perfect and the marks came out as nonsense.
+
+    The page is the big bright thing. Find it, cut to it, and the desk stops
+    being able to pretend.
+    """
+    h, w = gray.shape
+    soft = cv2.GaussianBlur(gray, (9, 9), 0)
+    _, bright = cv2.threshold(soft, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    bright = cv2.morphologyEx(
+        bright, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)),
+    )
+    found, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not found:
+        return gray
+
+    x, y, cw, ch = cv2.boundingRect(max(found, key=cv2.contourArea))
+    # Only believe it if it looks like a page rather than a highlight: a
+    # quarter of the frame at least, and not a sliver.
+    if cw * ch < 0.25 * w * h or min(cw, ch) < 0.3 * min(w, h):
+        return gray
+
+    # A little inside the edge: the paper's own border is not part of the form
+    # and is itself a long dark line.
+    m = max(3, min(cw, ch) // 100)
+    return gray[y + m: y + ch - m, x + m: x + cw - m]
+
+
 def load_gray(path) -> np.ndarray:
     """The photograph as grey, straightened, and not absurdly large."""
     data = np.fromfile(str(path), dtype=np.uint8)
@@ -282,4 +371,4 @@ def load_gray(path) -> np.ndarray:
     if long_edge > 3000:
         scale = 3000 / long_edge
         image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    return deskew(image)
+    return deskew(crop_to_page(image))
