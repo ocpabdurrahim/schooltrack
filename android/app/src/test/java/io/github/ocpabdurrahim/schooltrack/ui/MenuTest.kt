@@ -62,7 +62,7 @@ class MenuTest {
         assertEquals(
             listOf(
                 "All students", "Add a student", "Add many students",
-                "Update from a list", "Certificates",
+                "Certificates",
             ),
             items(staff("OFFICE"), "Students"),
         )

@@ -42,10 +42,6 @@ private val ALL = listOf(
                 "Add many students", Screen.StudentsBatch, Need.RECORDS,
                 "a form like a spreadsheet, a row each",
             ),
-            MenuItem(
-                "Update from a list", Screen.StudentsUpdate, Need.RECORDS,
-                "fill in groups or religion for a whole section",
-            ),
             // ID cards are per student on the phone: opened from the student,
             // because a printed sheet is a thing you do at a desk.
             MenuItem("Certificates", Screen.Certificates, Need.RECORDS, "testimonial, transfer, character"),

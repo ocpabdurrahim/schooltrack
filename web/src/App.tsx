@@ -43,7 +43,6 @@ import StudentFees from './pages/StudentFees';
 import StudentResults from './pages/StudentResults';
 import Students from './pages/Students';
 import StudentsBatch from './pages/StudentsBatch';
-import StudentsUpdate from './pages/StudentsUpdate';
 import Users from './pages/Users';
 
 export default function App() {
@@ -90,7 +89,11 @@ export default function App() {
         <Route path="/students" element={staffOnly(<Students />)} />
         <Route path="/students/new" element={recordsOnly(<StudentEdit />)} />
         <Route path="/students/batch" element={recordsOnly(<StudentsBatch />)} />
-        <Route path="/students/update" element={recordsOnly(<StudentsUpdate />)} />
+        {/* "Update from a list" was removed. Without this the old address
+            falls through to /students/:studentId and says "No student with
+            id update", which reads as a fault rather than as a page that
+            is gone. */}
+        <Route path="/students/update" element={<Navigate to="/students" replace />} />
         <Route path="/students/:studentId/edit" element={recordsOnly(<StudentEdit />)} />
         {/* guardians reach these for their own children; the page and the
             rules both check that it is theirs */}

@@ -119,8 +119,6 @@ export default function Students() {
             <Link to="/students/new">Add a student</Link>
             {' · '}
             <Link to="/students/batch">Add many at once</Link>
-            {' · '}
-            <Link to="/students/update">Update from a list</Link>
           </p>
         )}
       </div>

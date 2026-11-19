@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyMarkPaste, matchByRoll, normalDate, parseMarkPaste, parseStudentRows,
-  prepareStudentRows, renames, parseMarkParts, MARK_HEADINGS, singleMark } from './batch';
+  applyMarkPaste, normalDate, parseMarkPaste, parseStudentRows,
+  prepareStudentRows, parseMarkParts, MARK_HEADINGS, singleMark } from './batch';
 
 /** The same cases exist in android/.../data/BatchTest.kt. */
 
@@ -315,77 +315,6 @@ describe('reading a pasted tally of marks', () => {
 // ---------------------------------------------------------------------------
 // updating students who are already here
 //
-// Written from the real case: a section of 78 was created from a list, the
-// Group column was added to that list afterwards, and 77 students sat every
-// paper in the class — Physics, History and both religion papers — because
-// nothing recorded which stream they were in.
-
-describe('matchByRoll', () => {
-  const here = [
-    { studentId: '238', rollNo: 1, fullName: 'Samia Putul', gender: 'Female' },
-    { studentId: '239', rollNo: 2, fullName: 'Afroza Akter', groupName: 'Science' },
-    { studentId: '240', rollNo: 3, fullName: 'Sohan' },
-  ];
-
-  // nameRequired: false — a list of Roll and Group has no name column, and
-  // for an update it does not need one.
-  const list = (text: string) => matchByRoll(parseStudentRows(text, false), here);
-
-  it('pairs each line with the student of that roll', () => {
-    const got = list('Roll,Name,Group\n1,Samia Putul,Science\n3,Sohan,Humanities');
-    expect(got.map((u) => u.studentId)).toEqual(['238', '240']);
-    expect(got.map((u) => u.problem)).toEqual(['', '']);
-  });
-
-  it('records only what the row would actually change', () => {
-    const got = list('Roll,Name,Group\n1,Samia Putul,Science');
-    expect(got[0].changes).toEqual([{ field: 'groupName', from: '', to: 'Science' }]);
-  });
-
-  it('says nothing to do when the value is already there', () => {
-    const got = list('Roll,Name,Group\n2,Afroza Akter,Science');
-    expect(got[0].changes).toEqual([]);
-  });
-
-  it('leaves a blank column alone — it must not wipe what is stored', () => {
-    // Only Roll and Group on this list: the gender already on roll 1 stays.
-    const got = list('Roll,Group\n1,Science');
-    expect(got[0].changes).toEqual([{ field: 'groupName', from: '', to: 'Science' }]);
-    expect(got[0].changes.some((c) => c.field === 'gender')).toBe(false);
-  });
-
-  it('reports a roll this section does not have, and never creates it', () => {
-    const got = list('Roll,Name,Group\n9,Nobody,Science');
-    expect(got[0].studentId).toBeNull();
-    expect(got[0].problem).toBe('No roll 9 in this section.');
-    expect(got[0].changes).toEqual([]);
-  });
-
-  it('refuses a line with no roll at all', () => {
-    const got = matchByRoll(
-      [{ ...parseStudentRows('Ayesha Khatun')[0], rollNo: null }],
-      here,
-    );
-    expect(got[0].studentId).toBeNull();
-    expect(got[0].problem).toContain('no roll number');
-  });
-
-  it('counts the rows that would rename somebody', () => {
-    // One is a correction. Forty mean the list belongs to another section.
-    const same = list('Roll,Name,Group\n1,Samia Putul,Science');
-    expect(renames(same)).toBe(0);
-    const other = list('Roll,Name,Group\n1,Different Child,Science\n2,Another One,Science');
-    expect(renames(other)).toBe(2);
-  });
-
-  it('normalises as it goes, so "sci" is stored as Science', () => {
-    expect(list('Roll,Group\n3,sci')[0].changes)
-      .toEqual([{ field: 'groupName', from: '', to: 'Science' }]);
-    expect(list('Roll,Religion\n3,muslim')[0].changes)
-      .toEqual([{ field: 'religion', from: '', to: 'Islam' }]);
-  });
-});
-
 describe('a spreadsheet with one column per part', () => {
   const g = (...rows: string[][]) => rows;
 
