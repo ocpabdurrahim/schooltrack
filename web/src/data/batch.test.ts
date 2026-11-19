@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyMarkPaste, matchByRoll, normalDate, parseMarkPaste, parseStudentRows,
-  prepareStudentRows, renames, parseMarkParts } from './batch';
+  prepareStudentRows, renames, parseMarkParts, MARK_HEADINGS, singleMark } from './batch';
 
 /** The same cases exist in android/.../data/BatchTest.kt. */
 
@@ -468,5 +468,45 @@ describe('a spreadsheet with one column per part', () => {
   it('points at the spreadsheet row a problem is on', () => {
     const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', '51', '18'], ['x', '1', '2']), ['CQ', 'MCQ']);
     expect(got.rows[1].line).toBe(3);
+  });
+});
+
+describe('a spreadsheet for a paper marked out of one number', () => {
+  const g = (...rows: string[][]) => rows;
+  const read = (grid: string[][]) => parseMarkParts(grid, MARK_HEADINGS);
+
+  it('takes whichever word the sheet used for the mark', () => {
+    for (const heading of MARK_HEADINGS) {
+      const got = read(g(['Roll', heading], ['3', '78']));
+      expect(got.problem).toBe('');
+      expect(singleMark(got.rows[0])).toBe(78);
+    }
+  });
+
+  it('prefers Marks when a sheet carries both Marks and Total', () => {
+    // They mean the same number twice; the first is the one that was typed.
+    const got = read(g(['Roll', 'Marks', 'Total'], ['3', '78', '78']));
+    expect(singleMark(got.rows[0])).toBe(78);
+  });
+
+  it('leaves an unmarked student null rather than zero', () => {
+    const got = read(g(['Roll', 'Marks'], ['3', '']));
+    expect(got.rows).toHaveLength(0);
+  });
+
+  it('reads an absent mark', () => {
+    const got = read(g(['Roll', 'Marks'], ['3', 'A']));
+    expect(got.rows[0].absent).toBe(true);
+    expect(singleMark(got.rows[0])).toBeNull();
+  });
+
+  it('says plainly when no column names the mark at all', () => {
+    const got = read(g(['Roll', 'Name'], ['3', 'Ayesha']));
+    expect(got.problem).toMatch(/heading row/i);
+  });
+
+  it('is null for a row with nothing in any mark column', () => {
+    expect(singleMark({ line: 2, rollNo: 3, parts: {}, absent: false, problem: '' }))
+      .toBeNull();
   });
 });

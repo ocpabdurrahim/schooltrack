@@ -577,6 +577,30 @@ export type PartsSheet = {
 export const headingKey = (raw: string) =>
   raw.trim().toUpperCase().replace(/\(.*?\)/g, '').replace(/[^A-Z0-9]+/g, '');
 
+/**
+ * What the one mark column may be called on a paper that is NOT split into
+ * parts, in the order they are preferred.
+ *
+ * A teacher's spreadsheet says "Marks", a tabulation says "Total", an exported
+ * one says "Obtained". They all mean the single number for the paper, and
+ * refusing a sheet over which word was used would be pedantry.
+ */
+export const MARK_HEADINGS = ['Marks', 'Mark', 'Total', 'Obtained', 'Score'];
+
+/**
+ * The single mark on a row, whichever of those columns the sheet used.
+ *
+ * Order matters: a sheet with both "Marks" and "Total" means the same number
+ * twice, and the first is the one the teacher typed.
+ */
+export function singleMark(row: PartsRow): number | null {
+  for (const name of MARK_HEADINGS) {
+    const v = row.parts[name];
+    if (v !== undefined && v !== null) return v;
+  }
+  return null;
+}
+
 /** The heading that names the roll, in the spellings a form or a teacher uses. */
 const ROLL_HEADINGS = ['ROLL', 'ROLLNO', 'ROLLNUMBER', 'ROLLNO.', 'SL', 'SLNO'];
 

@@ -48,15 +48,15 @@ import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
 import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.Subject
-import io.github.ocpabdurrahim.schooltrack.data.applyMarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.enteredSoFar
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
 import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.meritOrder
+import io.github.ocpabdurrahim.schooltrack.data.MARK_HEADINGS
 import io.github.ocpabdurrahim.schooltrack.data.PartsSheet
-import io.github.ocpabdurrahim.schooltrack.data.parseMarkPaste
 import io.github.ocpabdurrahim.schooltrack.data.parseMarkParts
+import io.github.ocpabdurrahim.schooltrack.data.singleMark
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
 import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
 import io.github.ocpabdurrahim.schooltrack.data.subjectStats
@@ -454,9 +454,6 @@ fun MarkEntryScreen(
 
     // the paste panel: a tally read, filled into the grid, and saved by the
     // ordinary Save button like anything typed in by hand
-    var pasteOpen by remember { mutableStateOf(false) }
-    var tally by remember { mutableStateOf("") }
-    var pasted by remember { mutableStateOf<Pair<MarkPaste, MarkFill>?>(null) }
     var fromFile by remember { mutableStateOf("") }
 
     // A spreadsheet of parts, for a subject marked in CQ/MCQ/Prac.
@@ -476,10 +473,6 @@ fun MarkEntryScreen(
         busy = false
     }
 
-    val pickFile = rememberSheetPicker(
-        onText = { name, loaded -> tally = loaded; fromFile = name; pasted = null; problem = "" },
-        onProblem = { problem = it; fromFile = "" },
-    )
 
     val exam = exams.firstOrNull { it.examId == examId }
     val className = students.firstOrNull()?.className.orEmpty()
@@ -506,8 +499,10 @@ fun MarkEntryScreen(
     val pickPartsFile = rememberGridPicker(
         onGrid = { name, grid ->
             problem = ""; note = ""; fromFile = name
+            // A paper marked in parts wants a column per part; a paper
+            // marked out of one number wants whichever word the sheet used.
             val comps = subject?.components.orEmpty().map { it.name }
-            val got = parseMarkParts(grid, comps)
+            val got = parseMarkParts(grid, if (comps.isNotEmpty()) comps else MARK_HEADINGS)
             partsRead = got
             if (got.problem.isEmpty()) {
                 val byRoll: Map<Long, String> =
@@ -519,15 +514,21 @@ fun MarkEntryScreen(
                     // than guessed at: their marks may already be in.
                     val id = row.rollNo?.let { byRoll[it] } ?: continue
                     val was = next[id] ?: Typed()
-                    val parts: MutableMap<String, String> = was.parts.toMutableMap()
-                    for ((name2, v) in row.parts.entries) {
-                        parts[name2] = if (v == v.toLong().toDouble()) {
-                            v.toLong().toString()
-                        } else {
-                            v.toString()
-                        }
+                    val show = { v: Double ->
+                        if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
                     }
-                    next = next + (id to was.copy(parts = parts, absent = row.absent))
+                    next = if (comps.isNotEmpty()) {
+                        val parts: MutableMap<String, String> = was.parts.toMutableMap()
+                        for ((name2, v) in row.parts.entries) parts[name2] = show(v)
+                        next + (id to was.copy(parts = parts, absent = row.absent))
+                    } else {
+                        val one = singleMark(row)
+                        if (one == null && !row.absent) continue
+                        next + (id to was.copy(
+                            marks = one?.let(show).orEmpty(),
+                            absent = row.absent,
+                        ))
+                    }
                     filled += 1
                 }
                 partsFilled = filled
@@ -549,7 +550,7 @@ fun MarkEntryScreen(
                 s.studentId to typedFrom(got?.marks, got?.parts, got?.absent ?: false)
             }
             problem = ""
-            pasted = null
+            partsRead = null
         } catch (_: Exception) {
             problem = "Could not load the marks."
         }
@@ -595,180 +596,83 @@ fun MarkEntryScreen(
             }
         }
 
-        // A subject marked in parts takes a SPREADSHEET, not a tally.
+        // ONE way in, for every paper: a spreadsheet.
         //
-        // A pasted tally is one number per student and cannot say whether it
-        // is the CQ or the MCQ. Until now this screen offered the tally box
-        // anyway and quietly filled the single-mark field, which for a paper
-        // marked in parts is not even the field the screen shows — so the
-        // marks went nowhere a teacher could see. A spreadsheet can say which
-        // column a number came from, because it has columns.
+        // The paste box is gone. It could only ever carry one number per
+        // student, which is fine for a paper marked out of 100 and useless
+        // for one marked CQ + MCQ -- and here it quietly filled the single
+        // mark field, which on a paper marked in parts is not even the field
+        // this screen shows, so the marks went nowhere a teacher could see.
+        // A spreadsheet says which column a number came from, because it has
+        // columns, and it is the same shape as the paper form. Marks can
+        // still be typed box by box below; this is the faster way in.
         val partColumns = subject?.components.orEmpty().map { it.name }
-        if (partColumns.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "A spreadsheet of marks",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "${subject?.subjectName.orEmpty()} is marked in " +
-                            partColumns.joinToString(" and ") +
-                            ", so a pasted tally is no use — one number per student " +
-                            "cannot say which part it is. A spreadsheet can, because " +
-                            "it has columns. Nothing is saved until you press Save marks.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                    OutlinedButton(
-                        onClick = pickPartsFile,
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    ) {
-                        Text(if (fromFile.isBlank()) "Choose an Excel or CSV file"
-                             else "Choose another file")
-                    }
-                    Text(
-                        "One heading row, then a row per student: Roll, " +
-                            partColumns.joinToString(", ") +
-                            ", and a Total if you like — the Total is ignored here, " +
-                            "because it is worked out from the parts. Leave a box empty " +
-                            "rather than writing 0 in it: a zero is a mark.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    partsRead?.let { got ->
-                        if (got.problem.isNotEmpty()) {
-                            Problem(got.problem)
-                        } else {
-                            Text(
-                                "$partsFilled student(s) filled in from " +
-                                    got.columns.keys.joinToString(" and ") +
-                                    ". Check them below, then press Save marks.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Green,
-                                modifier = Modifier.padding(top = 10.dp),
-                            )
-                        }
-                        for (row in got.rows.filter { it.problem.isNotEmpty() }) {
-                            Text(
-                                "Row ${row.line}: ${row.problem}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Muted,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        } else
         Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Column(Modifier.padding(16.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                Text(
+                    "A spreadsheet of marks",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    if (partColumns.isNotEmpty()) {
+                        "${subject?.subjectName.orEmpty()} is marked in " +
+                            partColumns.joinToString(" and ") +
+                            ", so the sheet needs a column for each. Nothing is " +
+                            "saved until you press Save marks."
+                    } else {
+                        "Marks for a whole section at once, off an .xlsx or a CSV. " +
+                            "Nothing is saved until you press Save marks."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                OutlinedButton(
+                    onClick = pickPartsFile,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 ) {
                     Text(
-                        "Paste a tally",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
+                        if (fromFile.isBlank()) "Choose an Excel or CSV file"
+                        else "Choose another file",
                     )
-                    TextButton(onClick = { pasteOpen = !pasteOpen; pasted = null }) {
-                        Text(if (pasteOpen) "close" else "open")
-                    }
                 }
-
-                if (!pasteOpen) {
-                    Text(
-                        "Marks off an answer-script tally, a whole section at a time, " +
-                            "instead of box by box. Nothing is saved until you press " +
-                            "Save marks.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                    )
-                } else {
-                    OutlinedButton(
-                        onClick = pickFile,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    ) { Text(if (fromFile.isBlank()) "Choose an Excel or CSV file" else "Choose another file") }
-
-                    OutlinedTextField(
-                        value = tally,
-                        onValueChange = { tally = it; fromFile = "" },
-                        label = {
-                            Text(
-                                if (fromFile.isBlank()) "Roll and mark, a line each"
-                                else "The marks · read from $fromFile",
-                            )
-                        },
-                        singleLine = false,
-                        minLines = 5,
-                        textStyle = MaterialTheme.typography.bodyMedium
-                            .copy(fontFamily = FontFamily.Monospace),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                    Text(
-                        "An .xlsx or a CSV, or typed in: a roll and its mark on each " +
-                            "line — 1 78, 1=78, 1, Ayesha, 78 — or a " +
-                            "bare column of marks in roll order, which has to match this " +
-                            "section exactly. Write A for absent and - to clear a mark.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Muted,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    Button(
-                        enabled = !busy && sitters.isNotEmpty(),
-                        onClick = {
-                            val paste = parseMarkPaste(tally)
-                            val fill = applyMarkPaste(
-                                paste,
-                                sitters.map { RollEntry(it.studentId, it.rollNo) },
-                                subject?.fullMarks?.toLong(),
-                            )
-                            pasted = paste to fill
-                            // Filling is not saving: the boxes change, the sheet
-                            // does not, and the ordinary Save button below is
-                            // still what writes it.
-                            if (fill.filled > 0) {
-                                entries = entries + fill.entries.mapValues { (id, v) ->
-                                    (entries[id] ?: Typed())
-                                        .copy(marks = v.marks, absent = v.absent)
-                                }
-                                note = ""
+                Text(
+                    "One heading row, then a row per student: Roll, then " +
+                        (
+                            if (partColumns.isNotEmpty()) {
+                                partColumns.joinToString(", ") +
+                                    ", and a Total if you like — it is ignored " +
+                                    "here, because it is worked out from the parts."
+                            } else {
+                                "Marks."
                             }
-                        },
-                        modifier = Modifier.padding(top = 10.dp),
-                    ) { Text("Fill the boxes") }
-
-                    pasted?.let { (paste, fill) ->
-                        if (fill.problem.isNotEmpty()) {
-                            Problem(fill.problem)
-                        } else {
-                            Text(
-                                "${fill.filled} box(es) filled in. Check them below, then " +
-                                    "press Save marks.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Green,
-                                modifier = Modifier.padding(top = 10.dp),
-                            )
-                        }
-                        if (fill.unknownRolls.isNotEmpty()) {
-                            Problem(
-                                "This section has no roll " +
-                                    fill.unknownRolls.joinToString(", ") +
-                                    " — those lines were left out.",
-                            )
-                        }
-                        if (fill.overRolls.isNotEmpty()) {
-                            Problem(
-                                "Roll " + fill.overRolls.joinToString(", ") +
-                                    " got more than the full marks.",
-                            )
-                        }
-                        paste.rows.filter { it.problem.isNotEmpty() }.forEach {
-                            Problem("Line ${it.line}: ${it.problem}")
-                        }
+                            ) +
+                        " Write A for absent. Leave a box empty rather than " +
+                        "writing 0 in it: a zero is a mark.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                partsRead?.let { got ->
+                    if (got.problem.isNotEmpty()) {
+                        Problem(got.problem)
+                    } else {
+                        Text(
+                            "$partsFilled student(s) filled in from " +
+                                got.columns.keys.joinToString(" and ") +
+                                ". Check them below, then press Save marks.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Green,
+                            modifier = Modifier.padding(top = 10.dp),
+                        )
+                    }
+                    for (row in got.rows.filter { it.problem.isNotEmpty() }) {
+                        Text(
+                            "Row ${row.line}: ${row.problem}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
                     }
                 }
             }

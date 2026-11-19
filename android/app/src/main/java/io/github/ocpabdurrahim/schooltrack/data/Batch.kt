@@ -657,6 +657,29 @@ fun headingKey(raw: String): String =
         .replace(Regex("""\(.*?\)"""), "")
         .replace(Regex("[^A-Z0-9]+"), "")
 
+/**
+ * What the one mark column may be called on a paper that is NOT split into
+ * parts, in the order they are preferred.
+ *
+ * A teacher's spreadsheet says "Marks", a tabulation says "Total", an exported
+ * one says "Obtained". They all mean the single number for the paper, and
+ * refusing a sheet over which word was used would be pedantry.
+ */
+val MARK_HEADINGS = listOf("Marks", "Mark", "Total", "Obtained", "Score")
+
+/**
+ * The single mark on a row, whichever of those columns the sheet used.
+ *
+ * Order matters: a sheet with both "Marks" and "Total" means the same number
+ * twice, and the first is the one the teacher typed.
+ */
+fun singleMark(row: PartsRow): Double? {
+    for (name in MARK_HEADINGS) {
+        row.parts[name]?.let { return it }
+    }
+    return null
+}
+
 /** The heading that names the roll, in the spellings a form or a teacher uses. */
 private val ROLL_HEADINGS = listOf("ROLL", "ROLLNO", "ROLLNUMBER", "SL", "SLNO")
 

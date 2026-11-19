@@ -593,4 +593,48 @@ class BatchTest {
         )
         assertEquals(3, got.rows[1].line)
     }
+
+    // ------------- a spreadsheet for a paper marked out of one number
+    // The SAME cases exist in web/src/data/batch.test.ts.
+
+    private fun oneMark(grid: Grid) = parseMarkParts(grid, MARK_HEADINGS)
+
+    @Test
+    fun `takes whichever word the sheet used for the mark`() {
+        for (heading in MARK_HEADINGS) {
+            val got = oneMark(grid(listOf("Roll", heading), listOf("3", "78")))
+            assertEquals("", got.problem)
+            assertEquals(78.0, singleMark(got.rows[0]))
+        }
+    }
+
+    @Test
+    fun `prefers Marks when a sheet carries both Marks and Total`() {
+        // They mean the same number twice; the first is the one that was typed.
+        val got = oneMark(grid(listOf("Roll", "Marks", "Total"), listOf("3", "78", "78")))
+        assertEquals(78.0, singleMark(got.rows[0]))
+    }
+
+    @Test
+    fun `leaves an unmarked student null rather than zero`() {
+        assertEquals(0, oneMark(grid(listOf("Roll", "Marks"), listOf("3", ""))).rows.size)
+    }
+
+    @Test
+    fun `reads an absent mark on a single-mark paper`() {
+        val got = oneMark(grid(listOf("Roll", "Marks"), listOf("3", "A")))
+        assertTrue(got.rows[0].absent)
+        assertNull(singleMark(got.rows[0]))
+    }
+
+    @Test
+    fun `says plainly when no column names the mark at all`() {
+        val got = oneMark(grid(listOf("Roll", "Name"), listOf("3", "Ayesha")))
+        assertTrue(got.problem.contains("heading row"))
+    }
+
+    @Test
+    fun `is null for a row with nothing in any mark column`() {
+        assertNull(singleMark(PartsRow(line = 2, rollNo = 3L)))
+    }
 }
