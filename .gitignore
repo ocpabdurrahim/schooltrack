@@ -69,3 +69,8 @@ ID Cards/
 # repository is public. The OCR work needs them locally and must never ship them.
 ocr/samples/
 *.jpeg
+
+# Photographs of real filled mark sheets live here. A whole section's marks,
+# and this repository is PUBLIC.
+Images/
+ocr/_selftest-sheet.png

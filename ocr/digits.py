@@ -22,15 +22,39 @@ from functools import lru_cache
 
 import cv2
 import numpy as np
+from pathlib import Path
 
 # Below this, the engine is guessing and we would rather have a blank box for
 # a person to fill in than a number nobody checked.
 CONFIDENT = 0.55
 
 
+MODELS = Path(__file__).resolve().parent / "models"
+
+
 @lru_cache(maxsize=1)
 def _engine():
+    """
+    The reader, in ENGLISH.
+
+    RapidOCR ships the Chinese PP-OCR model, and on a page of handwritten
+    marks that is not a small detail: it returned Chinese characters for
+    empty boxes and, worse, read a handwritten 6 as "G" and a 3 as "G" --
+    so 56 came back as "5G" and 34 as "G4". Those were refused as unreadable,
+    which was safe but meant a third of the sheet came back blank.
+
+    The English model reads the same boxes as 56 at 0.99 and 27 at 0.95. The
+    alphabet it is choosing from is the whole difference.
+
+    Falls back to whatever ships with the package if the English model is not
+    beside this file, so the reader still runs -- just less well, and the
+    download is in the README.
+    """
     from rapidocr_onnxruntime import RapidOCR
+
+    rec, keys = MODELS / "en_rec.onnx", MODELS / "en_dict.txt"
+    if rec.is_file() and keys.is_file():
+        return RapidOCR(rec_model_path=str(rec), rec_keys_path=str(keys))
     return RapidOCR()
 
 

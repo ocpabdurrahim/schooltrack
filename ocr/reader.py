@@ -131,6 +131,11 @@ def read_sheet(
         read_rolls = dict(seen)
         for r in usable:
             roll = (r + offset) if offset is not None else read_rolls.get(r)
+            # The run is fitted from cells that were read, so a block read
+            # badly can put the offset out and hand back roll -3. There is no
+            # roll below 1; saying "could not read it" is the honest answer.
+            if roll is not None and roll < 1:
+                roll = None
 
             parts: dict[str, int | None] = {}
             unsure = False

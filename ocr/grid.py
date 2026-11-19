@@ -241,9 +241,19 @@ def find_cells(gray: np.ndarray, per_block: int | None = None) -> tuple[list[Cel
     # found -- the columns divide evenly into blocks -- measurement is better
     # than any assumption and is left alone. Laying a template over a grid
     # that was already right is how a working sheet gets broken.
-    if per_block and _real_columns(cols) % per_block:
+    if per_block:
         patched = columns_from_template(cols, per_block, w)
-        if _real_columns(patched) % per_block == 0:
+        found, repaired = _real_columns(cols), _real_columns(patched)
+        # Two reasons to prefer the template, and the second one was missed
+        # at first: the columns not dividing into whole blocks is the obvious
+        # case, but a grid can divide PERFECTLY and still be wrong. Ten
+        # columns look like a tidy two blocks when the page holds three, and
+        # a third of the children quietly disappear. The template works the
+        # block count out from the width of the page instead.
+        better = repaired % per_block == 0 and (
+            found % per_block or repaired > found
+        )
+        if better:
             cols = patched
     rows = _within(rows, _extent(down, axis=1), h)
 
@@ -387,10 +397,21 @@ def columns_from_template(cols: list[int], per_block: int, width: int) -> list[i
     if pitch <= 0:
         return cols
 
-    how_many = max(1, int(round((width - start) / pitch)))
+    # Tile the WHOLE page, not just forwards from here.
+    #
+    # The block that reads best is not always the first one. Measuring block
+    # two and tiling rightwards covers block three and walks off the page,
+    # while block one -- which is right there and perfectly readable -- is
+    # dropped. So step back to the leftmost block that still fits on the page
+    # and lay the template from there.
+    first = start
+    while first - pitch >= -block_width * 0.1:
+        first -= pitch
+    how_many = max(1, int((width - first) / pitch) + 1)
+
     out: list[int] = []
     for b in range(how_many):
-        base = start + b * pitch
+        base = first + b * pitch
         if base > width:
             break
         for k, frac in enumerate(shape):

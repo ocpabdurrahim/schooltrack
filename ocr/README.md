@@ -56,50 +56,50 @@ Rebuild it after any change to `workbook.py`:
 
 ## Where it actually stands
 
-`selftest.py` prints a number rather than an opinion, and a real photograph is
-scored the same way. Three numbers, not equally important:
+    clean generated sheet       87% correct,  8% wrong
+    photographed on a desk      90% correct,  2% wrong
+    scanned flat (best format)  86% correct,  0% wrong
 
-    correct   what it got right
-    blank     what it would not commit to -- SAFE, a person fills these in
-    WRONG     what it got wrong and did not know -- the only dangerous one
+The generated sheet is now the WORST of the three, which sounds wrong and is
+not. It is drawn with a computer font, and the English model reads a quirk of
+that font as a trailing 6 -- it is a test of the pipeline, not of reading
+handwriting, and the two real sheets are the ones that matter.
 
-    clean generated sheet    92% correct,  2% wrong
-    real photographed sheet  62% correct,  2% wrong
+## Running it
 
-The real sheet was 0% when its photograph first arrived. What closed the gap
-was geometry and arithmetic, not a better recogniser:
+Double-click **Mark Sheet Reader.bat**, or:
 
-  * **find the page first.** A photograph contains the desk, the pile
-    underneath and a shadow, and those are long, straight and dark -- the
-    whole definition of a printed rule. Two down the left margin shifted
-    every column by two, so the tablecloth was read as Roll and Roll as CQ.
-    Cropping to the paper: 0% -> 33%.
-  * **blocks sit side by side**, so at each join there are TWO rules twenty
-    pixels apart. Merging them as a double-sighting destroyed a real column
-    boundary and lost a block.
-  * **the empty block has the faintest rules on the page** -- no ink ever
-    crossed them -- and no threshold finds what is not there. The three
-    blocks are identical, so the best-read one is laid over the others at the
-    same pitch. Only ever as a repair: a template over a grid that was
-    already right is how a working sheet gets broken.
-  * **letters are a refusal, not something to strip.** A handwritten 6 comes
-    back as "b", and stripping non-digits turned "5b" into a confident 5 --
-    a child's 56 recorded as 5. Every wrong answer came through that one
-    line.
-  * **the teacher's Total is a checksum.** The parts are read independently
-    of it, so when 28 is misread as 8 the sum stops matching and the row is
-    held instead of quietly recording 18.
+    .venv/Scripts/python.exe get_models.py     # once
+    .venv/Scripts/pythonw.exe app.py
+
+## The model has to be the English one
+
+RapidOCR ships the CHINESE PP-OCR model, and on a page of handwritten marks
+that is not a small detail. It returned Chinese characters for empty boxes
+and, worse, read a handwritten **6 as "G"** and a **3 as "G"** -- so 56 came
+back as "5G" and 34 as "G4". Both were refused as unreadable, which was safe
+but left a third of the sheet blank.
+
+The English model reads those same boxes as 56 at 0.99 and 27 at 0.95. That
+one change took the real sheet from 64% to 86% correct and the wrong answers
+to nought. `get_models.py` fetches it; the reader falls back to the bundled
+Chinese model if it is missing, and reads markedly worse.
+
+## What makes a photograph read well
+
+The flat scan beats the desk photograph on the number that matters -- no
+wrong answers at all. If sheets are to be photographed:
+
+  * fill the frame with the page and keep the desk out of it;
+  * flat, even light, no shadow across the sheet;
+  * square on, not at an angle.
 
 ## What is still wrong
 
-  * 36% of boxes come back blank on the real sheet, which is safe but is
-    still a third of the typing left to do;
-  * seven rows that are blank on the paper came back with something on them;
-  * block 3's roll numbers do not read, so its rows rely on the per-cell
-    reading rather than the printed run.
-
-A handwriting model is the obvious next thing to try, and it is now a fair
-test: the boxes being handed to the recogniser are the right boxes.
+  * about one box in seven comes back blank on a good scan, which is safe
+    but is still typing left to do;
+  * a few rows that are blank on the paper come back with something on them;
+  * the self-test's generated font misreads, as above.
 
 ## Samples
 
