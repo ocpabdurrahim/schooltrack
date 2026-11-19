@@ -64,3 +64,8 @@ android/.kotlin/
 ID Cards/
 *.jpg
 *.jpeg
+
+# Photographs of real filled mark sheets: a whole section's marks, and this
+# repository is public. The OCR work needs them locally and must never ship them.
+ocr/samples/
+*.jpeg
