@@ -70,6 +70,16 @@ const HEADERS: Record<string, Field> = {
   faith: 'religion',
 };
 
+/**
+ * Which student field a column heading names, or '' for a column this app has
+ * no home for.
+ *
+ * The same table the list parser reads headings with, so a grid lining a file
+ * up under its own columns and the parser reading the result afterwards cannot
+ * disagree about what "Father's Name" means.
+ */
+export const studentColumn = (raw: string): string => HEADERS[letters(raw)] ?? '';
+
 /** What a list without a header line is taken to be. */
 const ROLL_FIRST: Field[] = ['rollNo', 'fullName', 'fatherName', 'motherName', 'mobileNo', 'dob'];
 // A list that does not lead with a roll number is taken to have no rolls in it

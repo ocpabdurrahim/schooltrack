@@ -72,6 +72,48 @@ export function pasteInto(
   return out;
 }
 
+/** A heading, reduced to its letters, so "Father's name" and "father name" match. */
+const letters = (s: string) => s.trim().toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * Rows from a file or a clipboard, lined up under a form's columns.
+ *
+ * A heading row is honoured where it names a column the form has, so a sheet
+ * whose columns are in another order still lands in the right boxes. Without
+ * one the columns are taken in the form's own order.
+ *
+ * TWO headings have to match before the first row is believed to be headings
+ * at all. One is not enough: a list that happens to start with a student
+ * called Group, or a stray cell reading "Sex", would otherwise have a real
+ * child's row eaten as a title.
+ *
+ * `key` is the vocabulary. By default a heading is only its letters, so
+ * "Roll No" and "rollno" are one column. A caller with a richer table of
+ * spellings — the students form hands in the list parser's own — passes it,
+ * and then the grid and whatever reads the grid afterwards cannot disagree
+ * about what a heading meant.
+ */
+export function underColumns(
+  lines: Cells,
+  headings: string[],
+  key: (s: string) => string = letters,
+): Cells {
+  if (!lines.length) return [];
+  const head = lines[0].map(key);
+  const known = headings.map(key);
+  const named = head.filter((h) => h !== '' && known.includes(h)).length >= 2;
+
+  const body = named ? lines.slice(1) : lines;
+  return body.map((line) => {
+    const row = headings.map(() => '');
+    line.forEach((value, j) => {
+      const col = named ? known.indexOf(head[j] ?? '') : j;
+      if (col >= 0 && col < row.length) row[col] = value;
+    });
+    return row;
+  });
+}
+
 /** True when nothing has been typed in this row. */
 export const rowIsBlank = (row: string[]) => row.every((c) => c.trim() === '');
 

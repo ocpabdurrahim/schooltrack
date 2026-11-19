@@ -8,6 +8,7 @@ import {
   removeRow,
   rowIsBlank,
   setCell,
+  underColumns,
   withSpareRows,
 } from './gridedit';
 
@@ -90,6 +91,58 @@ describe('pasting a block', () => {
   it('leaves the grid alone when the clipboard is empty', () => {
     const g = blankGrid(2, 2);
     expect(pasteInto(g, 0, 0, '')).toBe(g);
+  });
+});
+
+describe('rows lined up under a form', () => {
+  const FORM = ['roll', 'name', 'father', 'mobile'];
+
+  it('takes the columns in the form order when there is no heading row', () => {
+    expect(underColumns([['1', 'Ayesha', 'Karim']], FORM))
+      .toEqual([['1', 'Ayesha', 'Karim', '']]);
+  });
+
+  it('honours a heading row whose columns are in another order', () => {
+    expect(underColumns([['Name', 'Roll'], ['Ayesha', '1']], FORM))
+      .toEqual([['1', 'Ayesha', '', '']]);
+  });
+
+  it('matches a heading whatever its spacing and case', () => {
+    expect(underColumns([['  NAME ', 'Roll'], ['Ayesha', '1']], FORM))
+      .toEqual([['1', 'Ayesha', '', '']]);
+  });
+
+  it('can be given a vocabulary, so "Father\'s Name" is the father column', () => {
+    // The students form hands in the list parser's own heading table. Without
+    // that, a sheet headed "Father's Name" would not be recognised as a
+    // heading row at all and the headings would import as a student.
+    const key = (s: string) => {
+      const k = s.trim().toLowerCase().replace(/[^a-z]/g, '');
+      return ({ fathersname: 'father', fathername: 'father' } as Record<string, string>)[k] ?? k;
+    };
+    expect(underColumns([["Father's Name", 'Roll'], ['Karim', '7']], FORM, key))
+      .toEqual([['7', '', 'Karim', '']]);
+  });
+
+  it('does NOT eat a student row that happens to match one heading', () => {
+    // A child actually called Roll is unlikely; a one-cell list under a
+    // stray word is not. One match is a coincidence, two is a heading row.
+    expect(underColumns([['Roll', 'Ayesha'], ['2', 'Bashir']], FORM))
+      .toEqual([['Roll', 'Ayesha', '', ''], ['2', 'Bashir', '', '']]);
+  });
+
+  it('ignores a column the form has not got', () => {
+    expect(underColumns([['Roll', 'Nickname', 'Name'], ['1', 'Ayu', 'Ayesha']], FORM))
+      .toEqual([['1', 'Ayesha', '', '']]);
+  });
+
+  it('drops what falls off the right-hand edge', () => {
+    expect(underColumns([['1', 'A', 'B', 'C', 'D', 'E']], FORM))
+      .toEqual([['1', 'A', 'B', 'C']]);
+  });
+
+  it('gives nothing for nothing', () => {
+    expect(underColumns([], FORM)).toEqual([]);
   });
 });
 

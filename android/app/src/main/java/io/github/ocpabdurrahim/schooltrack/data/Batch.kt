@@ -83,6 +83,16 @@ private val NAME_FIRST = listOf(
 
 private fun letters(s: String) = s.lowercase().filter { it in 'a'..'z' }
 
+/**
+ * Which student field a column heading names, or "" for a column this app has
+ * no home for.
+ *
+ * The same table the list parser reads headings with, so a grid lining a file
+ * up under its own columns and the parser reading the result afterwards cannot
+ * disagree about what "Father's Name" means.
+ */
+fun studentColumn(raw: String): String = HEADERS[letters(raw)]?.name ?: ""
+
 private data class Split(val cells: List<String>, val loose: Boolean)
 
 /**

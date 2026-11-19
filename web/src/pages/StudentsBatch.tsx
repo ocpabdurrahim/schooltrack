@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
-import { type StudentRow, parseStudentRows, prepareStudentRows } from '../data/batch';
+import {
+  type StudentRow, parseStudentRows, prepareStudentRows, studentColumn,
+} from '../data/batch';
 import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
 import { findStudents } from '../data/people';
 import SheetGrid, { type Column } from '../components/SheetGrid';
-import { type Cells, blankGrid, clipboardCells, gridToList, withSpareRows } from '../data/gridedit';
+import {
+  type Cells, blankGrid, clipboardCells, gridToList, underColumns, withSpareRows,
+} from '../data/gridedit';
 
 /**
  * The form's columns, in the order the office reads them off a register.
@@ -46,32 +50,14 @@ const HEADINGS = COLUMNS.map((c) => c.key);
 /**
  * A file's rows, lined up under this form's columns.
  *
- * A heading row in the file is honoured where it names a column this form
- * has, so a sheet whose columns are in another order still lands in the right
- * boxes. Without one the columns are taken in the form's own order, which is
- * the order the paste box used before this grid replaced it.
+ * The lining up itself lives in underColumns, which is tested and shared with
+ * the Android screen: a file read one way on a computer and another way on a
+ * phone is worse than a file that cannot be read at all.
  */
 function intoColumns(text: string): Cells {
-  const lines = clipboardCells(text.replace(/	/g, '	'));
+  const lines = clipboardCells(text);
   if (!lines.length) return blankGrid(8, COLUMNS.length);
-
-  const head = lines[0].map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
-  const known = HEADINGS.map((h) => h.replace(/[^a-z]/g, ''));
-  const named = head.filter((h) => known.includes(h)).length >= 2;
-
-  const body = named ? lines.slice(1) : lines;
-  const at = named
-    ? head.map((h) => known.indexOf(h))
-    : HEADINGS.map((_, i) => i);
-
-  return body.map((line) => {
-    const row = Array.from({ length: COLUMNS.length }, () => '');
-    line.forEach((value, j) => {
-      const col = named ? at[j] : j;
-      if (col >= 0 && col < row.length) row[col] = value;
-    });
-    return row;
-  });
+  return underColumns(lines, HEADINGS, studentColumn);
 }
 
 export default function StudentsBatch() {

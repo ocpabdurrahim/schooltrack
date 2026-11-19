@@ -74,3 +74,9 @@ ocr/samples/
 # and this repository is PUBLIC.
 Images/
 ocr/_selftest-sheet.png
+
+# Spreadsheets dropped in the repo root are the school's own lists of real
+# children (names, guardians, registration numbers). THIS REPO IS PUBLIC.
+# Fixtures that belong in git live under web/src/data/fixtures/.
+/*.xlsx
+/*.csv

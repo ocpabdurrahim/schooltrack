@@ -40,7 +40,7 @@ private val ALL = listOf(
             MenuItem("Add a student", Screen.StudentEdit, Need.RECORDS),
             MenuItem(
                 "Add many students", Screen.StudentsBatch, Need.RECORDS,
-                "paste a whole section in one go",
+                "a form like a spreadsheet, a row each",
             ),
             MenuItem(
                 "Update from a list", Screen.StudentsUpdate, Need.RECORDS,
