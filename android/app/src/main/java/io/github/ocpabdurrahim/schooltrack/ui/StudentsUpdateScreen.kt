@@ -292,9 +292,49 @@ fun StudentsUpdateScreen(
                         HorizontalDivider(Modifier.padding(top = 6.dp))
                     }
 
-                    if (!done) {
+                    // A list that asks for nothing is the ordinary case here, not
+                    // a failure: the same file read twice, or a column the office
+                    // has already filled in. Said in a sentence, because
+                    // "Update 0 student(s)" greyed out is read as the page not
+                    // working — which is exactly how it was read.
+                    if (!done && willChange == 0 && notFound == 0) {
+                        Text(
+                            "Nothing to change. All " + shown.size + " line(s) already " +
+                                "match what is stored for " + (section?.displayName ?: "") +
+                                ", so there is nothing to save. This is what reading the " +
+                                "same list a second time looks like.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+
+                    // Deliberately does NOT name the reason. A held row is held
+                    // either because it carries no roll or because the roll is not
+                    // in this section, and saying "these rolls are not in
+                    // Class 6 - A" about a list that had no roll column at all
+                    // sends the office looking for the wrong mistake. Each row
+                    // already says which it is.
+                    if (!done && willChange == 0 && notFound > 0) {
+                        Text(
+                            "Nothing can be saved. " +
+                                (if (notFound == shown.size)
+                                    "None of these " + shown.size + " line(s) could be matched"
+                                 else "$notFound of these " + shown.size +
+                                    " line(s) could not be matched") +
+                                " to a student in " +
+                                (section?.displayName ?: "") +
+                                (if (alreadyRight > 0)
+                                    ", and the rest already match what is stored."
+                                 else " — each row says why above."),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Bad,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+
+                    if (!done && willChange > 0) {
                         Button(
-                            enabled = !busy && willChange > 0,
+                            enabled = !busy,
                             onClick = {
                                 busy = true; problem = ""
                                 scope.launch {
@@ -322,7 +362,12 @@ fun StudentsUpdateScreen(
                             },
                             modifier = Modifier.padding(top = 12.dp),
                         ) { Text(if (busy) "Saving…" else "Update " + willChange + " student(s)") }
-                    } else {
+                    }
+
+                    // Its own `if`, not an `else`: the button's condition is now
+                    // "there is something to save", so an else would print
+                    // "0 student(s) updated" underneath "Nothing to change".
+                    if (done) {
                         Text(
                             savedIds.size.toString() + " student(s) updated.",
                             color = MaterialTheme.colorScheme.primary,

@@ -279,8 +279,44 @@ export default function StudentsUpdate() {
             </table>
           </div>
 
-          {!done && (
-            <button onClick={save} disabled={busy || ready === 0} style={{ marginTop: 14 }}>
+          {/*
+            A list that asks for nothing is the ordinary case here, not a
+            failure: the same file read twice, or a column the office has
+            already filled in. Said in a sentence, because "Update 0 students"
+            greyed out is read as the page not working — which is exactly how
+            it was read.
+          */}
+          {!done && ready === 0 && stopped === 0 && (
+            <p className="callout" style={{ marginTop: 14 }}>
+              <strong>Nothing to change.</strong> All {rows.length} line
+              {rows.length === 1 ? '' : 's'} already match what is stored for
+              {' '}{section?.displayName}, so there is nothing to save. This is
+              what reading the same list a second time looks like.
+            </p>
+          )}
+
+          {/*
+            Deliberately does NOT name the reason. A held row is held either
+            because it carries no roll or because the roll is not in this
+            section, and saying "these rolls are not in Class 6 - A" about a
+            list that had no roll column at all sends the office looking for
+            the wrong mistake. Each row already says which it is.
+          */}
+          {!done && ready === 0 && stopped > 0 && (
+            <p className="callout bad" style={{ marginTop: 14 }}>
+              <strong>Nothing can be saved.</strong>{' '}
+              {stopped === rows.length
+                ? `None of these ${rows.length} line${rows.length === 1 ? '' : 's'} could be matched`
+                : `${stopped} of these ${rows.length} lines could not be matched`}
+              {' '}to a student in {section?.displayName}
+              {nothing > 0
+                ? ', and the rest already match what is stored.'
+                : ' — each row says why above.'}
+            </p>
+          )}
+
+          {!done && ready > 0 && (
+            <button onClick={save} disabled={busy} style={{ marginTop: 14 }}>
               {busy ? 'Saving…' : `Update ${ready} student${ready === 1 ? '' : 's'}`}
             </button>
           )}
