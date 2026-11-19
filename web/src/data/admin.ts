@@ -8,7 +8,9 @@
  */
 import {
   collection,
+  deleteDoc,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   orderBy,
@@ -16,10 +18,12 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 import { SCHOOL_ID, db } from '../firebase';
 import type { StudentDetail } from './people';
+import type { ClassUse } from './classuse';
 import type { Move } from './promotion';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -118,6 +122,47 @@ export async function saveClass(c: Omit<ClassRow, 'displayName'> & { displayName
     })),
     { merge: true },
   );
+}
+
+/**
+ * What still points at a class, so the screen can say why it will not go.
+ *
+ * Counted rather than fetched: a section of eighty would otherwise be read in
+ * full to answer a yes-or-no question. Students include those who have LEFT —
+ * their record still carries the classId and their results still have to be
+ * readable years later.
+ */
+export async function classUse(classId: string): Promise<ClassUse> {
+  const of = async (name: string) =>
+    (await getCountFromServer(query(collection(school(), name), where('classId', '==', classId))))
+      .data().count;
+
+  const [students, results, attendance] = await Promise.all([
+    of('students'), of('results'), of('attendanceMarks'),
+  ]);
+
+  // The routine lives on the EXAM document as an array, so it is read rather
+  // than counted. There is one per exam and a school has a handful. (It is
+  // not a collection of its own: reading one the rules do not name is denied
+  // outright by the catch-all, which would fail this whole call.)
+  const ops = await getDocs(collection(school(), 'exams'));
+  const routine = ops.docs.reduce((n, d) => {
+    const entries = (d.data().routine ?? []) as { classId?: string }[];
+    return n + entries.filter((e) => e.classId === classId).length;
+  }, 0);
+
+  return { students, results, attendance, routine };
+}
+
+/**
+ * Removes a class outright.
+ *
+ * The caller establishes that nothing points at it — canRemoveClass() — and
+ * the rules permit the delete to an ADMIN. Nothing cascades on purpose: a
+ * delete that took records with it is how a mis-click empties a school.
+ */
+export async function removeClass(classId: string) {
+  await deleteDoc(doc(school(), 'classes', classId));
 }
 
 // ---------------------------------------------------------------------------

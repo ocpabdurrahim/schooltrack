@@ -4,8 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,15 +42,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
+import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.IntegrationsRepository
+import io.github.ocpabdurrahim.schooltrack.data.Removal
+import io.github.ocpabdurrahim.schooltrack.data.STAFF_STATUS
+import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
+import io.github.ocpabdurrahim.schooltrack.data.StaffRow
+import io.github.ocpabdurrahim.schooltrack.data.canRemoveClass
+import io.github.ocpabdurrahim.schooltrack.data.classIdFor
 import io.github.ocpabdurrahim.schooltrack.data.listModels
 import io.github.ocpabdurrahim.schooltrack.data.maskKey
 import io.github.ocpabdurrahim.schooltrack.data.rankVisionModels
-import io.github.ocpabdurrahim.schooltrack.data.ClassRow
-import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
-import io.github.ocpabdurrahim.schooltrack.data.STAFF_STATUS
-import io.github.ocpabdurrahim.schooltrack.data.StaffRow
-import io.github.ocpabdurrahim.schooltrack.data.classIdFor
 import kotlinx.coroutines.launch
 
 /** The message every refused write gets. */
@@ -355,6 +357,11 @@ fun ClassesScreen(
     var active by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(true) }
     var problem by remember { mutableStateOf("") }
+    /** The section being removed, once it has been checked and found removable. */
+    var removing by remember { mutableStateOf<Pair<ClassRow, String>?>(null) }
+    /** Why a section will not go — its own state, so it shows beside the list. */
+    var blocked by remember { mutableStateOf("") }
+    var checking by remember { mutableStateOf("") }
 
     suspend fun load() {
         rows = try { repo.listAllClasses() } catch (_: Exception) { emptyList() }
@@ -395,7 +402,38 @@ fun ClassesScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text("edit", color = MaterialTheme.colorScheme.primary)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("edit", color = MaterialTheme.colorScheme.primary)
+                            TextButton(
+                                enabled = !busy && checking.isEmpty(),
+                                onClick = {
+                                    // Nothing is deleted here: this only reads
+                                    // what points at the section, and refuses
+                                    // if anything does.
+                                    problem = ""; blocked = ""; removing = null
+                                    checking = c.classId
+                                    scope.launch {
+                                        try {
+                                            val use = repo.classUse(c.classId)
+                                            val last = rows.none {
+                                                it.classId != c.classId &&
+                                                    it.className.trim() == c.className.trim()
+                                            }
+                                            when (val v = canRemoveClass(use, last)) {
+                                                is Removal.Allowed -> removing = c to v.warning
+                                                is Removal.Refused -> blocked = v.reason
+                                            }
+                                        } catch (_: Exception) {
+                                            blocked = "Could not check that section. Only an " +
+                                                "administrator may change the class list."
+                                        }
+                                        checking = ""
+                                    }
+                                },
+                            ) {
+                                Text(if (checking == c.classId) "checking…" else "remove")
+                            }
+                        }
                     }
                     HorizontalDivider()
                 }
@@ -404,6 +442,62 @@ fun ClassesScreen(
                         "No sections yet. Students cannot be added until a section " +
                             "exists to put them in.",
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                // Removal is two steps on purpose. The first reads what points
+                // at the section; this is the second, and it names the section
+                // in full rather than asking "are you sure", because "are you
+                // sure" is read as "press yes".
+                removing?.let { (row, warning) ->
+                    Text(
+                        "Remove ${row.displayName}? Nothing points at it — no students, " +
+                            "no marks, no attendance — so it can go. This cannot be undone, " +
+                            "and the section would have to be added again by hand.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    if (warning.isNotBlank()) {
+                        Text(
+                            warning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
+                    Row(
+                        Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Button(
+                            enabled = !busy,
+                            onClick = {
+                                busy = true; blocked = ""
+                                scope.launch {
+                                    try {
+                                        repo.removeClass(row.classId)
+                                        removing = null
+                                        if (editingId == row.classId) clear()
+                                        load()
+                                    } catch (_: Exception) {
+                                        blocked = "That removal was refused. Only an " +
+                                            "administrator may change the class list."
+                                        busy = false
+                                    }
+                                }
+                            },
+                        ) { Text(if (busy) "Removing…" else "Yes, remove ${row.displayName}") }
+                        TextButton(onClick = { removing = null }) { Text("keep it") }
+                    }
+                }
+
+                if (blocked.isNotBlank()) {
+                    Text(
+                        blocked,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Bad,
+                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
             }

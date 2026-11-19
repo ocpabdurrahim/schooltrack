@@ -1,5 +1,6 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
+import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -209,6 +210,48 @@ class AdminRepository(
             ),
             SetOptions.merge(),
         ).await()
+    }
+
+    /**
+     * What still points at a class, so the screen can say why it will not go.
+     *
+     * Counted rather than fetched: a section of eighty would otherwise be read
+     * in full to answer a yes-or-no question. Students include those who have
+     * LEFT — their record still carries the classId and their results still
+     * have to be readable years later.
+     */
+    suspend fun classUse(classId: String): ClassUse {
+        suspend fun of(name: String): Int =
+            school().collection(name).whereEqualTo("classId", classId)
+                .count().get(AggregateSource.SERVER).await().count.toInt()
+
+        // The routine lives on the EXAM document as an array, so it is read
+        // rather than counted. There is one per exam and a school has a
+        // handful.
+        val routine = school().collection("exams").get().await().documents.sumOf { d ->
+            @Suppress("UNCHECKED_CAST")
+            val entries = (d.get("routine") as? List<Map<String, Any?>>).orEmpty()
+            entries.count { it["classId"] == classId }
+        }
+
+        return ClassUse(
+            students = of("students"),
+            results = of("results"),
+            attendance = of("attendanceMarks"),
+            routine = routine,
+        )
+    }
+
+    /**
+     * Removes a class outright.
+     *
+     * The caller establishes that nothing points at it — canRemoveClass() —
+     * and the rules permit the delete to an ADMIN. Nothing cascades on
+     * purpose: a delete that took records with it is how a mis-click empties
+     * a school.
+     */
+    suspend fun removeClass(classId: String) {
+        school().collection("classes").document(classId).delete().await()
     }
 
     // -----------------------------------------------------------------------

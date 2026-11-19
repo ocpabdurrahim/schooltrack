@@ -1,5 +1,8 @@
 ﻿import { useEffect, useState } from 'react';
-import { type ClassRow, classIdFor, listAllClasses, saveClass } from '../data/admin';
+import {
+  type ClassRow, classIdFor, classUse, listAllClasses, removeClass, saveClass,
+} from '../data/admin';
+import { canRemoveClass } from '../data/classuse';
 
 const blank = { className: '', section: '', sortOrder: 0, active: true };
 
@@ -9,6 +12,17 @@ export default function Classes() {
   const [form, setForm] = useState({ ...blank });
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState('');
+  /** The section being removed, once it has been checked and found removable. */
+  const [removing, setRemoving] = useState<{ row: ClassRow; warning: string } | null>(null);
+  /**
+   * Why a section will not go — its own state, not `problem`.
+   *
+   * `problem` belongs to the form below and is rendered there; sharing it put
+   * "this section still has 5 students" under the Save button as well as
+   * beside the section it was about.
+   */
+  const [blocked, setBlocked] = useState('');
+  const [checking, setChecking] = useState('');
 
   const load = () =>
     listAllClasses()
@@ -38,6 +52,49 @@ export default function Classes() {
     setEditing(null);
     setForm({ ...blank, sortOrder: (rows.at(-1)?.sortOrder ?? 0) + 1 });
     setProblem('');
+  }
+
+  /**
+   * Asks what still points at the section before offering to remove it.
+   *
+   * Nothing is deleted here: this only reads. A section that is in use says
+   * so and says what to do instead, and one that is free asks to be
+   * confirmed — because a class is removed about once, and a mis-click that
+   * takes one out is a class the office has to notice is missing.
+   */
+  async function check(c: ClassRow) {
+    setProblem(''); setBlocked(''); setRemoving(null); setChecking(c.classId);
+    try {
+      const use = await classUse(c.classId);
+      const lastOfItsName = !rows.some(
+        (r) => r.classId !== c.classId && r.className.trim() === c.className.trim(),
+      );
+      const verdict = canRemoveClass(use, lastOfItsName);
+      if (verdict.ok) setRemoving({ row: c, warning: verdict.warning });
+      else setBlocked(verdict.reason);
+    } catch {
+      setBlocked('Could not check that section. Only an administrator may change the class list.');
+    } finally {
+      setChecking('');
+    }
+  }
+
+  async function remove() {
+    if (!removing) return;
+    setBusy(true); setBlocked('');
+    try {
+      await removeClass(removing.row.classId);
+      setRemoving(null);
+      if (editing?.classId === removing.row.classId) {
+        setEditing(null);
+        setForm({ ...blank });
+      }
+      await load();
+    } catch {
+      setBlocked('That removal was refused. Only an administrator may change the class list.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function save() {
@@ -81,6 +138,10 @@ export default function Classes() {
             <span>
               <code style={{ color: 'var(--muted)', marginRight: 12 }}>{c.classId}</code>
               <button className="link" onClick={() => startEdit(c)}>edit</button>
+              <button className="link" style={{ marginLeft: 10 }} disabled={busy || checking !== ''}
+                      onClick={() => check(c)}>
+                {checking === c.classId ? 'checking…' : 'remove'}
+              </button>
             </span>
           </div>
         ))}
@@ -93,6 +154,34 @@ export default function Classes() {
         )}
 
         <button onClick={startNew} disabled={busy}>Add a section</button>
+
+        {/*
+          Removal is two steps on purpose. The first reads what points at the
+          section and refuses if anything does; this is the second, and it
+          names the section in full rather than saying "are you sure", because
+          "are you sure" is read as "press yes".
+        */}
+        {removing && (
+          <div className="callout bad" style={{ marginTop: 14 }}>
+            <p style={{ marginTop: 0 }}>
+              <strong>Remove {removing.row.displayName}?</strong> Nothing points at it —
+              no students, no marks, no attendance — so it can go. This cannot be undone,
+              and the section would have to be added again by hand.
+            </p>
+            {removing.warning && (
+              <p style={{ fontSize: 13 }}>{removing.warning}</p>
+            )}
+            <button onClick={remove} disabled={busy}>
+              {busy ? 'Removing…' : `Yes, remove ${removing.row.displayName}`}
+            </button>
+            <button className="link" style={{ marginLeft: 14 }}
+                    onClick={() => setRemoving(null)}>
+              keep it
+            </button>
+          </div>
+        )}
+
+        {blocked && <div className="err">{blocked}</div>}
       </div>
 
       <div className="card">

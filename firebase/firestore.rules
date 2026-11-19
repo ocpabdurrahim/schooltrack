@@ -136,9 +136,29 @@ service cloud.firestore {
 
       // ---- people and reference data ---------------------------------------
 
+      // A class may be DELETED, which almost nothing else here may.
+      //
+      // Removing is for mistakes — a section typed twice, a trial nobody
+      // used. A class that has taught anybody is retired instead (active
+      // false), which every listing filters while its records keep working.
+      // The app establishes that nothing points at the class before it calls
+      // this, because rules cannot: counting students, marks and attendance
+      // would be several queries inside one evaluation, which Firestore caps.
+      //
+      // So this is a real widening and worth naming: an ADMIN may delete a
+      // class that still has students, if they go around the app to do it.
+      // The damage is bounded — a class document holds no history of its own,
+      // and the records that point at it keep their own classId and roll, as
+      // the results reports now show — and an ADMIN can already overwrite the
+      // same document with `write`, which is no gentler.
+      //
+      // Delete is kept out of the stamped() guard on purpose: there is no
+      // request.resource on a delete, so a single `write` rule with stamped()
+      // refuses every removal.
       match /classes/{classId} {
         allow read: if isStaff(s) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if isAdmin(s);
       }
 
       match /students/{studentId} {

@@ -127,6 +127,12 @@ beforeEach(async () => {
       amount: 300, updatedAt: now,
     });
 
+    // A section with nothing pointing at it, for the removal rule.
+    await setDoc(doc(db, p('classes', '62')), {
+      className: 'Class 7', section: 'A', displayName: 'Class 7 - A',
+      sortOrder: 2, active: true, updatedAt: now,
+    });
+
     await setDoc(doc(db, p('holidays', '2026-12-16')), {
       date: '2026-12-16', name: 'Victory Day', source: 'SCHOOL', updatedAt: now,
     });
@@ -528,11 +534,23 @@ describe('the calendar and exam operations', () => {
     );
   });
 
-  // The one deletable record in the database. Delete is deliberately outside
-  // stamped(), because a delete carries no request.resource to stamp.
+  // Delete is deliberately outside stamped(), because a delete carries no
+  // request.resource to stamp.
   it('ADMIN may delete a holiday, and a TEACHER may not', async () => {
     await assertFails(deleteDoc(doc(teacher(), p('holidays', '2026-12-16'))));
     await assertSucceeds(deleteDoc(doc(admin(), p('holidays', '2026-12-16'))));
+  });
+
+  // Removing a class is for mistakes — a section typed twice, a trial nobody
+  // used. The APP refuses to remove one that still has students, marks or
+  // attendance; the rules cannot, because counting them would be several
+  // queries inside one evaluation. So this test pins what the rules DO
+  // promise, which is narrower than it looks: only an ADMIN, never a teacher
+  // or the office.
+  it('ADMIN may delete a class; TEACHER and OFFICE may not', async () => {
+    await assertFails(deleteDoc(doc(teacher(), p('classes', '62'))));
+    await assertFails(deleteDoc(doc(office(), p('classes', '62'))));
+    await assertSucceeds(deleteDoc(doc(admin(), p('classes', '62'))));
   });
 
   it('only ADMIN may set the routine, which lives on the exam', async () => {
