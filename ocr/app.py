@@ -75,11 +75,17 @@ class App:
         row = ttk.Frame(mid)
         row.pack(fill=X, padx=10, pady=8)
         ttk.Label(row, text="Mark columns:").pack(side=LEFT)
-        self.parts = StringVar(value="CQ, MCQ")
+        # EVERY mark column printed on the form, including ones nobody fills
+        # in. Prac is empty on every sheet so far and it still has to be here:
+        # the blocks are counted in columns, so leaving it out makes each
+        # block four wide where the paper is five, and every mark slides one
+        # column left -- a Total lands in MCQ and a roll number in CQ. The
+        # spreadsheet looks perfectly tidy and is wrong throughout.
+        self.parts = StringVar(value="CQ, MCQ, Prac")
         ttk.Entry(row, textvariable=self.parts, width=28).pack(side=LEFT, padx=8)
         ttk.Label(
             row,
-            text="as printed on the sheet, in order, between Roll and Total",
+            text="EVERY column printed between Roll and Total, even empty ones",
             foreground="#666",
         ).pack(side=LEFT)
 
@@ -245,8 +251,25 @@ class App:
                 self.say(f"Look in {outcome['debug']} to see what it found on the page.")
             return
 
+        # Excel holds the file open, and a teacher reading last run's marks
+        # while this one finishes is the normal case, not a mistake. Write
+        # beside it rather than failing with a PermissionError nobody can act
+        # on -- and say which file was written, since it is not the usual one.
         target = outcome["folder"] / "marks.xlsx"
-        write_xlsx(target, marks_grid(outcome["names"], rows))
+        try:
+            write_xlsx(target, marks_grid(outcome["names"], rows))
+        except PermissionError:
+            from datetime import datetime
+            target = outcome["folder"] / f"marks-{datetime.now():%H%M}.xlsx"
+            try:
+                write_xlsx(target, marks_grid(outcome["names"], rows))
+            except OSError as e:
+                self.say("")
+                self.say(f"Could not write the spreadsheet: {e}")
+                return
+            self.say("")
+            self.say("marks.xlsx is open in another program, so this was "
+                     f"written as {target.name} instead.")
 
         named = sum(1 for r in rows if r.get("roll") is not None)
         self.say("")
