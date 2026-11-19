@@ -486,6 +486,8 @@ fun MarkEntryScreen(
     // A spreadsheet of parts, for a subject marked in CQ/MCQ/Prac.
     var partsRead by remember { mutableStateOf<PartsSheet?>(null) }
     var partsFilled by remember { mutableStateOf(0) }
+    // Rolls the file named that this section has not got.
+    var strangers by remember { mutableStateOf<List<Long>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         try {
@@ -536,10 +538,18 @@ fun MarkEntryScreen(
                     sitters.associate { it.rollNo to it.studentId }
                 var filled = 0
                 var next = entries
+                val unknown = mutableListOf<Long>()
                 for (row in got.rows) {
                     // A roll this section has not got is left alone rather
-                    // than guessed at: their marks may already be in.
-                    val id = row.rollNo?.let { byRoll[it] } ?: continue
+                    // than guessed at -- but it is SAID, not silently
+                    // dropped. A sheet of the wrong class's rolls would
+                    // otherwise report four filled from five rows and leave
+                    // the teacher to spot the missing one themselves.
+                    val id = row.rollNo?.let { byRoll[it] }
+                    if (id == null) {
+                        row.rollNo?.let { unknown.add(it) }
+                        continue
+                    }
                     val was = next[id] ?: Typed()
                     val show = { v: Double ->
                         if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
@@ -559,6 +569,7 @@ fun MarkEntryScreen(
                     filled += 1
                 }
                 partsFilled = filled
+                strangers = unknown.toList()
                 if (filled > 0) entries = next
             }
         },
@@ -691,6 +702,17 @@ fun MarkEntryScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = Green,
                             modifier = Modifier.padding(top = 10.dp),
+                        )
+                    }
+                    if (strangers.isNotEmpty()) {
+                        Text(
+                            "This section has no roll " +
+                                strangers.joinToString(", ") +
+                                " — those rows were left out. Is the file for a " +
+                                "different class?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                     for (row in got.rows.filter { it.problem.isNotEmpty() }) {

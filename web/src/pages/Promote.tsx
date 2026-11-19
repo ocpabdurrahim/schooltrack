@@ -218,7 +218,12 @@ export default function Promote() {
         {note && <div className="good">{note}</div>}
       </div>
 
-      {plan.problem && <div className="card"><div className="err">{plan.problem}</div></div>}
+      {/* Not an error on the back of a success. Once a class has been moved
+          up it IS empty, and "that class has no students on the roll" in red
+          underneath "4 student(s) moved up" reads like the write failed. */}
+      {plan.problem && !note && (
+        <div className="card"><div className="err">{plan.problem}</div></div>
+      )}
 
       {!busy && !plan.problem && plan.moves.length > 0 && (
         <div className="card">

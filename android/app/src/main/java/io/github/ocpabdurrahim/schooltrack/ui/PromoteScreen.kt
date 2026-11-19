@@ -245,7 +245,10 @@ fun PromoteScreen(
             }
         }
 
-        if (plan.problem.isNotEmpty()) {
+        // Not an error on the back of a success. Once a class has been moved
+        // up it IS empty, and "that class has no students on the roll" shown
+        // under "4 student(s) moved up" reads like the write failed.
+        if (plan.problem.isNotEmpty() && note.isEmpty()) {
             Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                 Column(Modifier.padding(16.dp)) { Problem(plan.problem) }
             }

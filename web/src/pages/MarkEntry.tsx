@@ -136,6 +136,8 @@ export default function MarkEntry() {
   // A spreadsheet of parts, for a subject marked in CQ/MCQ/Prac.
   const [partsRead, setPartsRead] = useState<PartsSheet | null>(null);
   const [partsFilled, setPartsFilled] = useState(0);
+  // Rolls the file named that this section has not got.
+  const [strangers, setStrangers] = useState<number[]>([]);
 
   /**
    * A spreadsheet with one column per part, into the boxes below.
@@ -169,11 +171,18 @@ export default function MarkEntry() {
 
     const byRoll = new Map(sitters.map((s) => [s.rollNo, s.studentId]));
     let filled = 0;
+    const strangers: number[] = [];
     const next: Record<string, Typed> = {};
     for (const row of got.rows) {
       const id = row.rollNo === null ? undefined : byRoll.get(row.rollNo);
-      // A roll this section has not got is left alone rather than guessed at.
-      if (!id) continue;
+      // A roll this section has not got is left alone rather than guessed at
+      // -- but it is SAID, not silently dropped. A sheet of the wrong class's
+      // rolls would otherwise report "4 students filled in" off five rows and
+      // leave the teacher to notice the missing one themselves.
+      if (!id) {
+        if (row.rollNo !== null) strangers.push(row.rollNo);
+        continue;
+      }
       const was = entries[id] ?? blankTyped();
 
       if (comps.length) {
@@ -192,6 +201,7 @@ export default function MarkEntry() {
       filled += 1;
     }
     setPartsFilled(filled);
+    setStrangers(strangers);
     if (filled > 0) setEntries((was) => ({ ...was, ...next }));
   }
 
@@ -330,6 +340,12 @@ export default function MarkEntry() {
                   from {Object.keys(partsRead.columns).join(' and ')}. Check them
                   below, then press Save marks.
                 </span>
+              </p>
+            )}
+            {strangers.length > 0 && (
+              <p className="warn" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                This section has no roll {strangers.join(', ')} — those rows were
+                left out. Is the file for a different class?
               </p>
             )}
             {partsRead.rows.filter((r) => r.problem).map((r) => (
