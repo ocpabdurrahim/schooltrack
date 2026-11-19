@@ -6,7 +6,11 @@ import {
   pickVisionModel,
   retryAfter,
   RETRY_WAITS_MS,
+  isTimeout,
+  noAnswerError,
   readSheets,
+  retryAfterNoAnswer,
+  TIMEOUT_RETRIES,
   stripFence,
 } from './gemini';
 
@@ -278,5 +282,87 @@ describe('the call itself', () => {
       readSheets('bad', 'gemini-2.5-flash', [{ mimeType: 'image/jpeg', base64: 'x' }], ['CQ']),
     ).rejects.toThrow(/copied whole/i);
     expect(calls).toBe(1);
+  });
+});
+
+describe('when nothing answers at all', () => {
+  it('knows a timeout from any other failure', () => {
+    expect(isTimeout(new Error('Timeout error'))).toBe(true);
+    expect(isTimeout({ name: 'TimeoutError', message: '' })).toBe(true);
+    expect(isTimeout(new Error('Read timed out'))).toBe(true);
+    expect(isTimeout(new Error('Failed to fetch'))).toBe(false);
+  });
+
+  it('sends the sheet again once, not twice', () => {
+    // A 5xx is cheap to repeat; a timeout costs the whole upload again, and
+    // the likeliest cause is that the upload was already too slow.
+    expect(retryAfterNoAnswer(0)).not.toBeNull();
+    expect(retryAfterNoAnswer(TIMEOUT_RETRIES)).toBeNull();
+    expect(TIMEOUT_RETRIES).toBeLessThan(RETRY_WAITS_MS.length);
+  });
+
+  it('names the photograph, which is the thing the teacher can change', () => {
+    const said = noAnswerError(new Error('Timeout error'), 1_400_000);
+    expect(said).toContain('1.4 MB');
+    expect(said).toMatch(/better signal|one page at a time/i);
+    // and never leaves them with the bare platform word
+    expect(said).not.toBe('Timeout error');
+  });
+
+  it('says plainly when it could not reach Google at all', () => {
+    expect(noAnswerError(new Error('Failed to fetch'), 0)).toMatch(/could not reach google/i);
+  });
+});
+
+describe('the call when the line is bad', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  const sheet = JSON.stringify({ header: {}, rows: [{ roll: 3, cells: [{ column: 'CQ', value: 51 }] }] });
+  const ok = () => new Response(
+    JSON.stringify({ candidates: [{ content: { parts: [{ text: sheet }] } }] }), { status: 200 },
+  );
+  const read = () => readSheets('key', 'gemini-2.5-flash', [{ mimeType: 'image/jpeg', base64: 'x'.repeat(40) }], ['CQ']);
+
+  it('gets the sheet when the first attempt times out and the second does not', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error('Timeout error'), { name: 'TimeoutError' });
+      return ok();
+    }));
+
+    const p = read();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect((await p).rows[0].values.CQ).toBe(51);
+    expect(calls).toBe(2);
+  });
+
+  it('gives up after one more go and explains itself', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      throw Object.assign(new Error('Timeout error'), { name: 'TimeoutError' });
+    }));
+
+    const p = read().catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const e = await p as Error;
+
+    expect(calls).toBe(TIMEOUT_RETRIES + 1);
+    expect(e.message).toMatch(/did not answer within 120 seconds/i);
+    expect(e.message).toMatch(/MB/);
+  });
+
+  it('never lets a call hang for ever', async () => {
+    // fetch has no timeout of its own; a stalled call must still come back.
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
+      signal = init.signal as AbortSignal;
+      return ok();
+    }));
+    await read();
+    expect(signal).toBeInstanceOf(AbortSignal);
   });
 });

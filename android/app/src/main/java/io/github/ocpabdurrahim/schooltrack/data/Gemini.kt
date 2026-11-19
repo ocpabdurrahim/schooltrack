@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -257,6 +258,52 @@ fun retryAfter(status: Int, attempt: Int): Long? {
     return if (attempt < RETRY_WAITS_MS.size) RETRY_WAITS_MS[attempt] else null
 }
 
+/** How long one attempt is given before it is abandoned. */
+const val CALL_TIMEOUT_MS = 120_000
+
+/**
+ * A call that never got an answer is sent again ONCE, not twice.
+ *
+ * A 5xx is cheap to repeat — Google already read the photograph and threw it
+ * away. A timeout is not: the likeliest cause is that the upload is too slow
+ * for the line, and sending the same megabytes twice more makes that worse,
+ * not better.
+ */
+const val TIMEOUT_RETRIES = 1
+
+fun retryAfterNoAnswer(attempt: Int): Long? =
+    if (attempt < TIMEOUT_RETRIES) RETRY_WAITS_MS[0] else null
+
+/** Told apart from every other failure because it is about the line, not the key. */
+fun isTimeout(message: String?): Boolean =
+    Regex("timeout|timed out|deadline|abort", RegexOption.IGNORE_CASE)
+        .containsMatchIn(message.orEmpty())
+
+/**
+ * A failure with no reply at all, in words that point at the real suspect.
+ *
+ * "Timeout error" on its own tells a teacher nothing they can act on. The
+ * photograph is by far the biggest thing on the wire, so its size is named:
+ * on a slow line most of the wait is spent sending it, and that is something
+ * the teacher can actually change.
+ */
+fun noAnswerError(message: String?, uploadBytes: Int): String {
+    val seconds = CALL_TIMEOUT_MS / 1000
+    val size = if (uploadBytes > 0) {
+        " The photograph sent was %.1f MB.".format(uploadBytes / 1_000_000.0)
+    } else {
+        ""
+    }
+    return if (isTimeout(message)) {
+        "Google did not answer within $seconds seconds, even after trying again.$size" +
+            " On a slow connection most of that is spent sending the picture — try again on" +
+            " better signal, or send one page at a time."
+    } else {
+        "Could not reach Google at all, even after trying again.$size " +
+            "Check the connection. ${message.orEmpty()}".trimEnd()
+    }
+}
+
 /**
  * What went wrong, in words a head teacher can act on.
  *
@@ -310,9 +357,22 @@ private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
  * here blocks nothing the teacher can see.
  */
 private fun call(url: String, payload: String?, model: String = ""): String {
+    val uploadBytes = payload?.length ?: 0
     var attempt = 0
     while (true) {
-        val (status, text) = once(url, payload)
+        val result = try {
+            once(url, payload)
+        } catch (e: IOException) {
+            // No reply at all — a dead line or a read that ran out of time.
+            // Worth one more go, because the commonest cause is a moment of
+            // bad signal rather than anything wrong with the request.
+            val again = retryAfterNoAnswer(attempt)
+                ?: throw IllegalStateException(noAnswerError(e.message, uploadBytes))
+            Thread.sleep(again)
+            attempt += 1
+            continue
+        }
+        val (status, text) = result
         if (status in 200..299) return text
         val wait = retryAfter(status, attempt)
             ?: throw IllegalStateException(apiError(status, text, model))
@@ -326,7 +386,7 @@ private fun once(url: String, payload: String?): Pair<Int, String> {
     conn.connectTimeout = 30_000
     // A page of handwriting takes the model a while, and a teacher would far
     // rather wait than be told to photograph it again.
-    conn.readTimeout = 120_000
+    conn.readTimeout = CALL_TIMEOUT_MS
     try {
         if (payload != null) {
             conn.requestMethod = "POST"

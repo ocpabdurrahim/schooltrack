@@ -67,6 +67,7 @@ import io.github.ocpabdurrahim.schooltrack.data.pickVisionModel
 import io.github.ocpabdurrahim.schooltrack.data.readSheets
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
+import io.github.ocpabdurrahim.schooltrack.data.sheetSizeLabel
 import io.github.ocpabdurrahim.schooltrack.data.uriToSheetShot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -415,7 +416,7 @@ fun ScanMarksScreen(
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            "${s.width}×${s.height}",
+                            "${s.width}×${s.height} · ${sheetSizeLabel(s.base64)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -91,3 +91,19 @@ export async function fileToSheetShot(file: File): Promise<SheetShot> {
     height: size.height,
   };
 }
+
+/**
+ * How big this picture is on the wire, in megabytes.
+ *
+ * Shown beside the photograph because the upload is the slow part of reading
+ * a sheet, and a teacher on a weak line should be able to see that before
+ * spending two minutes finding out.
+ *
+ * Base64 carries three bytes in every four characters.
+ */
+export function sheetMegabytes(base64: string): number {
+  return (base64.length * 3) / 4 / 1_000_000;
+}
+
+/** The same, rounded the way it is shown. */
+export const sheetSizeLabel = (base64: string) => `${sheetMegabytes(base64).toFixed(1)} MB`;

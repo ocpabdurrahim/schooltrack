@@ -252,6 +252,45 @@ class GeminiTest {
         )
     }
 
+    // ------------------------------------------ when nothing answers at all
+
+    @Test
+    fun `knows a timeout from any other failure`() {
+        assertTrue(isTimeout("Timeout error"))
+        assertTrue(isTimeout("Read timed out"))
+        assertTrue(isTimeout("TimeoutError"))
+        assertTrue(!isTimeout("Unable to resolve host"))
+        assertTrue(!isTimeout(null))
+    }
+
+    @Test
+    fun `sends the sheet again once, not twice`() {
+        // A 5xx is cheap to repeat; a timeout costs the whole upload again,
+        // and the likeliest cause is that the upload was already too slow.
+        assertTrue(retryAfterNoAnswer(0) != null)
+        assertNull(retryAfterNoAnswer(TIMEOUT_RETRIES))
+        assertTrue(TIMEOUT_RETRIES < RETRY_WAITS_MS.size)
+    }
+
+    @Test
+    fun `names the photograph, which is the thing the teacher can change`() {
+        val said = noAnswerError("Timeout error", 1_400_000)
+        assertTrue(said.contains("1.4 MB"))
+        assertTrue(said.contains("better signal") || said.contains("one page at a time"))
+        // and never leaves them with the bare platform word
+        assertTrue(said != "Timeout error")
+    }
+
+    @Test
+    fun `says plainly when it could not reach Google at all`() {
+        assertTrue(noAnswerError("Unable to resolve host", 0).contains("could not reach Google", true))
+    }
+
+    @Test
+    fun `says how long it waited, so two minutes of silence is explained`() {
+        assertTrue(noAnswerError("Timeout error", 0).contains("120 seconds"))
+    }
+
     // ------------------------------------------------------------- masking
 
     @Test

@@ -140,3 +140,17 @@ private fun applySheetExif(bitmap: Bitmap, exif: ExifInterface): Bitmap {
     }
     return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
 }
+
+/**
+ * How big this picture is on the wire, in megabytes.
+ *
+ * Shown beside the photograph because the upload is the slow part of reading
+ * a sheet, and a teacher on a weak line should be able to see that before
+ * spending two minutes finding out.
+ *
+ * Base64 carries three bytes in every four characters.
+ */
+fun sheetMegabytes(base64: String): Double = base64.length * 3.0 / 4.0 / 1_000_000.0
+
+/** The same, rounded the way it is shown. */
+fun sheetSizeLabel(base64: String): String = "%.1f MB".format(sheetMegabytes(base64))

@@ -15,7 +15,7 @@ import { type StudentDetail, findStudents } from '../data/people';
 import { partsAndTotal } from '../data/markentry';
 import { getIntegrations, saveIntegrations } from '../data/integrations';
 import { listModels, pickVisionModel, readSheets } from '../data/gemini';
-import { type SheetShot, fileToSheetShot } from '../data/sheetphoto';
+import { type SheetShot, fileToSheetShot, sheetSizeLabel } from '../data/sheetphoto';
 import {
   type Chosen,
   type ScanRead,
@@ -353,7 +353,7 @@ export default function ScanMarks() {
               <figure key={i} className="shot">
                 <img src={s.preview} alt={`Sheet ${i + 1}`} />
                 <figcaption>
-                  {s.width}×{s.height}
+                  {s.width}×{s.height} · {sheetSizeLabel(s.base64)}
                   <button
                     type="button"
                     className="link"

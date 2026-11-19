@@ -79,22 +79,79 @@ export function retryAfter(status: number, attempt: number): number | null {
   return attempt < RETRY_WAITS_MS.length ? RETRY_WAITS_MS[attempt] : null;
 }
 
+/**
+ * How long one attempt is given before it is abandoned.
+ *
+ * `fetch` has no timeout of its own: without this a stalled call hangs for as
+ * long as the browser allows, with the button disabled and nothing to press.
+ * An error is bad; a page that never comes back is worse.
+ */
+export const CALL_TIMEOUT_MS = 120_000;
+
+/**
+ * A call that never got an answer is sent again ONCE, not twice.
+ *
+ * A 5xx is cheap to repeat — Google already read the photograph and threw it
+ * away. A timeout is not: the likeliest cause is that the upload is too slow
+ * for the line, and sending the same megabytes twice more makes that worse,
+ * not better.
+ */
+export const TIMEOUT_RETRIES = 1;
+
+export function retryAfterNoAnswer(attempt: number): number | null {
+  return attempt < TIMEOUT_RETRIES ? RETRY_WAITS_MS[0] : null;
+}
+
+/** Told apart from every other failure because it is about the line, not the key. */
+export function isTimeout(err: unknown): boolean {
+  const e = err as { name?: string; message?: string } | null;
+  return /timeout|timed out|deadline|aborted/i.test(`${e?.name ?? ''} ${e?.message ?? ''}`);
+}
+
+/**
+ * A failure with no reply at all, in words that point at the real suspect.
+ *
+ * "Timeout error" on its own tells a teacher nothing they can act on. The
+ * photograph is by far the biggest thing on the wire, so its size is named:
+ * on a slow line most of the wait is spent sending it, and that is something
+ * the teacher can actually change.
+ */
+export function noAnswerError(err: unknown, uploadBytes: number): string {
+  const seconds = Math.round(CALL_TIMEOUT_MS / 1000);
+  const size = uploadBytes > 0 ? ` The photograph sent was ${(uploadBytes / 1_000_000).toFixed(1)} MB.` : '';
+  if (isTimeout(err)) {
+    return `Google did not answer within ${seconds} seconds, even after trying again.${size}`
+      + ' On a slow connection most of that is spent sending the picture — try again on better'
+      + ' signal, or send one page at a time.';
+  }
+  const why = (err as Error)?.message ?? '';
+  return `Could not reach Google at all, even after trying again.${size} `
+    + `Check the connection. ${why}`.trimEnd();
+}
+
 const sleep = (ms: number) => new Promise((r) => { setTimeout(r, ms); });
 
 /**
- * One call to Google, sent again if their side falls over.
+ * One call to Google, sent again if their side falls over or never answers.
  *
  * A 500 or a 503 from Gemini is far more often a busy minute than anything
  * wrong with the sheet, and a teacher at the end of a marking day should not
  * have to be the retry mechanism.
  */
-async function send(url: string, init?: RequestInit): Promise<Response> {
-  let res = await fetch(url, init);
+async function send(url: string, init: RequestInit = {}, uploadBytes = 0): Promise<Response> {
   for (let attempt = 0; ; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
+    } catch (err) {
+      const again = retryAfterNoAnswer(attempt);
+      if (again === null) throw new Error(noAnswerError(err, uploadBytes));
+      await sleep(again);
+      continue;
+    }
     const wait = retryAfter(res.status, attempt);
     if (wait === null) return res;
     await sleep(wait);
-    res = await fetch(url, init);
   }
 }
 
@@ -314,30 +371,33 @@ export async function readSheets(
 ): Promise<ScanRead> {
   if (images.length === 0) throw new Error('There is no photograph to read.');
 
+  const payload = JSON.stringify({
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: buildPrompt(componentNames) },
+        ...images.map((i) => ({
+          inline_data: { mime_type: i.mimeType, data: i.base64 },
+        })),
+      ],
+    }],
+    generationConfig: {
+      // Nothing here should be invented, so the sampling is turned off as
+      // far as it will go.
+      temperature: 0,
+      responseMimeType: 'application/json',
+      responseSchema: REPLY_SCHEMA,
+    },
+  });
+
   const res = await send(
     `${API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: buildPrompt(componentNames) },
-            ...images.map((i) => ({
-              inline_data: { mime_type: i.mimeType, data: i.base64 },
-            })),
-          ],
-        }],
-        generationConfig: {
-          // Nothing here should be invented, so the sampling is turned off as
-          // far as it will go.
-          temperature: 0,
-          responseMimeType: 'application/json',
-          responseSchema: REPLY_SCHEMA,
-        },
-      }),
+      body: payload,
     },
+    payload.length,
   );
 
   const body = await res.json().catch(() => null);
