@@ -56,7 +56,7 @@ export function pickVisionModel(models: ModelInfo[]): string | null {
 }
 
 export async function listModels(apiKey: string): Promise<ModelInfo[]> {
-  const res = await fetch(`${API}/models?key=${encodeURIComponent(apiKey)}`);
+  const res = await send(`${API}/models?key=${encodeURIComponent(apiKey)}`);
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(apiError(res.status, body));
   return ((body?.models ?? []) as Record<string, unknown>[]).map((m) => ({
@@ -66,12 +66,47 @@ export async function listModels(apiKey: string): Promise<ModelInfo[]> {
 }
 
 /**
+ * How long to wait before sending a failed call again, or null to give up.
+ *
+ * Only Google's own 5xx is tried again. A 400 or a 403 means the request
+ * itself is wrong and sending it a second time changes nothing, and a 429 is
+ * Google asking for less — hammering it is the one thing that makes it worse.
+ */
+export const RETRY_WAITS_MS = [900, 2600];
+
+export function retryAfter(status: number, attempt: number): number | null {
+  if (status < 500) return null;
+  return attempt < RETRY_WAITS_MS.length ? RETRY_WAITS_MS[attempt] : null;
+}
+
+const sleep = (ms: number) => new Promise((r) => { setTimeout(r, ms); });
+
+/**
+ * One call to Google, sent again if their side falls over.
+ *
+ * A 500 or a 503 from Gemini is far more often a busy minute than anything
+ * wrong with the sheet, and a teacher at the end of a marking day should not
+ * have to be the retry mechanism.
+ */
+async function send(url: string, init?: RequestInit): Promise<Response> {
+  let res = await fetch(url, init);
+  for (let attempt = 0; ; attempt += 1) {
+    const wait = retryAfter(res.status, attempt);
+    if (wait === null) return res;
+    await sleep(wait);
+    res = await fetch(url, init);
+  }
+}
+
+/**
  * What went wrong, in words a head teacher can act on.
  *
  * Google's own message is kept on the end because it is the only thing that
- * distinguishes a dead key from a key with billing switched off.
+ * distinguishes a dead key from a key with billing switched off — and, on a
+ * 5xx, the only thing that says whether their side was merely busy or choked
+ * on what we sent. Swallowing it there left nothing to act on at all.
  */
-function apiError(status: number, body: unknown): string {
+export function apiError(status: number, body: unknown, model = ''): string {
   const raw = (body as { error?: { message?: string } } | null)?.error?.message ?? '';
   if (status === 400 && /API key not valid/i.test(raw)) {
     return 'That API key was not accepted. Check it was copied whole, with no spaces.';
@@ -86,7 +121,16 @@ function apiError(status: number, body: unknown): string {
     return 'Google is rate-limiting this key — too many sheets too quickly. '
       + 'Wait a minute and try again.';
   }
-  if (status >= 500) return 'Google had a problem reading it. Try again in a moment.';
+  if (status >= 500) {
+    // 503 is Google saying "not now"; 500 is Google saying "something about
+    // this went wrong", and those want different things from the teacher.
+    const busy = status === 503 || /overload|unavailable|try again/i.test(raw);
+    const head = busy
+      ? 'Google was busy and could not read it, even after trying again. '
+        + 'Give it a minute and press Read sheets again.'
+      : `Google could not read it (${status}), even after trying again.`;
+    return `${head}${model ? ` Model ${model}.` : ''} ${raw}`.trim();
+  }
   return raw || `The reader answered with ${status}.`;
 }
 
@@ -270,7 +314,7 @@ export async function readSheets(
 ): Promise<ScanRead> {
   if (images.length === 0) throw new Error('There is no photograph to read.');
 
-  const res = await fetch(
+  const res = await send(
     `${API}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
@@ -297,7 +341,7 @@ export async function readSheets(
   );
 
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(apiError(res.status, body));
+  if (!res.ok) throw new Error(apiError(res.status, body, model));
 
   const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (typeof text !== 'string' || text.trim() === '') {

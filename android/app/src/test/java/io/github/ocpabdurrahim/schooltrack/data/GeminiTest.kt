@@ -190,6 +190,68 @@ class GeminiTest {
         assertTrue(p.contains("Never compute the Total yourself"))
     }
 
+    // ------------------------------------- trying again when Google falls over
+
+    @Test
+    fun `tries again on their 5xx, which is usually a busy minute`() {
+        assertEquals(RETRY_WAITS_MS[0], retryAfter(500, 0))
+        assertEquals(RETRY_WAITS_MS[0], retryAfter(503, 0))
+        assertEquals(RETRY_WAITS_MS[1], retryAfter(500, 1))
+    }
+
+    @Test
+    fun `gives up rather than going round for ever`() {
+        assertNull(retryAfter(500, RETRY_WAITS_MS.size))
+    }
+
+    @Test
+    fun `waits longer each time, so a busy minute is given a minute`() {
+        assertTrue(RETRY_WAITS_MS[1] > RETRY_WAITS_MS[0])
+    }
+
+    @Test
+    fun `never repeats a request that was wrong to begin with`() {
+        // Sending a bad key or a bad model again changes nothing.
+        for (status in listOf(400, 401, 403, 404)) assertNull(retryAfter(status, 0))
+    }
+
+    @Test
+    fun `never repeats a 429, the one case where asking again makes it worse`() {
+        assertNull(retryAfter(429, 0))
+    }
+
+    // ------------------------------------------- what the teacher is told
+
+    private fun err(m: String) = """{"error":{"message":"$m"}}"""
+
+    @Test
+    fun `keeps Google's own words on a 5xx, which is all there is to go on`() {
+        val said = apiError(500, err("Internal error encountered."), "gemini-2.5-flash")
+        assertTrue(said.contains("Internal error encountered."))
+        // and says which model, since that is the other half of the diagnosis
+        assertTrue(said.contains("gemini-2.5-flash"))
+    }
+
+    @Test
+    fun `separates Google being busy from Google choking on the sheet`() {
+        assertTrue(apiError(503, err("The model is overloaded.")).contains("busy", true))
+        assertTrue(!apiError(500, err("Internal error.")).contains("busy", true))
+    }
+
+    @Test
+    fun `says it already tried again, so nobody retries a lost cause by hand`() {
+        assertTrue(apiError(500, err("x")).contains("even after trying again", true))
+        assertTrue(apiError(503, err("x")).contains("even after trying again", true))
+    }
+
+    @Test
+    fun `still names a dead key plainly`() {
+        assertTrue(
+            apiError(400, err("API key not valid. Please pass a valid API key."))
+                .contains("copied whole", true),
+        )
+    }
+
     // ------------------------------------------------------------- masking
 
     @Test

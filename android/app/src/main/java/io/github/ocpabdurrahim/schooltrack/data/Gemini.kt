@@ -243,8 +243,29 @@ fun parseScanReply(raw: String): ScanRead {
 
 data class SheetImage(val mimeType: String, val base64: String)
 
-/** What went wrong, in words a head teacher can act on. */
-private fun apiError(status: Int, body: String): String {
+/**
+ * How long to wait before sending a failed call again, or null to give up.
+ *
+ * Only Google's own 5xx is tried again. A 400 or a 403 means the request
+ * itself is wrong and sending it a second time changes nothing, and a 429 is
+ * Google asking for less — hammering it is the one thing that makes it worse.
+ */
+val RETRY_WAITS_MS = listOf(900L, 2600L)
+
+fun retryAfter(status: Int, attempt: Int): Long? {
+    if (status < 500) return null
+    return if (attempt < RETRY_WAITS_MS.size) RETRY_WAITS_MS[attempt] else null
+}
+
+/**
+ * What went wrong, in words a head teacher can act on.
+ *
+ * Google's own message is kept on the end because it is the only thing that
+ * distinguishes a dead key from a key with billing switched off — and, on a
+ * 5xx, the only thing that says whether their side was merely busy or choked
+ * on what we sent. Swallowing it there left nothing to act on at all.
+ */
+fun apiError(status: Int, body: String, model: String = ""): String {
     val raw = try {
         JSONObject(body).optJSONObject("error")?.optString("message").orEmpty()
     } catch (_: Exception) {
@@ -258,7 +279,21 @@ private fun apiError(status: Int, body: String): String {
         status == 429 ->
             "Google is rate-limiting this key — too many sheets too quickly. " +
                 "Wait a minute and try again."
-        status >= 500 -> "Google had a problem reading it. Try again in a moment."
+        status >= 500 -> {
+            // 503 is Google saying "not now"; 500 is Google saying "something
+            // about this went wrong", and those want different things from the
+            // teacher.
+            val busy = status == 503 ||
+                listOf("overload", "unavailable", "try again").any { raw.contains(it, true) }
+            val head = if (busy) {
+                "Google was busy and could not read it, even after trying again. " +
+                    "Give it a minute and press Read sheets again."
+            } else {
+                "Google could not read it ($status), even after trying again."
+            }
+            val where = if (model.isNotEmpty()) " Model $model." else ""
+            "$head$where $raw".trim()
+        }
         raw.isNotEmpty() -> raw
         else -> "The reader answered with $status."
     }
@@ -266,7 +301,27 @@ private fun apiError(status: Int, body: String): String {
 
 private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
-private fun call(url: String, payload: String?): String {
+/**
+ * One call to Google, sent again if their side falls over.
+ *
+ * A 500 or a 503 from Gemini is far more often a busy minute than anything
+ * wrong with the sheet, and a teacher at the end of a marking day should not
+ * have to be the retry mechanism. Already on a background thread, so sleeping
+ * here blocks nothing the teacher can see.
+ */
+private fun call(url: String, payload: String?, model: String = ""): String {
+    var attempt = 0
+    while (true) {
+        val (status, text) = once(url, payload)
+        if (status in 200..299) return text
+        val wait = retryAfter(status, attempt)
+            ?: throw IllegalStateException(apiError(status, text, model))
+        Thread.sleep(wait)
+        attempt += 1
+    }
+}
+
+private fun once(url: String, payload: String?): Pair<Int, String> {
     val conn = URL(url).openConnection() as HttpURLConnection
     conn.connectTimeout = 30_000
     // A page of handwriting takes the model a while, and a teacher would far
@@ -282,8 +337,7 @@ private fun call(url: String, payload: String?): String {
         val status = conn.responseCode
         val stream = if (status in 200..299) conn.inputStream else conn.errorStream
         val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
-        if (status !in 200..299) throw IllegalStateException(apiError(status, text))
-        return text
+        return status to text
     } finally {
         conn.disconnect()
     }
@@ -341,7 +395,9 @@ suspend fun readSheets(
         )
         .toString()
 
-    val body = JSONObject(call("$API/models/${enc(model)}:generateContent?key=${enc(apiKey)}", payload))
+    val body = JSONObject(
+        call("$API/models/${enc(model)}:generateContent?key=${enc(apiKey)}", payload, model),
+    )
     val text = body.optJSONArray("candidates")
         ?.optJSONObject(0)
         ?.optJSONObject("content")

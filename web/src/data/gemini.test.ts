@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { buildPrompt, parseScanReply, pickVisionModel, stripFence } from './gemini';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  apiError,
+  buildPrompt,
+  parseScanReply,
+  pickVisionModel,
+  retryAfter,
+  RETRY_WAITS_MS,
+  readSheets,
+  stripFence,
+} from './gemini';
 
 /** The SAME cases exist in android/.../data/GeminiTest.kt. */
 
@@ -151,5 +160,123 @@ describe('buildPrompt', () => {
     const p = buildPrompt(['CQ', 'MCQ']);
     expect(p).toContain('Never report an empty cell as 0');
     expect(p).toContain('Never compute the Total yourself');
+  });
+});
+
+describe('trying again when Google falls over', () => {
+  it('tries again on their 5xx, which is usually a busy minute', () => {
+    expect(retryAfter(500, 0)).toBe(RETRY_WAITS_MS[0]);
+    expect(retryAfter(503, 0)).toBe(RETRY_WAITS_MS[0]);
+    expect(retryAfter(500, 1)).toBe(RETRY_WAITS_MS[1]);
+  });
+
+  it('gives up rather than going round for ever', () => {
+    expect(retryAfter(500, RETRY_WAITS_MS.length)).toBeNull();
+  });
+
+  it('waits longer each time, so a busy minute is given a minute', () => {
+    expect(RETRY_WAITS_MS[1]).toBeGreaterThan(RETRY_WAITS_MS[0]);
+  });
+
+  it('never repeats a request that was wrong to begin with', () => {
+    // Sending a bad key or a bad model again changes nothing.
+    for (const status of [400, 401, 403, 404]) {
+      expect(retryAfter(status, 0)).toBeNull();
+    }
+  });
+
+  it('never repeats a 429, the one case where asking again makes it worse', () => {
+    expect(retryAfter(429, 0)).toBeNull();
+  });
+});
+
+describe('what the teacher is told', () => {
+  const err = (m: string) => ({ error: { message: m } });
+
+  it("keeps Google's own words on a 5xx, which is all there is to go on", () => {
+    const said = apiError(500, err('Internal error encountered.'), 'gemini-2.5-flash');
+    expect(said).toContain('Internal error encountered.');
+    // and says which model, since that is the other half of the diagnosis
+    expect(said).toContain('gemini-2.5-flash');
+  });
+
+  it('separates Google being busy from Google choking on the sheet', () => {
+    expect(apiError(503, err('The model is overloaded.'))).toMatch(/busy/i);
+    expect(apiError(500, err('Internal error.'))).not.toMatch(/busy/i);
+  });
+
+  it('says it already tried again, so nobody retries a lost cause by hand', () => {
+    expect(apiError(500, err('x'))).toMatch(/even after trying again/i);
+    expect(apiError(503, err('x'))).toMatch(/even after trying again/i);
+  });
+
+  it('still names a dead key plainly', () => {
+    expect(apiError(400, err('API key not valid. Please pass a valid API key.')))
+      .toMatch(/copied whole/i);
+  });
+});
+
+describe('the call itself', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  const sheet = JSON.stringify({
+    header: { exam: 'Half Yearly', year: '2026', className: 'Ten', subject: 'History' },
+    rows: [{ roll: 3, cells: [{ column: 'CQ', value: 51 }, { column: 'MCQ', value: 18 }] }],
+  });
+  const ok = () => new Response(
+    JSON.stringify({ candidates: [{ content: { parts: [{ text: sheet }] } }] }),
+    { status: 200 },
+  );
+  const down = (status: number, message: string) => new Response(
+    JSON.stringify({ error: { message } }), { status },
+  );
+
+  it('sends the sheet again when Google is briefly unavailable', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      return calls < 3 ? down(503, 'The model is overloaded.') : ok();
+    }));
+
+    const p = readSheets('key', 'gemini-2.5-flash', [{ mimeType: 'image/jpeg', base64: 'x' }], ['CQ']);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const got = await p;
+
+    // Two failures swallowed; the teacher saw a wait, not an error.
+    expect(calls).toBe(3);
+    expect(got.rows[0].values.CQ).toBe(51);
+    expect(got.header.subject).toBe('History');
+  });
+
+  it('stops after the last wait and repeats what Google said', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      return down(500, 'Internal error encountered.');
+    }));
+
+    const p = readSheets('key', 'gemini-2.5-flash', [{ mimeType: 'image/jpeg', base64: 'x' }], ['CQ'])
+      .catch((e: Error) => e);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const e = await p as Error;
+
+    expect(calls).toBe(RETRY_WAITS_MS.length + 1);
+    expect(e.message).toContain('Internal error encountered.');
+    expect(e.message).toContain('gemini-2.5-flash');
+  });
+
+  it('does not send a bad key a second time', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      return down(400, 'API key not valid. Please pass a valid API key.');
+    }));
+
+    await expect(
+      readSheets('bad', 'gemini-2.5-flash', [{ mimeType: 'image/jpeg', base64: 'x' }], ['CQ']),
+    ).rejects.toThrow(/copied whole/i);
+    expect(calls).toBe(1);
   });
 });
