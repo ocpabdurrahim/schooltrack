@@ -48,7 +48,30 @@ commit to is `null` — never `0`, because a zero is a mark, and a failing one.
 
 ## Running it
 
-    .venv/Scripts/python.exe server.py
+    npm --prefix web run build          # once, and after any app change
+    ocr/.venv/Scripts/python.exe ocr/server.py
+
+Then open **http://localhost:8765** on that machine. On its Setup screen set
+*Who reads the sheets* and put `http://localhost:8765` as the reader address.
+
+## Why the app is served from here
+
+Found by testing, not assumed: **a page on https://schooltrack-1941.web.app
+cannot call http://localhost**. Chrome blocks it before anything leaves the
+machine — nothing reaches this service at all — so no amount of CORS at this
+end helps. It was checked in a real Chrome as well as in a test browser, and
+both refused it.
+
+Serving the built app from this same service puts the app and the reader on
+**one origin**, and the problem stops existing: no CORS, no mixed content, no
+private-network rules. One command, one address.
+
+The deployed site keeps working exactly as before for everybody else — it just
+uses Google, as it always did. The local reader is for the machine it runs on.
+
+The Android app is not affected by any of this (it is not a browser), but a
+phone reaching this service over the school wifi would be plain HTTP to a LAN
+address, which Android blocks by default. That is not wired up yet.
 
 ## Samples
 
