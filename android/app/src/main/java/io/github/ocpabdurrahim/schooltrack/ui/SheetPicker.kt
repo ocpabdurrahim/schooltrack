@@ -10,7 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import io.github.ocpabdurrahim.schooltrack.data.SHEET_MIME_TYPES
+import io.github.ocpabdurrahim.schooltrack.data.Grid
 import io.github.ocpabdurrahim.schooltrack.data.readSheetFile
+import io.github.ocpabdurrahim.schooltrack.data.readSheetGrid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,6 +52,42 @@ fun rememberSheetPicker(
                     onProblem("There is nothing in ${name.ifBlank { "that file" }}.")
                 } else {
                     onText(name, text)
+                }
+            } catch (e: Exception) {
+                onProblem(e.message ?: "That file could not be read.")
+            }
+        }
+    }
+    return remember(launcher) { { launcher.launch(SHEET_MIME_TYPES) } }
+}
+
+/**
+ * Picks a spreadsheet and hands back its COLUMNS.
+ *
+ * The same chooser, stopping one step earlier: a subject marked in parts
+ * needs to know which column a number came from, and flattening the sheet to
+ * text throws exactly that away.
+ */
+@Composable
+fun rememberGridPicker(
+    onGrid: (name: String, grid: Grid) -> Unit,
+    onProblem: (String) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                val name = displayName(context, uri)
+                val bytes = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: throw IllegalArgumentException("That file could not be opened.")
+                val grid = readSheetGrid(name, bytes)
+                if (grid.all { row -> row.all { it.isBlank() } }) {
+                    onProblem("There is nothing in ${name.ifBlank { "that file" }}.")
+                } else {
+                    onGrid(name, grid)
                 }
             } catch (e: Exception) {
                 onProblem(e.message ?: "That file could not be read.")

@@ -307,7 +307,18 @@ val SHEET_MIME_TYPES = arrayOf("*/*")
  * to type, and what was read is on the screen to be corrected before it goes
  * anywhere near the register.
  */
-fun readSheetFile(name: String, bytes: ByteArray): String {
+fun readSheetFile(name: String, bytes: ByteArray): String = gridToText(readSheetGrid(name, bytes))
+
+/**
+ * The same file, kept as COLUMNS.
+ *
+ * readSheetFile flattens a sheet to text, which is right for a tally of one
+ * mark per student but throws away the only thing that can say which part a
+ * number belongs to. A subject marked in CQ and MCQ needs the columns.
+ *
+ * The twin of readSheetGrid in web/src/data/sheet.ts.
+ */
+fun readSheetGrid(name: String, bytes: ByteArray): Grid {
     val lower = name.lowercase()
     if (lower.endsWith(".xls")) {
         throw IllegalArgumentException(
@@ -319,8 +330,8 @@ fun readSheetFile(name: String, bytes: ByteArray): String {
     // name with no extension at all. "PK" is where every zip starts.
     val looksZipped = bytes.size > 1 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
     return if (lower.endsWith(".xlsx") || lower.endsWith(".xlsm") || looksZipped) {
-        gridToText(readXlsx(bytes))
+        readXlsx(bytes)
     } else {
-        gridToText(parseCsv(bytes.toString(Charsets.UTF_8)))
+        parseCsv(bytes.toString(Charsets.UTF_8))
     }
 }

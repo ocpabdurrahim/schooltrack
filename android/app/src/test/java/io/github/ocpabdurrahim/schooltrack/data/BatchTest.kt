@@ -456,4 +456,141 @@ class BatchTest {
             list("Roll,Religion@3,muslim".replace("@", NEWLINE))[0].changes,
         )
     }
+
+    // ------------------------- a spreadsheet with one column per part
+    // The SAME cases exist in web/src/data/batch.test.ts.
+
+    private fun grid(vararg rows: List<String>): Grid = rows.toList()
+
+    @Test
+    fun `reads the columns of the paper form`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ", "Total"),
+                 listOf("3", "51", "18", "69"),
+                 listOf("4", "56", "18", "74")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals("", got.problem)
+        assertEquals(2, got.rows.size)
+        assertEquals(3L, got.rows[0].rollNo)
+        assertEquals(mapOf("CQ" to 51.0, "MCQ" to 18.0), got.rows[0].parts)
+        assertEquals(mapOf("CQ" to 56.0, "MCQ" to 18.0), got.rows[1].parts)
+    }
+
+    @Test
+    fun `ignores a Total column, which is the teachers checksum and not a part`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ", "Total"), listOf("3", "51", "18", "69")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(listOf("CQ", "MCQ"), got.rows[0].parts.keys.toList())
+    }
+
+    @Test
+    fun `matches a heading however it was written`() {
+        val got = parseMarkParts(
+            grid(listOf("roll no.", "C.Q. (70)", "mcq"), listOf("3", "51", "18")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(3L, got.rows[0].rollNo)
+        assertEquals(mapOf("CQ" to 51.0, "MCQ" to 18.0), got.rows[0].parts)
+    }
+
+    @Test
+    fun `finds the heading row even when the sheet has a title above it`() {
+        val got = parseMarkParts(
+            grid(listOf("Matkhola ML High School"), listOf(""),
+                 listOf("Class Ten", "History"),
+                 listOf("Roll", "CQ", "MCQ"), listOf("3", "51", "18")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(1, got.rows.size)
+        assertEquals(3L, got.rows[0].rollNo)
+    }
+
+    @Test
+    fun `leaves an empty box empty, because a zero is a mark and a failing one`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "51", "")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(mapOf("CQ" to 51.0), got.rows[0].parts)
+    }
+
+    @Test
+    fun `drops a row with nothing on it rather than reporting it`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "51", "18"),
+                 listOf(""), listOf("", "", "")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(1, got.rows.size)
+    }
+
+    @Test
+    fun `keeps a row whose roll cannot be read, and says so`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("three", "51", "18")),
+            listOf("CQ", "MCQ"),
+        )
+        assertNull(got.rows[0].rollNo)
+        assertTrue(got.rows[0].problem.contains("not a roll number"))
+    }
+
+    @Test
+    fun `keeps a row whose mark cannot be read, and says which column`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "fifty", "18")),
+            listOf("CQ", "MCQ"),
+        )
+        assertTrue(got.rows[0].problem.contains("CQ"))
+        assertEquals(18.0, got.rows[0].parts["MCQ"])
+    }
+
+    @Test
+    fun `reads an absent mark`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "A", "A")),
+            listOf("CQ", "MCQ"),
+        )
+        assertTrue(got.rows[0].absent)
+    }
+
+    @Test
+    fun `says plainly when there is no heading row at all`() {
+        val got = parseMarkParts(
+            grid(listOf("3", "51", "18"), listOf("4", "56", "18")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(0, got.rows.size)
+        assertTrue(got.problem.contains("heading row"))
+    }
+
+    @Test
+    fun `says plainly when the parts it needs are not among the columns`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "Marks"), listOf("3", "69")), listOf("CQ", "MCQ"),
+        )
+        assertTrue(got.problem.contains("CQ or MCQ"))
+    }
+
+    @Test
+    fun `copes with a part column the sheet simply left out`() {
+        // A subject marked CQ + MCQ + Prac, on a form that only has the first two.
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "51", "18")),
+            listOf("CQ", "MCQ", "Prac"),
+        )
+        assertEquals(mapOf("CQ" to 1, "MCQ" to 2), got.columns)
+        assertEquals(mapOf("CQ" to 51.0, "MCQ" to 18.0), got.rows[0].parts)
+    }
+
+    @Test
+    fun `points at the spreadsheet row a problem is on`() {
+        val got = parseMarkParts(
+            grid(listOf("Roll", "CQ", "MCQ"), listOf("3", "51", "18"), listOf("x", "1", "2")),
+            listOf("CQ", "MCQ"),
+        )
+        assertEquals(3, got.rows[1].line)
+    }
 }

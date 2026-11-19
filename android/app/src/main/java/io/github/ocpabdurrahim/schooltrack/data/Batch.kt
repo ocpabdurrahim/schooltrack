@@ -625,3 +625,121 @@ fun matchByRoll(rows: List<StudentRow>, here: List<Existing>): List<Update> {
  */
 fun renames(updates: List<Update>) =
     updates.count { u -> u.changes.any { it.field == Editable.FULL_NAME } }
+
+// ---------------------------------------------------------------------------
+// a spreadsheet with one column per part
+
+data class PartsRow(
+    /** 1-based row in the spreadsheet, so a problem can be pointed at. */
+    val line: Int,
+    val rollNo: Long? = null,
+    /** Part name to mark. A part the row left empty is simply absent here. */
+    val parts: Map<String, Double> = emptyMap(),
+    val absent: Boolean = false,
+    val problem: String = "",
+)
+
+data class PartsSheet(
+    /** Which spreadsheet column each part was found in, for the report. */
+    val columns: Map<String, Int> = emptyMap(),
+    val rows: List<PartsRow> = emptyList(),
+    val problem: String = "",
+)
+
+/**
+ * A column heading, reduced to what it is actually naming.
+ *
+ * Headings come off a form and out of a reader, so "CQ", "cq", "C.Q." and
+ * "CQ (70)" all have to mean the same column.
+ */
+fun headingKey(raw: String): String =
+    raw.trim().uppercase()
+        .replace(Regex("""\(.*?\)"""), "")
+        .replace(Regex("[^A-Z0-9]+"), "")
+
+/** The heading that names the roll, in the spellings a form or a teacher uses. */
+private val ROLL_HEADINGS = listOf("ROLL", "ROLLNO", "ROLLNUMBER", "SL", "SLNO")
+
+/**
+ * Reads a spreadsheet of marks that are split into parts.
+ *
+ * The paste box cannot do this — one number per student cannot say which part
+ * it is — but a spreadsheet CAN, because it has columns, and the paper form
+ * the teacher fills in is laid out in exactly those columns: Roll, then one
+ * per part.
+ *
+ * Nothing here decides whether a mark is RIGHT. Over-max, a part the subject
+ * does not have, an unknown roll: all of that is the mark entry screen's job,
+ * which already does it for typed marks. This only works out which column is
+ * which and what number is in it.
+ *
+ * The twin of parseMarkParts in web/src/data/batch.ts.
+ */
+fun parseMarkParts(grid: Grid, componentNames: List<String>): PartsSheet {
+    val wanted = componentNames.map { it to headingKey(it) }
+
+    val headerAt = grid.indexOfFirst { row ->
+        val keys = row.map { headingKey(it) }
+        keys.any { it in ROLL_HEADINGS } && wanted.any { it.second in keys }
+    }
+    if (headerAt < 0) {
+        return PartsSheet(
+            problem = "That spreadsheet has no heading row naming a roll column and " +
+                componentNames.joinToString(" or ") +
+                ". The first row should name the columns.",
+        )
+    }
+
+    val keys = grid[headerAt].map { headingKey(it) }
+    val rollAt = keys.indexOfFirst { it in ROLL_HEADINGS }
+    val columns = LinkedHashMap<String, Int>()
+    for ((name, key) in wanted) {
+        val at = keys.indexOf(key)
+        if (at >= 0) columns[name] = at
+    }
+    if (columns.isEmpty()) {
+        return PartsSheet(
+            problem = "No column is headed " + componentNames.joinToString(" or ") + ".",
+        )
+    }
+
+    val rows = mutableListOf<PartsRow>()
+    for (i in headerAt + 1 until grid.size) {
+        val raw = grid[i]
+        if (raw.all { it.isBlank() }) continue
+
+        var rollNo: Long? = null
+        var problem = ""
+        var absent = false
+        val parts = LinkedHashMap<String, Double>()
+
+        val rollText = raw.getOrElse(rollAt) { "" }.trim()
+        if (Regex("""^\d+$""").matches(rollText)) {
+            rollNo = rollText.toLong()
+        } else {
+            problem = if (rollText.isEmpty()) "No roll number on this row."
+            else "\"$rollText\" is not a roll number."
+        }
+
+        var anything = false
+        for ((name, at) in columns) {
+            val text = raw.getOrElse(at) { "" }.trim()
+            val v = markValue(text)
+            if (v == null) {
+                if (text.isNotEmpty() && problem.isEmpty()) {
+                    problem = "\"$text\" in $name is not a mark."
+                }
+                continue
+            }
+            if (v.second) { absent = true; anything = true; continue }
+            // An empty box is NOT a zero: a zero is a mark, and a failing one.
+            v.first?.let { parts[name] = it; anything = true }
+        }
+
+        if (!anything && problem.isEmpty()) continue
+        rows.add(PartsRow(line = i + 1, rollNo = rollNo, parts = parts,
+                          absent = absent, problem = problem))
+    }
+
+    return PartsSheet(columns = columns, rows = rows)
+}

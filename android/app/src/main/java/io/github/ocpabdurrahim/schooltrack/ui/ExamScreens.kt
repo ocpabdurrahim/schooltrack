@@ -54,7 +54,9 @@ import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
 import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.meritOrder
+import io.github.ocpabdurrahim.schooltrack.data.PartsSheet
 import io.github.ocpabdurrahim.schooltrack.data.parseMarkPaste
+import io.github.ocpabdurrahim.schooltrack.data.parseMarkParts
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
 import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
 import io.github.ocpabdurrahim.schooltrack.data.subjectStats
@@ -457,6 +459,10 @@ fun MarkEntryScreen(
     var pasted by remember { mutableStateOf<Pair<MarkPaste, MarkFill>?>(null) }
     var fromFile by remember { mutableStateOf("") }
 
+    // A spreadsheet of parts, for a subject marked in CQ/MCQ/Prac.
+    var partsRead by remember { mutableStateOf<PartsSheet?>(null) }
+    var partsFilled by remember { mutableStateOf(0) }
+
     LaunchedEffect(Unit) {
         try {
             exams = repo.listExams()
@@ -490,6 +496,46 @@ fun MarkEntryScreen(
     val sitters = subject?.let { sub ->
         students.filter { sitsSubject(sub, it.asSitter()) }
     } ?: students
+
+    /**
+     * A spreadsheet with one column per part, into the boxes below.
+     *
+     * Filling is not saving: this changes what is on screen, and the ordinary
+     * Save marks button is still the only thing that writes anything.
+     */
+    val pickPartsFile = rememberGridPicker(
+        onGrid = { name, grid ->
+            problem = ""; note = ""; fromFile = name
+            val comps = subject?.components.orEmpty().map { it.name }
+            val got = parseMarkParts(grid, comps)
+            partsRead = got
+            if (got.problem.isEmpty()) {
+                val byRoll: Map<Long, String> =
+                    sitters.associate { it.rollNo to it.studentId }
+                var filled = 0
+                var next = entries
+                for (row in got.rows) {
+                    // A roll this section has not got is left alone rather
+                    // than guessed at: their marks may already be in.
+                    val id = row.rollNo?.let { byRoll[it] } ?: continue
+                    val was = next[id] ?: Typed()
+                    val parts: MutableMap<String, String> = was.parts.toMutableMap()
+                    for ((name2, v) in row.parts.entries) {
+                        parts[name2] = if (v == v.toLong().toDouble()) {
+                            v.toLong().toString()
+                        } else {
+                            v.toString()
+                        }
+                    }
+                    next = next + (id to was.copy(parts = parts, absent = row.absent))
+                    filled += 1
+                }
+                partsFilled = filled
+                if (filled > 0) entries = next
+            }
+        },
+        onProblem = { problem = it; fromFile = ""; partsRead = null },
+    )
 
     LaunchedEffect(classId, examId, subjectId) {
         if (classId.isBlank() || examId.isBlank()) return@LaunchedEffect
@@ -549,6 +595,74 @@ fun MarkEntryScreen(
             }
         }
 
+        // A subject marked in parts takes a SPREADSHEET, not a tally.
+        //
+        // A pasted tally is one number per student and cannot say whether it
+        // is the CQ or the MCQ. Until now this screen offered the tally box
+        // anyway and quietly filled the single-mark field, which for a paper
+        // marked in parts is not even the field the screen shows — so the
+        // marks went nowhere a teacher could see. A spreadsheet can say which
+        // column a number came from, because it has columns.
+        val partColumns = subject?.components.orEmpty().map { it.name }
+        if (partColumns.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        "A spreadsheet of marks",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "${subject?.subjectName.orEmpty()} is marked in " +
+                            partColumns.joinToString(" and ") +
+                            ", so a pasted tally is no use — one number per student " +
+                            "cannot say which part it is. A spreadsheet can, because " +
+                            "it has columns. Nothing is saved until you press Save marks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                    OutlinedButton(
+                        onClick = pickPartsFile,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    ) {
+                        Text(if (fromFile.isBlank()) "Choose an Excel or CSV file"
+                             else "Choose another file")
+                    }
+                    Text(
+                        "One heading row, then a row per student: Roll, " +
+                            partColumns.joinToString(", ") +
+                            ", and a Total if you like — the Total is ignored here, " +
+                            "because it is worked out from the parts. Leave a box empty " +
+                            "rather than writing 0 in it: a zero is a mark.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    partsRead?.let { got ->
+                        if (got.problem.isNotEmpty()) {
+                            Problem(got.problem)
+                        } else {
+                            Text(
+                                "$partsFilled student(s) filled in from " +
+                                    got.columns.keys.joinToString(" and ") +
+                                    ". Check them below, then press Save marks.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Green,
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
+                        }
+                        for (row in got.rows.filter { it.problem.isNotEmpty() }) {
+                            Text(
+                                "Row ${row.line}: ${row.problem}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Muted,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        } else
         Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Row(
