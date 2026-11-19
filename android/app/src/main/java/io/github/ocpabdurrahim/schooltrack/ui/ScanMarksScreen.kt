@@ -1,7 +1,11 @@
 package io.github.ocpabdurrahim.schooltrack.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -53,7 +57,9 @@ import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.checkScan
+import io.github.ocpabdurrahim.schooltrack.data.discardSheetPhoto
 import io.github.ocpabdurrahim.schooltrack.data.listModels
+import io.github.ocpabdurrahim.schooltrack.data.newSheetPhotoUri
 import io.github.ocpabdurrahim.schooltrack.data.matchComponent
 import io.github.ocpabdurrahim.schooltrack.data.normalColumn
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
@@ -179,10 +185,16 @@ fun ScanMarksScreen(
     val stopped = checked?.findings?.any { it.level == Level.STOP } == true
     val ready = checked?.rows?.count { it.problem.isEmpty() && it.studentId != null } ?: 0
 
-    val pick = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents(),
-    ) { uris ->
-        if (uris.isNullOrEmpty()) return@rememberLauncherForActivityResult
+    /**
+     * Both ways in land here: a sheet just photographed and one picked out of
+     * the gallery are the same thing by the time they are read.
+     *
+     * [ours] says the files are the camera's, written into our own cache: those
+     * are deleted once read. A picked file belongs to the gallery and is left
+     * exactly where it was found.
+     */
+    fun addShots(uris: List<Uri>, ours: Boolean = false) {
+        if (uris.isEmpty()) return
         scope.launch {
             problem = ""; note = ""
             try {
@@ -193,7 +205,54 @@ fun ScanMarksScreen(
                 read = null
             } catch (e: Exception) {
                 problem = e.message ?: "That photograph could not be read."
+            } finally {
+                if (ours) withContext(Dispatchers.IO) {
+                    uris.forEach { discardSheetPhoto(context, it) }
+                }
             }
+        }
+    }
+
+    val pick = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        addShots(uris.orEmpty())
+    }
+
+    // Held across the trip to the camera app: TakePicture hands back only
+    // whether a picture was taken, never where it put it.
+    var pendingPhoto by remember { mutableStateOf<Uri?>(null) }
+
+    val takePhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { taken ->
+        val uri = pendingPhoto
+        pendingPhoto = null
+        if (uri == null) return@rememberLauncherForActivityResult
+        // Backing out of the camera still leaves the empty file behind.
+        if (taken) addShots(listOf(uri), ours = true) else discardSheetPhoto(context, uri)
+    }
+
+    val startCamera = {
+        try {
+            val uri = newSheetPhotoUri(context)
+            pendingPhoto = uri
+            takePhoto.launch(uri)
+        } catch (e: Exception) {
+            problem = "The camera could not be opened. " +
+                "A photograph taken in the camera app can still be chosen here."
+        }
+    }
+
+    val askCamera = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            startCamera()
+        } else {
+            // Not a dead end: the camera app itself needs no permission from us.
+            problem = "Without the camera, photograph the sheet in the camera " +
+                "app and add it with Choose a photograph."
         }
     }
 
@@ -315,10 +374,28 @@ fun ScanMarksScreen(
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
 
+                // Stacked, not side by side: at 360dp the two labels do not fit
+                // on one line, and a teacher holding a phone over a sheet wants
+                // a target the width of the card.
+                Button(
+                    onClick = {
+                        val allowed = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.CAMERA,
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (allowed) startCamera() else askCamera.launch(Manifest.permission.CAMERA)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Take a photograph")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { pick.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Choose a photograph")
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { pick.launch("image/*") }) {
-                        Text("Add a photograph")
-                    }
                     if (shots.isNotEmpty()) {
                         TextButton(onClick = { shots = emptyList(); read = null }) {
                             Text("Clear")

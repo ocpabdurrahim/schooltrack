@@ -670,6 +670,13 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   color: var(--accent-ink);
   border-color: var(--line);
 }
+/* Wraps rather than running off a phone: two full labels do not fit on one
+   line at 360px, and a button half off the screen cannot be pressed. */
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .link {
   background: none;
   border: 0;

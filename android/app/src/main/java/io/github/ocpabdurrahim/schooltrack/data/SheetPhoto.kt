@@ -6,8 +6,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.util.Base64
+import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * Turning a photographed mark sheet into something small enough to send.
@@ -98,6 +100,32 @@ fun uriToSheetShot(context: Context, uri: Uri): SheetShot {
         width = w,
         height = h,
     )
+}
+
+/**
+ * Somewhere for the camera app to put the photograph it is about to take.
+ *
+ * It has to be a content:// Uri from our own FileProvider — handing another
+ * app a file:// path has been refused since Android 7 — and it has to exist
+ * before the camera is launched, because the camera writes into it rather
+ * than handing anything back.
+ */
+fun newSheetPhotoUri(context: Context): Uri {
+    val dir = File(context.cacheDir, "sheets").apply { mkdirs() }
+    val file = File(dir, "sheet-${System.currentTimeMillis()}.jpg")
+    file.createNewFile()
+    return FileProvider.getUriForFile(context, "${context.packageName}.photos", file)
+}
+
+/**
+ * Throws the file away once it has been read.
+ *
+ * The picture is held in memory from then on, and what is on it is a whole
+ * section's marks — it has no business sitting in the cache afterwards, and a
+ * term of photographed sheets would quietly fill the phone.
+ */
+fun discardSheetPhoto(context: Context, uri: Uri) {
+    runCatching { context.contentResolver.delete(uri, null, null) }
 }
 
 private fun applySheetExif(bitmap: Bitmap, exif: ExifInterface): Bitmap {

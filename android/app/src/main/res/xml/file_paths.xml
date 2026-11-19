@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The one folder the camera app may write into: our own cache, and only the
+    sheets/ corner of it. A photographed mark sheet carries a whole section's
+    marks, so it is deleted again as soon as it has been read.
+-->
+<paths>
+    <cache-path name="sheets" path="sheets/" />
+</paths>

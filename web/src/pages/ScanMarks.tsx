@@ -317,17 +317,35 @@ export default function ScanMarks() {
           are read together.
         </p>
 
-        <label className="btn">
-          Add a photograph
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            onChange={addPhotos}
-            style={{ display: 'none' }}
-          />
-        </label>
+        {/*
+          Two ways in, because one input cannot be both. `capture` sends a
+          phone straight to its camera and takes the gallery away with it, so
+          on its own it refuses a sheet photographed ten minutes ago. It is
+          also ignored on a desktop, where the second button is the only one
+          that means anything.
+        */}
+        <div className="btn-row">
+          <label className="btn">
+            Take a photograph
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={addPhotos}
+              style={{ display: 'none' }}
+            />
+          </label>
+          <label className="btn ghost">
+            Choose a photograph
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={addPhotos}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
 
         {shots.length > 0 && (
           <div className="shots">
