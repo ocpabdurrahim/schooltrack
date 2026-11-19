@@ -113,6 +113,10 @@ beforeEach(async () => {
 
     await setDoc(doc(db, p('counters', 'receipts')), { next: 2 });
 
+    await setDoc(doc(db, p('integrations', 'gemini')), {
+      geminiApiKey: 'test-key-not-a-real-one', geminiModel: 'gemini-x-flash', updatedAt: now,
+    });
+
     await setDoc(doc(db, p('feeHeads', 'TUITION')), {
       headCode: 'TUITION', headName: 'Tuition fee', frequency: 'MONTHLY',
       active: true, sortOrder: 1, updatedAt: now,
@@ -332,6 +336,49 @@ describe('role boundaries', () => {
     await assertSucceeds(getDoc(doc(office(), p('feeHeads', 'TUITION'))));
     await assertSucceeds(getDoc(doc(office(), p('feeStructure', 'TUITION_Class 6_2026'))));
     await assertFails(getDoc(doc(office(), p('payments', 'RCPT-000001'))));
+  });
+
+  // ---- the Gemini key -------------------------------------------------
+  //
+  // An API key is worth money to whoever holds it, and this one sits in the
+  // database because the app has no server to hide it behind. So the rules
+  // are the whole of its protection, and these cases are the whole of the
+  // proof that it works.
+
+  it('a guardian cannot read the API key', async () => {
+    // The reason it is not a document under settings/: parents read settings,
+    // and rules are a union, so nothing inside that collection can be hidden
+    // from them afterwards.
+    await assertFails(getDoc(doc(parent(), p('integrations', 'gemini'))));
+    await assertSucceeds(getDoc(doc(parent(), p('settings', 'school'))));
+  });
+
+  it('signed out, the API key is unreachable', async () => {
+    await assertFails(getDoc(doc(stranger(), p('integrations', 'gemini'))));
+  });
+
+  it('a TEACHER reads the API key, because a teacher scans the sheets', async () => {
+    await assertSucceeds(getDoc(doc(teacher(), p('integrations', 'gemini'))));
+  });
+
+  it('ACCOUNTS and OFFICE cannot read the API key', async () => {
+    // Neither of them ever enters a mark, so neither needs it.
+    await assertFails(getDoc(doc(accounts(), p('integrations', 'gemini'))));
+    await assertFails(getDoc(doc(office(), p('integrations', 'gemini'))));
+  });
+
+  it('only an ADMIN may set the API key', async () => {
+    // serverTimestamp(), because stamped() wants updatedAt == request.time.
+    await assertFails(
+      setDoc(doc(teacher(), p('integrations', 'gemini')), {
+        geminiApiKey: 'teacher-should-not', updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(admin(), p('integrations', 'gemini')), {
+        geminiApiKey: 'admin-may', updatedAt: serverTimestamp(),
+      }),
+    );
   });
 
   // ---- student photographs -------------------------------------------

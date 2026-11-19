@@ -119,6 +119,21 @@ service cloud.firestore {
         allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
       }
 
+      // ---- integrations: the school's own API keys --------------------------
+      //
+      // A COLLECTION OF ITS OWN, and not a document under settings/, which
+      // guardians can read. Rules are a union: a narrower rule on one document
+      // inside a readable collection takes nothing away, so the only way to
+      // keep a key from parents is to keep it out of there entirely.
+      //
+      // Read is narrower than isStaff() as well. ACCOUNTS and OFFICE never
+      // scan a mark sheet, so they never need the key, and a key is worth
+      // money to whoever holds it.
+      match /integrations/{docId} {
+        allow read: if hasRole(s, ['ADMIN', 'TEACHER']);
+        allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
+      }
+
       // ---- people and reference data ---------------------------------------
 
       match /classes/{classId} {

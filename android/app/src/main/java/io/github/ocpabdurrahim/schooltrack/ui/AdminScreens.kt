@@ -25,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,6 +42,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
+import io.github.ocpabdurrahim.schooltrack.data.IntegrationsRepository
+import io.github.ocpabdurrahim.schooltrack.data.listModels
+import io.github.ocpabdurrahim.schooltrack.data.maskKey
+import io.github.ocpabdurrahim.schooltrack.data.pickVisionModel
 import io.github.ocpabdurrahim.schooltrack.data.ClassRow
 import io.github.ocpabdurrahim.schooltrack.data.SchoolSettings
 import io.github.ocpabdurrahim.schooltrack.data.STAFF_STATUS
@@ -159,8 +164,20 @@ fun SchoolSetupScreen(
     var note by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf("") }
 
+    // The Gemini key, for reading photographed mark sheets. Kept apart from
+    // the settings above because it is kept apart in the database too:
+    // settings are readable by parents, and an API key must not be.
+    val integrations = remember { IntegrationsRepository() }
+    var keyOnFile by remember { mutableStateOf("") }
+    var newKey by remember { mutableStateOf("") }
+    var model by remember { mutableStateOf("") }
+    var keyNote by remember { mutableStateOf("") }
+    var keyProblem by remember { mutableStateOf("") }
+    var keyBusy by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         repo.getSettings()?.let { s = it }
+        integrations.get().let { keyOnFile = it.geminiApiKey; model = it.geminiModel }
         busy = false
     }
 
@@ -210,6 +227,99 @@ fun SchoolSetupScreen(
                          modifier = Modifier.padding(top = 8.dp))
                 }
                 Problem(problem)
+            }
+        }
+
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Reading mark sheets", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "A Gemini key lets the app read a photographed mark sheet. Without " +
+                        "one, marks are typed in as before and nothing else changes. Make " +
+                        "a key at aistudio.google.com/apikey.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Text(
+                    "The key is stored in this school's own database, where only an " +
+                        "administrator or a teacher can reach it — never in the app's " +
+                        "code, which is public. A photographed sheet is sent to Google " +
+                        "to be read.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                )
+
+                Text(
+                    if (keyOnFile.isEmpty()) {
+                        "No key yet. Mark sheets cannot be scanned."
+                    } else {
+                        "Key on file: " + maskKey(keyOnFile) +
+                            if (model.isNotEmpty()) "  ·  read by " + model else ""
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+
+                Field(
+                    label = if (keyOnFile.isEmpty()) "Paste the key" else "Replace the key",
+                    value = newKey,
+                ) { newKey = it }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        enabled = !keyBusy && newKey.isNotBlank(),
+                        onClick = {
+                            // Saved and immediately spent on one cheap call, so
+                            // whoever pasted it finds out NOW whether it works --
+                            // rather than a teacher finding out over a pile of
+                            // scripts.
+                            keyBusy = true; keyNote = ""; keyProblem = ""
+                            scope.launch {
+                                try {
+                                    val key = newKey.trim()
+                                    val picked = pickVisionModel(listModels(key))
+                                        ?: throw IllegalStateException(
+                                            "That key works, but has no model on it that " +
+                                                "can read a picture.",
+                                        )
+                                    integrations.save(apiKey = key, model = picked)
+                                    keyOnFile = key; model = picked; newKey = ""
+                                    keyNote = "Saved, and checked against Google. " +
+                                        "Sheets will be read by " + picked + "."
+                                } catch (e: Exception) {
+                                    keyProblem = e.message ?: "That key could not be checked."
+                                }
+                                keyBusy = false
+                            }
+                        },
+                    ) { Text(if (keyBusy) "Checking…" else "Save and check the key") }
+
+                    if (keyOnFile.isNotEmpty()) {
+                        OutlinedButton(
+                            enabled = !keyBusy,
+                            onClick = {
+                                keyBusy = true; keyNote = ""; keyProblem = ""
+                                scope.launch {
+                                    try {
+                                        integrations.save(apiKey = "", model = "")
+                                        keyOnFile = ""; model = ""; newKey = ""
+                                        keyNote = "Removed. Mark sheets can no longer be scanned."
+                                    } catch (_: Exception) {
+                                        keyProblem = REFUSED
+                                    }
+                                    keyBusy = false
+                                }
+                            },
+                        ) { Text("Remove") }
+                    }
+                }
+
+                if (keyNote.isNotEmpty()) {
+                    Text(keyNote, color = MaterialTheme.colorScheme.primary,
+                         modifier = Modifier.padding(top = 8.dp))
+                }
+                Problem(keyProblem)
             }
         }
     }

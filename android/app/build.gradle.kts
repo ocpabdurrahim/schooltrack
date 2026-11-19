@@ -126,6 +126,10 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.zxing.core)
+    // The real org.json on the unit-test classpath. Android ships a STUB whose
+    // every method throws "not mocked", so a parser written against the
+    // platform's JSON cannot be tested at all without this.
+    testImplementation("org.json:json:20231013")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

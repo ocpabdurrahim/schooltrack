@@ -55,6 +55,8 @@ const ALL: NavGroup[] = [
       { label: 'Enter marks', to: '/marks', needs: 'staff', hint: 'one subject, whole section' },
       { label: 'Quick entry', to: '/marks/quick', needs: 'staff',
         hint: 'roll after roll, or one whole marksheet' },
+      { label: 'Scan a mark sheet', to: '/marks/scan', needs: 'staff',
+        hint: 'photograph the filled-in paper form' },
       { label: 'Results', to: '/results', needs: 'staff', hint: 'result sheet and tabulation' },
       { label: 'Mark sheets', to: '/marks/sheets', needs: 'staff',
         hint: 'one per student, detailed or brief' },

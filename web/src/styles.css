@@ -634,3 +634,99 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 }
 /* On screen the sheets are stacked cards, so they need the gap back. */
 .print-page + .print-page { margin-top: 16px; }
+
+/* ---------------------------------------------------------------------------
+   Scanning a mark sheet
+   --------------------------------------------------------------------------- */
+
+.muted  { color: var(--muted); }
+.small  { font-size: 13px; }
+.bad    { color: var(--bad); }
+.warn   { color: var(--warn); }
+
+.row3 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+/* A file input is unstyleable, so the label wears the button and hides it. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+.btn.ghost {
+  background: transparent;
+  color: var(--accent-ink);
+  border-color: var(--line);
+}
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-ink);
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
+}
+
+.shots {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  margin: 14px 0;
+}
+.shot { margin: 0; }
+.shot img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* The whole sheet, letterboxed: a cropped thumbnail hides the block of
+     rolls that did not make it into the photograph. */
+  object-fit: contain;
+  background: var(--line-soft);
+  aspect-ratio: 3 / 4;
+}
+.shot figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  padding-top: 4px;
+}
+
+.scan { width: 100%; border-collapse: collapse; font-size: 14px; }
+.scan th, .scan td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.scan th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.scan .of { color: var(--muted); font-weight: 400; text-transform: none; }
+.scan input.tiny {
+  width: 72px;
+  padding: 5px 7px;
+  margin: 0;
+  font-size: 14px;
+}
+/* Held back, not saved: the row has to look different from the ones that are
+   going in, at a glance, from across a desk. */
+.scan tr.held { background: var(--bad-soft); }
+.scan tr.held input.tiny { border-color: var(--bad); }
+
+@media (max-width: 760px) {
+  .scan { font-size: 13px; }
+  .scan input.tiny { width: 58px; }
+}
