@@ -672,18 +672,6 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 }
 /* Wraps rather than running off a phone: two full labels do not fit on one
    line at 360px, and a button half off the screen cannot be pressed. */
-/* A radio and its explanation side by side, with the whole row clickable. */
-.choice {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line-soft);
-  cursor: pointer;
-}
-.choice:last-of-type { border-bottom: 0; }
-.choice input { margin-top: 3px; width: auto; }
-
 .btn-row {
   display: flex;
   flex-wrap: wrap;

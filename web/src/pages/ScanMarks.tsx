@@ -15,7 +15,6 @@ import { type StudentDetail, findStudents } from '../data/people';
 import { partsAndTotal } from '../data/markentry';
 import { getIntegrations, saveIntegrations } from '../data/integrations';
 import { listModels, modelsToTry, rankVisionModels, readSheets } from '../data/gemini';
-import { nothingToReadWith, readSheetsLocally, readersToTry } from '../data/reader';
 import { type SheetShot, fileToSheetShot, sheetSizeLabel } from '../data/sheetphoto';
 import {
   type Chosen,
@@ -54,9 +53,7 @@ export default function ScanMarks() {
   const [reading, setReading] = useState(false);
   const [problem, setProblem] = useState('');
   const [note, setNote] = useState('');
-  // Null until the settings have been read: the warning must not flash up
-  // before anybody knows whether there is a reader.
-  const [noReader, setNoReader] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
 
   useEffect(() => {
     Promise.all([listExams(), listSubjects(), listClasses(), getIntegrations()])
@@ -66,8 +63,7 @@ export default function ScanMarks() {
         setClasses(c);
         setExamId(e.find((x) => !x.published)?.examId ?? e[0]?.examId ?? '');
         setClassId(c[0]?.classId ?? '');
-        const order = readersToTry(keys.readWith, keys.localReaderUrl, keys.geminiApiKey !== '');
-        setNoReader(order.length === 0 ? nothingToReadWith(keys.readWith) : null);
+        setHasKey(keys.geminiApiKey !== '');
       })
       .catch(() => setProblem('Could not load the exams and sections.'))
       .finally(() => setBusy(false));
@@ -174,51 +170,18 @@ export default function ScanMarks() {
     setReading(true); setProblem(''); setNote('');
     try {
       const keys = await getIntegrations();
-      const images = shots.map((s) => ({ mimeType: s.mimeType, base64: s.base64 }));
-      const columns = components.map((c) => c.name);
-      const order = readersToTry(keys.readWith, keys.localReaderUrl, keys.geminiApiKey !== '');
-
-      if (order.length === 0) {
-        const why = nothingToReadWith(keys.readWith);
-        setNoReader(why);
-        throw new Error(why);
+      if (!keys.geminiApiKey) {
+        setHasKey(false);
+        throw new Error('No Gemini key is set up yet.');
       }
-      setNoReader(null);
-
-      let got: ScanRead | null = null;
-      let by = '';
-      const refused: string[] = [];
-
-      for (let i = 0; i < order.length; i += 1) {
-        const last = i === order.length - 1;
-        try {
-          if (order[i] === 'local') {
-            got = await readSheetsLocally(keys.localReaderUrl, images, columns);
-            by = "this school's own computer";
-          } else {
-            const models = await modelsFor(keys.geminiApiKey, keys.geminiModel, keys.geminiModels);
-            got = await readSheets(keys.geminiApiKey, models, images, columns);
-            by = 'Google';
-          }
-          break;
-        } catch (err) {
-          // One reader being unavailable is not a failure while the other is
-          // still to be asked — but it is never swallowed: if nothing reads
-          // the sheet, every refusal is shown, and when the second one does
-          // read it the first one's silence is still worth knowing about.
-          refused.push(err instanceof Error ? err.message : 'It could not be read.');
-          if (last) throw new Error(refused.join(' '));
-        }
-      }
-
-      if (!got) throw new Error(refused.join(' ') || 'That sheet could not be read.');
-
+      const models = await modelsFor(keys.geminiApiKey, keys.geminiModel, keys.geminiModels);
+      const got = await readSheets(
+        keys.geminiApiKey, models, shots.map((s) => ({ mimeType: s.mimeType, base64: s.base64 })),
+        components.map((c) => c.name),
+      );
       setRead(got);
-      const aside = refused.length ? ` ${refused[0]}` : '';
       if (got.rows.length === 0) {
-        setProblem(`Nothing written was found on that photograph.${aside}`);
-      } else {
-        setNote(`Read by ${by}.${aside}`);
+        setProblem('Nothing written was found on that photograph.');
       }
     } catch (err) {
       setProblem(err instanceof Error ? err.message : 'That sheet could not be read.');
@@ -310,9 +273,10 @@ export default function ScanMarks() {
           Nothing is saved until you have looked at what was read.
         </p>
 
-        {noReader && (
+        {hasKey === false && (
           <p className="warn">
-            {noReader} <Link to="/setup">Setup</Link>
+            No Gemini key has been set up yet, so nothing can be read.
+            An admin can paste one in on <Link to="/setup">Setup</Link>.
           </p>
         )}
 
@@ -419,7 +383,7 @@ export default function ScanMarks() {
           <button
             type="button"
             onClick={readIt}
-            disabled={reading || busy || shots.length === 0 || !chosen || noReader !== null}
+            disabled={reading || busy || shots.length === 0 || !chosen || hasKey === false}
           >
             {reading ? 'Reading…' : `Read ${shots.length || ''} sheet${shots.length === 1 ? '' : 's'}`}
           </button>

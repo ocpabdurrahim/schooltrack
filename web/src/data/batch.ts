@@ -20,6 +20,7 @@
  * register is worse than a rejected paste.
  */
 
+import type { Grid } from './sheet';
 import { normalGroup } from './groups';
 import { normalReligion } from './religions';
 
@@ -546,3 +547,115 @@ export function matchByRoll(rows: StudentRow[], here: Existing[]): Update[] {
  */
 export const renames = (updates: Update[]) =>
   updates.filter((u) => u.changes.some((c) => c.field === 'fullName')).length;
+
+// ---------------------------------------------------------------------------
+// a spreadsheet with one column per part
+
+export type PartsRow = {
+  /** 1-based row in the spreadsheet, so a problem can be pointed at. */
+  line: number;
+  rollNo: number | null;
+  /** Part name to mark. A part the row left empty is simply absent here. */
+  parts: Record<string, number | null>;
+  absent: boolean;
+  problem: string;
+};
+
+export type PartsSheet = {
+  /** Which spreadsheet column each part was found in, for the report. */
+  columns: Record<string, number>;
+  rows: PartsRow[];
+  problem: string;
+};
+
+/**
+ * A column heading, reduced to what it is actually naming.
+ *
+ * Headings come off a form and out of a reader, so "CQ", "cq", "C.Q." and
+ * "CQ (70)" all have to mean the same column.
+ */
+export const headingKey = (raw: string) =>
+  raw.trim().toUpperCase().replace(/\(.*?\)/g, '').replace(/[^A-Z0-9]+/g, '');
+
+/** The heading that names the roll, in the spellings a form or a teacher uses. */
+const ROLL_HEADINGS = ['ROLL', 'ROLLNO', 'ROLLNUMBER', 'ROLLNO.', 'SL', 'SLNO'];
+
+/**
+ * Reads a spreadsheet of marks that are split into parts.
+ *
+ * The paste box deliberately refuses this — one number per student cannot say
+ * which part it is — but a spreadsheet CAN, because it has columns, and the
+ * paper form the teacher fills in is laid out in exactly those columns:
+ * Roll, then one per part.
+ *
+ * Nothing here decides whether a mark is RIGHT. Over-max, a part the subject
+ * does not have, an unknown roll: all of that is the mark entry screen's job,
+ * which already does it for typed marks. This only works out which column is
+ * which and what number is in it.
+ */
+export function parseMarkParts(grid: Grid, componentNames: string[]): PartsSheet {
+  const wanted = componentNames.map((n) => ({ name: n, key: headingKey(n) }));
+  const empty: PartsSheet = { columns: {}, rows: [], problem: '' };
+
+  const headerAt = grid.findIndex((row) => {
+    const keys = row.map(headingKey);
+    return keys.some((k) => ROLL_HEADINGS.includes(k))
+      && wanted.some((w) => keys.includes(w.key));
+  });
+
+  if (headerAt < 0) {
+    return {
+      ...empty,
+      problem: 'That spreadsheet has no heading row naming a roll column and '
+        + `${componentNames.join(' or ')}. The first row should name the columns.`,
+    };
+  }
+
+  const keys = grid[headerAt].map(headingKey);
+  const rollAt = keys.findIndex((k) => ROLL_HEADINGS.includes(k));
+  const columns: Record<string, number> = {};
+  for (const w of wanted) {
+    const at = keys.indexOf(w.key);
+    if (at >= 0) columns[w.name] = at;
+  }
+
+  if (Object.keys(columns).length === 0) {
+    return {
+      ...empty,
+      problem: `No column is headed ${componentNames.join(' or ')}.`,
+    };
+  }
+
+  const rows: PartsRow[] = [];
+  for (let i = headerAt + 1; i < grid.length; i += 1) {
+    const raw = grid[i];
+    if (raw.every((c) => c.trim() === '')) continue;
+
+    const row: PartsRow = {
+      line: i + 1, rollNo: null, parts: {}, absent: false, problem: '',
+    };
+
+    const rollText = (raw[rollAt] ?? '').trim();
+    if (/^\d+$/.test(rollText)) row.rollNo = Number(rollText);
+    else row.problem = rollText === '' ? 'No roll number on this row.' : `"${rollText}" is not a roll number.`;
+
+    let anything = false;
+    for (const [name, at] of Object.entries(columns)) {
+      const v = markValue((raw[at] ?? '').trim());
+      if (v === null) {
+        if ((raw[at] ?? '').trim() !== '') {
+          row.problem ||= `"${raw[at]}" in ${name} is not a mark.`;
+        }
+        continue;
+      }
+      if (v.absent) { row.absent = true; anything = true; continue; }
+      // An empty box is NOT a zero: a zero is a mark, and a failing one.
+      if (v.marks !== null) { row.parts[name] = v.marks; anything = true; }
+    }
+
+    if (!anything && row.problem === '') continue;
+    rows.push(row);
+  }
+
+  return { columns, rows, problem: '' };
+}

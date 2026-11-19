@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyMarkPaste, matchByRoll, normalDate, parseMarkPaste, parseStudentRows,
-  prepareStudentRows, renames,
-} from './batch';
+  prepareStudentRows, renames, parseMarkParts } from './batch';
 
 /** The same cases exist in android/.../data/BatchTest.kt. */
 
@@ -384,5 +383,90 @@ describe('matchByRoll', () => {
       .toEqual([{ field: 'groupName', from: '', to: 'Science' }]);
     expect(list('Roll,Religion\n3,muslim')[0].changes)
       .toEqual([{ field: 'religion', from: '', to: 'Islam' }]);
+  });
+});
+
+describe('a spreadsheet with one column per part', () => {
+  const g = (...rows: string[][]) => rows;
+
+  it('reads the columns of the paper form', () => {
+    const got = parseMarkParts(g(
+      ['Roll', 'CQ', 'MCQ', 'Total'],
+      ['3', '51', '18', '69'],
+      ['4', '56', '18', '74'],
+    ), ['CQ', 'MCQ']);
+    expect(got.problem).toBe('');
+    expect(got.rows).toHaveLength(2);
+    expect(got.rows[0]).toMatchObject({ rollNo: 3, parts: { CQ: 51, MCQ: 18 } });
+    expect(got.rows[1]).toMatchObject({ rollNo: 4, parts: { CQ: 56, MCQ: 18 } });
+  });
+
+  it('ignores a Total column, which is the teacher\'s checksum and not a part', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ', 'Total'], ['3', '51', '18', '69']), ['CQ', 'MCQ']);
+    expect(Object.keys(got.rows[0].parts)).toEqual(['CQ', 'MCQ']);
+  });
+
+  it('matches a heading however it was written', () => {
+    const got = parseMarkParts(g(['roll no.', 'C.Q. (70)', 'mcq'], ['3', '51', '18']), ['CQ', 'MCQ']);
+    expect(got.rows[0]).toMatchObject({ rollNo: 3, parts: { CQ: 51, MCQ: 18 } });
+  });
+
+  it('finds the heading row even when the sheet has a title above it', () => {
+    const got = parseMarkParts(g(
+      ['Matkhola ML High School'], [], ['Class Ten', 'History'], ['Roll', 'CQ', 'MCQ'], ['3', '51', '18'],
+    ), ['CQ', 'MCQ']);
+    expect(got.rows).toHaveLength(1);
+    expect(got.rows[0].rollNo).toBe(3);
+  });
+
+  it('leaves an empty box empty, because a zero is a mark and a failing one', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', '51', '']), ['CQ', 'MCQ']);
+    expect(got.rows[0].parts).toEqual({ CQ: 51 });
+    expect(got.rows[0].parts.MCQ).toBeUndefined();
+  });
+
+  it('drops a row with nothing on it rather than reporting it', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', '51', '18'], [], ['', '', '']), ['CQ', 'MCQ']);
+    expect(got.rows).toHaveLength(1);
+  });
+
+  it('keeps a row whose roll cannot be read, and says so', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['three', '51', '18']), ['CQ', 'MCQ']);
+    expect(got.rows[0].rollNo).toBeNull();
+    expect(got.rows[0].problem).toMatch(/not a roll number/i);
+  });
+
+  it('keeps a row whose mark cannot be read, and says which column', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', 'fifty', '18']), ['CQ', 'MCQ']);
+    expect(got.rows[0].problem).toMatch(/CQ/);
+    expect(got.rows[0].parts.MCQ).toBe(18);
+  });
+
+  it('reads an absent mark', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', 'A', 'A']), ['CQ', 'MCQ']);
+    expect(got.rows[0].absent).toBe(true);
+  });
+
+  it('says plainly when there is no heading row at all', () => {
+    const got = parseMarkParts(g(['3', '51', '18'], ['4', '56', '18']), ['CQ', 'MCQ']);
+    expect(got.rows).toHaveLength(0);
+    expect(got.problem).toMatch(/heading row/i);
+  });
+
+  it('says plainly when the parts it needs are not among the columns', () => {
+    const got = parseMarkParts(g(['Roll', 'Marks'], ['3', '69']), ['CQ', 'MCQ']);
+    expect(got.problem).toMatch(/CQ or MCQ/);
+  });
+
+  it('copes with a part column the sheet simply left out', () => {
+    // A subject marked CQ + MCQ + Prac, on a form that only has the first two.
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', '51', '18']), ['CQ', 'MCQ', 'Prac']);
+    expect(got.columns).toEqual({ CQ: 1, MCQ: 2 });
+    expect(got.rows[0].parts).toEqual({ CQ: 51, MCQ: 18 });
+  });
+
+  it('points at the spreadsheet row a problem is on', () => {
+    const got = parseMarkParts(g(['Roll', 'CQ', 'MCQ'], ['3', '51', '18'], ['x', '1', '2']), ['CQ', 'MCQ']);
+    expect(got.rows[1].line).toBe(3);
   });
 });

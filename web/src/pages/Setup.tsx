@@ -7,8 +7,6 @@ import {
 } from '../data/admin';
 import { getIntegrations, maskKey, saveIntegrations } from '../data/integrations';
 import { listModels, rankVisionModels } from '../data/gemini';
-import type { ReadWith } from '../data/reader';
-import { READ_WITH_LABELS, nothingToReadWith, readersToTry } from '../data/reader';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -28,13 +26,6 @@ export default function Setup() {
   const [keyProblem, setKeyProblem] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
 
-  // Who does the reading: Google, this school's own computer, or whichever
-  // of the two is available.
-  const [readWith, setReadWith] = useState<ReadWith>('auto');
-  const [readerUrl, setReaderUrl] = useState('');
-  const [readerNote, setReaderNote] = useState('');
-  const [readerBusy, setReaderBusy] = useState(false);
-
   useEffect(() => {
     getSettings()
       .then((got) => { if (got) setS({ ...DEFAULT_SETTINGS, ...got }); })
@@ -43,33 +34,8 @@ export default function Setup() {
     getIntegrations().then((i) => {
       setKeyOnFile(i.geminiApiKey);
       setModel(i.geminiModel);
-      setReadWith(i.readWith);
-      setReaderUrl(i.localReaderUrl);
     });
   }, []);
-
-  /**
-   * Remembers who should read the sheets.
-   *
-   * Not checked against the reader the way the key is checked against Google:
-   * the office computer is very often switched off at the moment somebody is
-   * sitting here setting this up, and refusing to save an address because
-   * nothing answered it right now would be wrong.
-   */
-  async function saveReader() {
-    setReaderBusy(true); setReaderNote('');
-    try {
-      await saveIntegrations({ readWith, localReaderUrl: readerUrl });
-      setReaderNote(
-        readersToTry(readWith, readerUrl, keyOnFile !== '').length === 0
-          ? `Saved. ${nothingToReadWith(readWith)}`
-          : 'Saved.',
-      );
-    } catch {
-      setReaderNote('That could not be saved.');
-    }
-    setReaderBusy(false);
-  }
 
   /**
    * Saves the key and immediately spends it on one cheap call, so the person
@@ -236,60 +202,6 @@ export default function Setup() {
 
         {keyNote && <div style={{ marginTop: 10, color: 'var(--accent)' }}>{keyNote}</div>}
         {keyProblem && <div className="err">{keyProblem}</div>}
-      </div>
-
-      <div className="card">
-        <h2>Who reads the sheets</h2>
-        <p className="muted small">
-          Google reads a sheet from anywhere there is signal, but a free key is
-          refused when their models are busy — which tends to be exactly when
-          schools are marking. This school can run its own reader on one office
-          computer instead: free, no quota, and nothing leaves the building —
-          but only while that computer is switched on.
-        </p>
-
-        {READ_WITH_LABELS.map((o) => (
-          <label key={o.value} className="choice">
-            <input
-              type="radio"
-              name="readWith"
-              value={o.value}
-              checked={readWith === o.value}
-              onChange={() => setReadWith(o.value)}
-            />
-            <span>
-              <strong>{o.label}</strong>
-              <br />
-              <span className="muted small">{o.hint}</span>
-            </span>
-          </label>
-        ))}
-
-        <label htmlFor="readerUrl" style={{ marginTop: 12 }}>
-          Address of this school&rsquo;s reader
-        </label>
-        <input
-          id="readerUrl"
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="http://localhost:8765"
-          value={readerUrl}
-          onChange={(e) => setReaderUrl(e.target.value)}
-        />
-        <p className="muted small">
-          On the computer running the reader this is{' '}
-          <code>http://localhost:8765</code>. From another machine or a phone
-          on the same wifi it is that computer&rsquo;s address instead, such as{' '}
-          <code>http://192.168.0.12:8765</code>.
-        </p>
-
-        <div className="btn-row" style={{ marginTop: 10 }}>
-          <button onClick={saveReader} disabled={readerBusy}>
-            {readerBusy ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-        {readerNote && <div style={{ marginTop: 10, color: 'var(--accent)' }}>{readerNote}</div>}
       </div>
     </div>
   );

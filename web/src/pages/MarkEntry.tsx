@@ -14,10 +14,12 @@ import {
 import {
   type MarkFill,
   type MarkPaste,
+  type PartsSheet,
   applyMarkPaste,
   parseMarkPaste,
+  parseMarkParts,
 } from '../data/batch';
-import { SHEET_ACCEPT, readSheetFile } from '../data/sheet';
+import { SHEET_ACCEPT, readSheetFile, readSheetGrid } from '../data/sheet';
 import { gradeForSubject } from '../data/grading';
 import {
   type Typed,
@@ -139,6 +141,10 @@ export default function MarkEntry() {
   }, [className, subjects]);
 
   /** A chosen file only fills the box; the boxes are still filled by hand. */
+  // A spreadsheet of parts, for a subject marked in CQ/MCQ/Prac.
+  const [partsRead, setPartsRead] = useState<PartsSheet | null>(null);
+  const [partsFilled, setPartsFilled] = useState(0);
+
   async function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -152,6 +158,48 @@ export default function MarkEntry() {
     } catch (err) {
       setProblem(err instanceof Error ? err.message : 'That file could not be read.');
     }
+  }
+
+  /**
+   * A spreadsheet with one column per part, into the boxes below.
+   *
+   * Filling is not saving: this changes what is on screen, and the ordinary
+   * Save marks button is still the only thing that writes anything.
+   */
+  async function pickPartsFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !subject) return;
+    setPartsRead(null); setProblem(''); setNote('');
+
+    let got;
+    try {
+      got = parseMarkParts(
+        await readSheetGrid(file),
+        (subject.components ?? []).map((c) => c.name),
+      );
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : 'That file could not be read.');
+      return;
+    }
+    setPartsRead(got);
+    if (got.problem) return;
+
+    const byRoll = new Map(sitters.map((s) => [s.rollNo, s.studentId]));
+    let filled = 0;
+    const next: Record<string, Typed> = {};
+    for (const row of got.rows) {
+      const id = row.rollNo === null ? undefined : byRoll.get(row.rollNo);
+      // A roll this section has not got is left alone rather than guessed at.
+      if (!id) continue;
+      const was = entries[id] ?? blankTyped();
+      const parts = { ...was.parts };
+      for (const [name, v] of Object.entries(row.parts)) parts[name] = String(v);
+      next[id] = { ...was, parts, absent: row.absent };
+      filled += 1;
+    }
+    setPartsFilled(filled);
+    if (filled > 0) setEntries((was) => ({ ...was, ...next }));
   }
 
   function fillFromTally() {
@@ -266,13 +314,47 @@ export default function MarkEntry() {
 
       {subject?.components?.length ? (
         <div className="card">
-          <h2>Paste a tally</h2>
-          <p style={{ color: 'var(--muted)', fontSize: 14, margin: 0 }}>
-            Not for this paper. {subject.subjectName} is marked in
-            {' '}{subject.components.map((c) => c.name).join(' and ')}, and a pasted tally
-            carries one number per student — there is no way to tell which part it is.
-            Type the parts below, or paste into a subject that is marked as one mark.
+          <h2>A spreadsheet of marks</h2>
+          <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 10px' }}>
+            {subject.subjectName} is marked in
+            {' '}{subject.components.map((c) => c.name).join(' and ')}, so a pasted
+            tally is no use — one number per student cannot say which part it is.
+            A spreadsheet can, because it has columns. Nothing is saved until you
+            press Save marks.
           </p>
+          <label htmlFor="pfile">An Excel file (.xlsx) or a CSV</label>
+          <input id="pfile" type="file" accept={SHEET_ACCEPT} onChange={pickPartsFile} />
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: '10px 0 0' }}>
+            One heading row, then a row per student:{' '}
+            <strong>Roll</strong>, {subject.components.map((c) => (
+              <strong key={c.name}>{c.name} </strong>
+            ))}
+            and a Total if you like — the Total is ignored here, because it is
+            worked out from the parts. Leave a box empty rather than writing 0
+            in it: a zero is a mark.
+          </p>
+          {partsRead && (
+            <>
+              {partsRead.problem && <div className="err">{partsRead.problem}</div>}
+              {!partsRead.problem && (
+                <p style={{ margin: '12px 0 0' }} className="good">
+                  <strong>
+                    {partsFilled} student{partsFilled === 1 ? '' : 's'} filled in
+                  </strong>{' '}
+                  <span style={{ color: 'var(--muted)' }}>
+                    from {Object.keys(partsRead.columns).join(' and ')}. Check
+                    them below, then press Save marks.
+                  </span>
+                </p>
+              )}
+              {partsRead.rows.filter((r: PartsSheet['rows'][number]) => r.problem)
+                .map((r: PartsSheet['rows'][number]) => (
+                <p key={r.line} className="warn" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Row {r.line}: {r.problem}
+                </p>
+              ))}
+            </>
+          )}
         </div>
       ) : (
       <div className="card">

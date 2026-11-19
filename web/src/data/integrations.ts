@@ -14,7 +14,6 @@
  */
 
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import type { ReadWith } from './reader';
 import { SCHOOL_ID, db } from '../firebase';
 
 export type Integrations = {
@@ -32,23 +31,11 @@ export type Integrations = {
    * why geminiModel is still kept and still used first.
    */
   geminiModels: string[];
-  /**
-   * Where this school's own reader is listening, if it has one. Empty means
-   * there is no local reader and Google is the only one.
-   */
-  localReaderUrl: string;
-  /** Which reader the school has chosen. See reader.ts. */
-  readWith: ReadWith;
 };
 
 export const NO_INTEGRATIONS: Integrations = {
   geminiApiKey: '', geminiModel: '', geminiModels: [],
-  localReaderUrl: '', readWith: 'auto',
 };
-
-/** Anything else stored is read as 'auto', which is the safe one: it tries both. */
-const asReadWith = (raw: unknown): ReadWith =>
-  (raw === 'local' || raw === 'gemini' ? raw : 'auto');
 
 const ref = () => doc(db, 'schools', SCHOOL_ID, 'integrations', 'gemini');
 
@@ -68,8 +55,6 @@ export async function getIntegrations(): Promise<Integrations> {
       geminiApiKey: String(d.geminiApiKey ?? ''),
       geminiModel: String(d.geminiModel ?? ''),
       geminiModels: Array.isArray(d.geminiModels) ? d.geminiModels.map(String) : [],
-      localReaderUrl: String(d.localReaderUrl ?? ''),
-      readWith: asReadWith(d.readWith),
     };
   } catch {
     return NO_INTEGRATIONS;
@@ -82,8 +67,6 @@ export async function saveIntegrations(patch: Partial<Integrations>): Promise<vo
   if (patch.geminiApiKey !== undefined) data.geminiApiKey = patch.geminiApiKey.trim();
   if (patch.geminiModel !== undefined) data.geminiModel = patch.geminiModel.trim();
   if (patch.geminiModels !== undefined) data.geminiModels = patch.geminiModels.map((m) => m.trim());
-  if (patch.localReaderUrl !== undefined) data.localReaderUrl = patch.localReaderUrl.trim();
-  if (patch.readWith !== undefined) data.readWith = patch.readWith;
   await setDoc(ref(), data, { merge: true });
 }
 

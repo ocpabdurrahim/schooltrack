@@ -324,6 +324,17 @@ export const SHEET_ACCEPT = '.csv,.txt,.tsv,.xlsx,.xlsm,text/csv,text/plain,'
  * anywhere near the register.
  */
 export async function readSheetFile(file: File): Promise<string> {
+  return gridToText(await readSheetGrid(file));
+}
+
+/**
+ * The same file, kept as COLUMNS.
+ *
+ * readSheetFile flattens a sheet to text, which is right for a tally of one
+ * mark per student but throws away the only thing that can say which part a
+ * number belongs to. A subject marked in CQ and MCQ needs the columns.
+ */
+export async function readSheetGrid(file: File): Promise<Grid> {
   if (file.name.toLowerCase().endsWith('.xls')) {
     throw new Error(
       'That is the old .xls format, which this cannot read. Open it in Excel and '
@@ -331,11 +342,9 @@ export async function readSheetFile(file: File): Promise<string> {
     );
   }
   const data = await file.arrayBuffer();
-  return gridToText(
-    // Judged by content as well as by name, because a name can be anything.
-    // "PK" is where every zip starts, and an .xlsx is a zip.
-    looksZipped(data) ? await readXlsx(data) : parseCsv(new TextDecoder().decode(data)),
-  );
+  // Judged by content as well as by name, because a name can be anything.
+  // "PK" is where every zip starts, and an .xlsx is a zip.
+  return looksZipped(data) ? readXlsx(data) : parseCsv(new TextDecoder().decode(data));
 }
 
 /** True if these bytes begin a zip, and so possibly an .xlsx. */
