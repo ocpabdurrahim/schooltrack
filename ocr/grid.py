@@ -199,7 +199,7 @@ def deskew(gray: np.ndarray) -> np.ndarray:
     )
 
 
-def find_cells(gray: np.ndarray) -> tuple[list[Cell], dict]:
+def find_cells(gray: np.ndarray, per_block: int | None = None) -> tuple[list[Cell], dict]:
     """
     Every box of the printed grid, with a note on what was found.
 
@@ -236,20 +236,38 @@ def find_cells(gray: np.ndarray) -> tuple[list[Cell], dict]:
     # The horizontal rules say where the table is: they are printed INSIDE it
     # and span it. Anything outside their reach is not part of the form.
     cols = _regularise(_within(cols, _extent(across, axis=0), w))
+
+    # The template is a REPAIR, not the normal path. When the rules were all
+    # found -- the columns divide evenly into blocks -- measurement is better
+    # than any assumption and is left alone. Laying a template over a grid
+    # that was already right is how a working sheet gets broken.
+    if per_block and _real_columns(cols) % per_block:
+        patched = columns_from_template(cols, per_block, w)
+        if _real_columns(patched) % per_block == 0:
+            cols = patched
     rows = _within(rows, _extent(down, axis=1), h)
 
     note = {"horizontal_rules": len(rows), "vertical_rules": len(cols),
             "width": w, "height": h}
 
+    # The thin strips BETWEEN blocks are not columns of the form. They are
+    # real -- two blocks' borders with a gap between them -- so their rules
+    # must be kept, or the columns either side move. But they hold nothing,
+    # and counting them as columns makes the blocks come out the wrong width.
+    widths = [b - a for a, b in zip(cols, cols[1:])]
+    typical = sorted(widths)[len(widths) // 2] if widths else 0
+    real = [i for i, wd in enumerate(widths) if wd >= max(10, typical * 0.45)]
+    note["separators_dropped"] = len(widths) - len(real)
+
     cells: list[Cell] = []
     for r in range(len(rows) - 1):
-        for c in range(len(cols) - 1):
-            y, yy = rows[r], rows[r + 1]
+        y, yy = rows[r], rows[r + 1]
+        if yy - y < 10:
+            continue
+        for new_c, c in enumerate(real):
             x, xx = cols[c], cols[c + 1]
-            # Slivers between two renderings of the same rule are not boxes.
-            if yy - y < 10 or xx - x < 10:
-                continue
-            cells.append(Cell(row=r, col=c, x=x, y=y, w=xx - x, h=yy - y))
+            cells.append(Cell(row=r, col=new_c, x=x, y=y, w=xx - x, h=yy - y))
+    note["columns"] = len(real)
     return cells, note
 
 
@@ -276,24 +294,114 @@ def _regularise(positions: list[int]) -> list[int]:
     if usual <= 0:
         return positions
 
+    # Only a few pixels counts as "the same rule twice". It used to be nearly
+    # half a column, which was badly wrong: the three blocks sit SIDE BY SIDE,
+    # so at each join there are two real rules about twenty pixels apart --
+    # the right edge of one block and the left edge of the next. Merging those
+    # destroyed a genuine column boundary and lost a block.
     kept = [positions[0]]
     for p in positions[1:]:
-        if p - kept[-1] < usual * 0.45:
-            kept[-1] = (kept[-1] + p) // 2   # the same rule, twice
+        if p - kept[-1] < max(4, usual * 0.15):
+            kept[-1] = (kept[-1] + p) // 2
         else:
             kept.append(p)
 
     filled = [kept[0]]
     for p in kept[1:]:
-        span = p - filled[-1]
+        start = filled[-1]          # fixed BEFORE extending: reading filled[-1]
+        span = p - start            # inside the loop walked off the page
         missing = int(round(span / usual)) - 1
         # Only fill a gap that is a whole number of columns wide. A gap that
         # is 1.4 columns is not a missing rule, it is simply a wider column.
         if 1 <= missing <= 6 and abs(span / usual - round(span / usual)) < 0.22:
             step = span / (missing + 1)
-            filled.extend(int(filled[-1] + step * (i + 1)) for i in range(missing))
+            filled.extend(int(start + step * (i + 1)) for i in range(missing))
         filled.append(p)
     return filled
+
+
+def _real_columns(cols: list[int]) -> int:
+    """How many of these columns are columns, rather than gaps between blocks."""
+    widths = [b - a for a, b in zip(cols, cols[1:])]
+    if not widths:
+        return 0
+    typical = sorted(widths)[len(widths) // 2]
+    return sum(1 for wd in widths if wd >= max(10, typical * 0.45))
+
+
+def columns_from_template(cols: list[int], per_block: int, width: int) -> list[int]:
+    """
+    Lays one well-read block over the ones that were not read.
+
+    The last thing detection cannot solve by trying harder. The three blocks
+    are identical — the form is one block printed three times — but they are
+    NOT equally visible: the block nobody wrote in has the faintest rules on
+    the page, because no ink ever crossed them. On a real sheet its inner
+    rules are simply not there to find, and a third of the children vanish.
+
+    So the best-read block becomes the template. Its width and its internal
+    proportions are measured, and the same shape is laid over the others at
+    the same pitch. A generated line that lands near a line that WAS found
+    gives way to it: measurement beats assumption wherever measurement
+    exists.
+
+    Returns the columns unchanged when no clean block can be found, because a
+    template taken from a bad reading is worse than no template.
+    """
+    if len(cols) < per_block + 1:
+        return cols
+
+    gaps = [b - a for a, b in zip(cols, cols[1:])]
+
+    # The template is the run of per_block consecutive gaps that are most
+    # nearly equal: a block whose every rule was found.
+    best, best_spread = None, None
+    for i in range(len(gaps) - per_block + 1):
+        run = gaps[i:i + per_block]
+        middle = sorted(run)[len(run) // 2]
+        if middle <= 0:
+            continue
+        spread = max(abs(g - middle) / middle for g in run)
+        if spread < 0.35 and (best_spread is None or spread < best_spread):
+            best, best_spread = i, spread
+    if best is None:
+        return cols
+
+    start = cols[best]
+    end = cols[best + per_block]
+    block_width = end - start
+    shape = [(cols[best + k] - start) / block_width for k in range(per_block + 1)]
+
+    # The pitch from one block to the next: the blocks sit side by side with a
+    # thin separator, so it is the block's own width plus that gap.
+    # Is there a gap BETWEEN the blocks, or do they sit flush?
+    #
+    # Judged against one COLUMN, not against the whole block. Against the
+    # block, the first column of the next block looks like a separator -- it
+    # is far narrower than a block -- and the template then lays every
+    # following block a column to the left of where it belongs.
+    typical_column = block_width / per_block
+    after = gaps[best + per_block: best + per_block + 1]
+    separator = after[0] if after and after[0] < typical_column * 0.5 else 0
+    pitch = block_width + separator
+    if pitch <= 0:
+        return cols
+
+    how_many = max(1, int(round((width - start) / pitch)))
+    out: list[int] = []
+    for b in range(how_many):
+        base = start + b * pitch
+        if base > width:
+            break
+        for k, frac in enumerate(shape):
+            if b > 0 and k == 0 and separator:
+                continue  # the separator's own line, added by the block before
+            want = int(round(base + frac * block_width))
+            if want > width:
+                break
+            near = min(cols, key=lambda c: abs(c - want))
+            out.append(near if abs(near - want) <= max(6, block_width * 0.03) else want)
+    return sorted(set(out))
 
 
 def _extent(mask: np.ndarray, axis: int) -> tuple[int, int] | None:

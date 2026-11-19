@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-from digits import read_number
+from digits import is_blank, read_number
 from grid import Cell, find_cells, load_gray
 
 
@@ -41,6 +41,7 @@ class SheetRead:
     rows: list[dict] = field(default_factory=list)
     note: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    held: int = 0
 
 
 def _by_row(cells: list[Cell]) -> dict[int, list[Cell]]:
@@ -66,7 +67,9 @@ def read_sheet(
     result.
     """
     gray = load_gray(photo)
-    cells, note = find_cells(gray)
+    # The reader knows the form's shape -- Roll, the parts, Total -- and the
+    # grid finder can use it to lay a well-read block over a faint one.
+    cells, note = find_cells(gray, per_block=1 + len(component_names) + 1)
     if not cells:
         raise CannotRead(
             f"No printed grid was found on {photo.name}. Is it a photograph of "
@@ -144,7 +147,43 @@ def read_sheet(
 
             if all(v is None for v in parts.values()):
                 continue  # nothing written on this row of this block
-            result.rows.append({"roll": roll, "parts": parts, "unsure": unsure})
+
+            # THE TEACHER'S OWN TOTAL, used as a checksum and nothing else.
+            #
+            # The form has a Total column, so every filled row carries its own
+            # answer. The parts are read independently of it, which makes the
+            # two a genuine check: when 28 is misread as 8 the sum stops
+            # matching what the teacher wrote, and the row can be held instead
+            # of quietly recording a child's 38 as 18.
+            #
+            # A held row is BLANK in the spreadsheet for somebody to fill in.
+            # That is the right way round: a blank costs a moment, and a
+            # plausible wrong mark costs a grade and is invisible.
+            total_cell = line[base + per_block - 1].crop(gray)
+            written, _ = read_number(total_cell)
+            got = [v for v in parts.values() if v is not None]
+            held = ""
+
+            # "No total was written" and "the total could not be read" are
+            # different things and must not be treated alike. An EMPTY total
+            # box beside some marks means those marks are probably not marks
+            # -- a smudge, a crease, a stray tick -- and the row is held. A
+            # total that is there but unreadable simply means there is no
+            # check available, which is no reason to throw the row away.
+            if written is None and is_blank(total_cell):
+                held = "no total written beside it"
+            elif written is not None and len(got) == len(component_names)                     and sum(got) != written:
+                held = f"the parts come to {sum(got)}, but the total written is {written}"
+
+            if held:
+                result.held += 1
+                parts = {name: None for name in parts}
+                unsure = True
+
+            result.rows.append({
+                "roll": roll, "parts": parts, "unsure": unsure,
+                "written_total": written, "held": held,
+            })
 
     if debug_dir is not None:
         _write_debug(photo, gray, cells, debug_dir)

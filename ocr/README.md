@@ -56,48 +56,50 @@ Rebuild it after any change to `workbook.py`:
 
 ## Where it actually stands
 
-Run `selftest.py` for a number rather than an opinion, and score a real
-photograph the same way. Three numbers, not equally important:
+`selftest.py` prints a number rather than an opinion, and a real photograph is
+scored the same way. Three numbers, not equally important:
 
     correct   what it got right
     blank     what it would not commit to -- SAFE, a person fills these in
     WRONG     what it got wrong and did not know -- the only dangerous one
 
     clean generated sheet    92% correct,  2% wrong
-    real photographed sheet  45% correct,  7% wrong
+    real photographed sheet  62% correct,  2% wrong
 
-Not good enough to trust yet. But the reason is worth writing down, because
-it is not the one everybody assumes.
+The real sheet was 0% when its photograph first arrived. What closed the gap
+was geometry and arithmetic, not a better recogniser:
 
-## It was never the handwriting
+  * **find the page first.** A photograph contains the desk, the pile
+    underneath and a shadow, and those are long, straight and dark -- the
+    whole definition of a printed rule. Two down the left margin shifted
+    every column by two, so the tablecloth was read as Roll and Roll as CQ.
+    Cropping to the paper: 0% -> 33%.
+  * **blocks sit side by side**, so at each join there are TWO rules twenty
+    pixels apart. Merging them as a double-sighting destroyed a real column
+    boundary and lost a block.
+  * **the empty block has the faintest rules on the page** -- no ink ever
+    crossed them -- and no threshold finds what is not there. The three
+    blocks are identical, so the best-read one is laid over the others at the
+    same pitch. Only ever as a repair: a template over a grid that was
+    already right is how a working sheet gets broken.
+  * **letters are a refusal, not something to strip.** A handwritten 6 comes
+    back as "b", and stripping non-digits turned "5b" into a confident 5 --
+    a child's 56 recorded as 5. Every wrong answer came through that one
+    line.
+  * **the teacher's Total is a checksum.** The parts are read independently
+    of it, so when 28 is misread as 8 the sum stops matching and the row is
+    held instead of quietly recording 18.
 
-The obvious theory was that a printed-text recogniser cannot read a
-teacher's handwriting, and the obvious fix was a handwriting model. Looking
-at the actual cell crops killed that theory in one glance: the marks were
-perfectly legible, and the two columns to the left of them were the DESK.
+## What is still wrong
 
-The photograph contains a desk, the pile of paper underneath, and a shadow.
-Those are long, straight and dark, which is the whole definition of a printed
-rule to anything looking for one. Two of them down the left margin became two
-extra columns, so every column shifted by two: the tablecloth was read as the
-Roll column, Roll as CQ, CQ as MCQ. The grid looked immaculate and the marks
-came out as nonsense.
+  * 36% of boxes come back blank on the real sheet, which is safe but is
+    still a third of the typing left to do;
+  * seven rows that are blank on the paper came back with something on them;
+  * block 3's roll numbers do not read, so its rows rely on the per-cell
+    reading rather than the printed run.
 
-Cropping to the page first -- find the big bright thing, cut to it -- took
-the real sheet from **0% to 33%** without touching the recogniser.
-Regularising the column grid took it to **45%**.
-
-So the recogniser is reading handwriting. It is the geometry that is still
-losing marks, and that is where the remaining work is:
-
-  * the EMPTY block's rules are the faintest on the page (nothing was written
-    to darken them) and are still being missed, so a third of the sheet is
-    dropped;
-  * the Roll/CQ boundary lands slightly inside the digits, so 56 reads as 5
-    and 34 as 4 -- always that one column.
-
-A handwriting model may still be worth having afterwards. It is not what is
-costing the marks today.
+A handwriting model is the obvious next thing to try, and it is now a fair
+test: the boxes being handed to the recogniser are the right boxes.
 
 ## Samples
 

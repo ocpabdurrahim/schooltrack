@@ -92,11 +92,21 @@ def read_number(cell: np.ndarray, maximum: int | None = None) -> tuple[int | Non
         return None, 0.0
 
     text, score = str(result[0][0]), float(result[0][1])
-    # The engine reads text; a mark cell holds a number. Letters here mean it
-    # has read the ruling, or the teacher's tick, and not a mark.
-    digits = re.sub(r"\D", "", text)
-    if digits == "" or len(digits) > 3:
+
+    # Letters are a REFUSAL, not something to strip out.
+    #
+    # This was the worst bug in the reader and it looked like the opposite of
+    # a bug. Stripping non-digits turned a partial misread into a confident
+    # wrong number: a handwritten 6 comes back as "b", so "5b" quietly became
+    # 5 and a child's 56 was recorded as 5. Every wrong answer on the real
+    # sheet came through here.
+    #
+    # A cell holding something that is not simply a number is a cell this
+    # cannot read, and the honest answer is to leave it blank for a person.
+    cleaned = text.strip().strip(r".,:;|/\-_ ")
+    if not re.fullmatch(r"\d{1,3}", cleaned):
         return None, score
+    digits = cleaned
     if score < CONFIDENT:
         return None, score
 

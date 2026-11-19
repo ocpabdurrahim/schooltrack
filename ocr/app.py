@@ -181,7 +181,7 @@ class App:
             self.progress.configure(maximum=max(1, len(found)))
 
             rows: list[dict] = []
-            unread = 0
+            unread = held = 0
             failed: list[str] = []
             debug_dir = folder / "what-it-saw" if self.debug.get() else None
 
@@ -203,14 +203,23 @@ class App:
                 )
                 unread += blanks
                 rows.extend(got.rows)
+                held += got.held
                 for w in got.warnings:
                     self.messages.put(("say", f"    note: {w}"))
                 self.messages.put((
                     "say",
-                    f"    {len(got.rows)} row(s), {blanks} box(es) it could not "
-                    f"read  ·  grid {got.note.get('columns')} columns"
+                    f"    {len(got.rows)} row(s), {blanks} box(es) left blank"
+                    f"  ·  grid {got.note.get('columns')} columns"
                     f" × {got.note.get('horizontal_rules')} rules",
                 ))
+                for r in got.rows:
+                    if r.get("held"):
+                        where = r.get("roll")
+                        self.messages.put((
+                            "say",
+                            f"      roll {where if where is not None else '?'}: "
+                            f"held — {r['held']}",
+                        ))
                 self.messages.put(("step", i))
 
             self.messages.put(("done", {
@@ -247,6 +256,11 @@ class App:
             self.say(f"    {outcome['unread']} box(es) left EMPTY because it was "
                      "not sure. They are blank in the spreadsheet on purpose — "
                      "a zero would be a failing mark nobody wrote.")
+        if outcome.get("held"):
+            self.say(f"    {outcome['held']} row(s) held back because the parts "
+                     "did not add up to the total the teacher wrote, or there "
+                     "was no total beside them. Those are the rows worth "
+                     "checking against the paper first.")
         if outcome["failed"]:
             self.say(f"    {len(outcome['failed'])} sheet(s) could not be read at "
                      "all: " + ", ".join(outcome["failed"]))
