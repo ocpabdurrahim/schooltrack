@@ -1,5 +1,7 @@
 package io.github.ocpabdurrahim.schooltrack.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,40 +41,47 @@ import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.Component
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
+import io.github.ocpabdurrahim.schooltrack.data.GROUPS
+import io.github.ocpabdurrahim.schooltrack.data.MARK_HEADINGS
 import io.github.ocpabdurrahim.schooltrack.data.MarkFill
 import io.github.ocpabdurrahim.schooltrack.data.MarkPaste
+import io.github.ocpabdurrahim.schooltrack.data.PartsSheet
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
 import io.github.ocpabdurrahim.schooltrack.data.ResultRow
 import io.github.ocpabdurrahim.schooltrack.data.RollEntry
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
-import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.Subject
+import io.github.ocpabdurrahim.schooltrack.data.TemplateStudent
+import io.github.ocpabdurrahim.schooltrack.data.Typed
+import io.github.ocpabdurrahim.schooltrack.data.ZipEntry
+import io.github.ocpabdurrahim.schooltrack.data.asSitter
 import io.github.ocpabdurrahim.schooltrack.data.enteredSoFar
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
+import io.github.ocpabdurrahim.schooltrack.data.gradeFor
 import io.github.ocpabdurrahim.schooltrack.data.gradeForSubject
 import io.github.ocpabdurrahim.schooltrack.data.meritOrder
-import io.github.ocpabdurrahim.schooltrack.data.MARK_HEADINGS
-import io.github.ocpabdurrahim.schooltrack.data.PartsSheet
 import io.github.ocpabdurrahim.schooltrack.data.parseMarkParts
-import io.github.ocpabdurrahim.schooltrack.data.singleMark
 import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
+import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
+import io.github.ocpabdurrahim.schooltrack.data.safeFileName
+import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
+import io.github.ocpabdurrahim.schooltrack.data.sheetFor
+import io.github.ocpabdurrahim.schooltrack.data.shortName
+import io.github.ocpabdurrahim.schooltrack.data.singleMark
+import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
 import io.github.ocpabdurrahim.schooltrack.data.subjectStats
+import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
+import io.github.ocpabdurrahim.schooltrack.data.templateFileName
+import io.github.ocpabdurrahim.schooltrack.data.templateRows
 import io.github.ocpabdurrahim.schooltrack.data.totalMarks
 import io.github.ocpabdurrahim.schooltrack.data.typedFrom
-import io.github.ocpabdurrahim.schooltrack.data.gradeFor
-import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
-import io.github.ocpabdurrahim.schooltrack.data.sheetFor
-import io.github.ocpabdurrahim.schooltrack.data.GROUPS
-import io.github.ocpabdurrahim.schooltrack.data.RELIGIONS
-import io.github.ocpabdurrahim.schooltrack.data.asSitter
-import io.github.ocpabdurrahim.schooltrack.data.shortName
-import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
-import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
-import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
+import io.github.ocpabdurrahim.schooltrack.data.xlsxOf
+import io.github.ocpabdurrahim.schooltrack.data.zip
 import kotlinx.coroutines.launch
 
 // ===========================================================================
@@ -519,6 +529,40 @@ fun MarkEntryScreen(
         students.filter { sitsSubject(sub, it.asSitter()) }
     } ?: students
 
+    // ---- the blank forms ------------------------------------------------
+    //
+    // Handed out from here rather than from somebody's old copy, so the
+    // columns are always the ones this subject is actually marked in and the
+    // rolls are always this section's. A form that is a year out of date is
+    // what makes an upload land on the wrong child.
+    val context = LocalContext.current
+    var pending by remember { mutableStateOf<Pair<String, ByteArray>?>(null) }
+    var formNote by remember { mutableStateOf("") }
+
+    val saveForm = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val waiting = pending
+        pending = null
+        if (uri == null || waiting == null) return@rememberLauncherForActivityResult
+        formNote = try {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(waiting.second) }
+                ?: throw IllegalStateException("could not write there")
+            "Saved ${waiting.first}"
+        } catch (_: Exception) {
+            "That file could not be written."
+        }
+    }
+
+    fun asTemplateStudents(list: List<StudentDetail>) =
+        list.map { TemplateStudent(it.rollNo, it.fullName, it.groupName) }
+
+    fun offer(name: String, bytes: ByteArray) {
+        formNote = ""
+        pending = name to bytes
+        saveForm.launch(name)
+    }
+
     /**
      * A spreadsheet with one column per part, into the boxes below.
      *
@@ -665,6 +709,57 @@ fun MarkEntryScreen(
                     color = Muted,
                     modifier = Modifier.padding(top = 6.dp),
                 )
+                val classLabel = classes.firstOrNull { it.classId == classId }
+                    ?.displayName ?: className
+
+                OutlinedButton(
+                    enabled = subject != null && sitters.isNotEmpty(),
+                    onClick = {
+                        val sub = subject ?: return@OutlinedButton
+                        offer(
+                            safeFileName(templateFileName(classLabel, sub.subjectName)),
+                            xlsxOf(templateRows(sub, asTemplateStudents(sitters), classLabel)),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                ) { Text("Blank form for " + (subject?.subjectName ?: "this subject")) }
+
+                OutlinedButton(
+                    enabled = classSubjects.isNotEmpty() && students.isNotEmpty(),
+                    onClick = {
+                        // Each sheet carries only the students who SIT that
+                        // paper — the same rule the boxes below use.
+                        val files = classSubjects.map { sub ->
+                            ZipEntry(
+                                safeFileName(templateFileName(classLabel, sub.subjectName)),
+                                xlsxOf(
+                                    templateRows(
+                                        sub,
+                                        asTemplateStudents(
+                                            students.filter { sitsSubject(sub, it.asSitter()) },
+                                        ),
+                                        classLabel,
+                                    ),
+                                ),
+                            )
+                        }
+                        offer(
+                            safeFileName("$classLabel — blank mark sheets") + ".zip",
+                            zip(files),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                ) { Text("Every subject in $classLabel") }
+
+                if (formNote.isNotBlank()) {
+                    Text(
+                        formNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Green,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+
                 OutlinedButton(
                     onClick = pickPartsFile,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
