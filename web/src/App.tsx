@@ -28,6 +28,7 @@ import Payslip from './pages/Payslip';
 import Receipt from './pages/Receipt';
 import Receipts from './pages/Receipts';
 import ReportCard from './pages/ReportCard';
+import ResetSchool from './pages/ResetSchool';
 import Results from './pages/Results';
 import Routine from './pages/Routine';
 import SalaryRegister from './pages/SalaryRegister';
@@ -139,6 +140,7 @@ export default function App() {
         <Route path="/staff" element={adminOnly(<Staff />)} />
         <Route path="/users" element={adminOnly(<Users />)} />
         <Route path="/setup" element={adminOnly(<Setup />)} />
+        <Route path="/setup/reset" element={adminOnly(<ResetSchool />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

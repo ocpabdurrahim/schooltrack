@@ -553,6 +553,73 @@ describe('the calendar and exam operations', () => {
     await assertSucceeds(deleteDoc(doc(admin(), p('classes', '62'))));
   });
 
+  // ---------------------------------------------------------------------
+  // Emptying the school.
+  //
+  // Deletes are opened only while settings/reset says armed and is less than
+  // fifteen minutes old. These tests are the whole safety story, so they pin
+  // both halves: that it works armed, and that it does NOT work otherwise.
+
+  const arm = async (minutesAgo = 0) => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), p('settings', 'reset')), {
+        armed: true,
+        armedAt: new Date(Date.now() - minutesAgo * 60_000),
+        updatedAt: new Date(),
+      });
+    });
+  };
+  const disarm = async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await deleteDoc(doc(c.firestore(), p('settings', 'reset')));
+    });
+  };
+
+  it('a receipt CANNOT be deleted when no reset is armed', async () => {
+    await disarm();
+    await assertFails(deleteDoc(doc(admin(), p('payments', 'RCPT-000001'))));
+  });
+
+  it('a receipt CAN be deleted while a reset is armed — and only then', async () => {
+    await arm();
+    await assertSucceeds(deleteDoc(doc(admin(), p('payments', 'RCPT-000001'))));
+    await disarm();
+  });
+
+  it('an armed reset goes stale after fifteen minutes', async () => {
+    await arm(20);
+    await assertFails(deleteDoc(doc(admin(), p('students', '76'))));
+    await disarm();
+  });
+
+  it('arming does not let a TEACHER or the OFFICE delete', async () => {
+    await arm();
+    await assertFails(deleteDoc(doc(teacher(), p('results', 'HALF_YEARLY-2026__76__BANGLA'))));
+    await assertFails(deleteDoc(doc(office(), p('students', '76'))));
+    await disarm();
+  });
+
+  it('only ADMIN may arm a reset', async () => {
+    await assertFails(
+      setDoc(doc(teacher(), p('settings', 'reset')),
+        { armed: true, armedAt: new Date(), updatedAt: serverTimestamp() }),
+    );
+    await assertSucceeds(
+      setDoc(doc(admin(), p('settings', 'reset')),
+        { armed: true, armedAt: new Date(), updatedAt: serverTimestamp() }),
+    );
+    await disarm();
+  });
+
+  it('an armed reset clears the records, not the way back in', async () => {
+    await arm();
+    // members is what grants access at all: deleting it would lock the
+    // school out of its own app with no way back except a service account.
+    await assertFails(deleteDoc(doc(admin(), p('members', 'admin@school.test'))));
+    await assertSucceeds(deleteDoc(doc(admin(), p('students', '76'))));
+    await disarm();
+  });
+
   it('only ADMIN may set the routine, which lives on the exam', async () => {
     const routine = [{
       classId: '61', subjectId: 'BANGLA', subjectName: 'Bangla',

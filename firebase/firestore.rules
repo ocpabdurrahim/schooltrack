@@ -89,6 +89,39 @@ service cloud.firestore {
       return request.resource.data.updatedAt == request.time;
     }
 
+    // ---------- emptying the school ---------------------------------------
+    //
+    // Deleting is impossible almost everywhere here, and on purpose: every
+    // `allow write: ... && stamped()` turns a delete away because a delete
+    // carries no request.resource to stamp, and payments says outright that a
+    // receipt is never deleted.
+    //
+    // "Start a new school" in Setup needs those opened — but NOT permanently,
+    // which was the whole objection to putting it in the app. An ADMIN arms
+    // the reset, which writes settings/reset, and deletes are allowed only
+    // while that document says armed AND is less than fifteen minutes old.
+    //
+    // Outside that window the database is exactly as locked as it was before
+    // this feature existed. A stray session, a bug in some future screen or a
+    // stolen token cannot delete a receipt, because arming is itself a
+    // deliberate write that leaves a record of who did it and when.
+    //
+    // One get(), on one document, for the whole batch: rules count repeated
+    // access to the same document once, so a 450-delete batch costs two
+    // document reads in total — this and the member lookup.
+    function resetArmed(s) {
+      let r = get(/databases/$(database)/documents/schools/$(s)/settings/reset);
+      let armedAt = r.data.get('armedAt', request.time - duration.value(1, 'h'));
+      return r != null
+             && r.data.get('armed', false) == true
+             && request.time < armedAt + duration.value(15, 'm');
+    }
+
+    /** May this request delete, as part of an armed reset? ADMIN only. */
+    function clearing(s) {
+      return isAdmin(s) && resetArmed(s);
+    }
+
     // ======================================================================
     //  SCHOOL
     // ======================================================================
@@ -109,7 +142,8 @@ service cloud.firestore {
         // a guardian may read their OWN doc and nothing else in here, so they
         // can see which children they are linked to -- but never edit it
         allow read: if isAdmin(s) || isAppAdmin() || (signedIn() && email == myEmail());
-        allow write: if (isAdmin(s) || isAppAdmin()) && stamped();
+        allow create, update: if (isAdmin(s) || isAppAdmin()) && stamped();
+        allow delete: if clearing(s);
       }
 
       // ---- settings --------------------------------------------------------
@@ -163,7 +197,8 @@ service cloud.firestore {
 
       match /students/{studentId} {
         allow read: if isStaff(s) || guardianSees(s, studentId);
-        allow write: if hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+        allow create, update: if hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+        allow delete: if clearing(s);
       }
 
       /**
@@ -189,12 +224,14 @@ service cloud.firestore {
 
       match /staff/{staffId} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /subjects/{subjectId} {
         allow read: if isStaff(s) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       // A holiday is the one record here that may be DELETED: a day marked by
@@ -225,7 +262,8 @@ service cloud.firestore {
       // "not taken yet" stays distinguishable from "everyone absent"
       match /attendance/{date} {
         allow read: if isStaff(s) || isGuardian(s);
-        allow write: if hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+        allow create, update: if hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /attendanceMarks/{markId} {
@@ -255,17 +293,20 @@ service cloud.firestore {
       // Per-student discounts stay in /discounts, which no guardian can read.
       match /feeHeads/{id} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /feeStructure/{id} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS', 'OFFICE']) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /discounts/{id} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /payments/{paymentId} {
@@ -282,9 +323,14 @@ service cloud.firestore {
           && request.resource.data.lines.size() > 0
           && request.resource.data.createdBy == myEmail();
 
-        // A receipt is never edited or deleted. Money that was taken wrongly is
-        // corrected with another document, the way the paper ledger does it.
-        allow update, delete: if false;
+        // A receipt is never edited, and never deleted except when the whole
+        // school is being emptied to start another one. Money that was taken
+        // wrongly is corrected with another document, the way the paper ledger
+        // does it — and clearing(s) is not a way around that: it needs an
+        // ADMIN to have armed a reset in the last fifteen minutes, which is a
+        // deliberate, recorded act, not a stray click on a receipt.
+        allow update: if false;
+        allow delete: if clearing(s);
       }
 
       match /counters/{counterId} {
@@ -292,53 +338,62 @@ service cloud.firestore {
         // student and staff numbers
         allow read: if isStaff(s);
         // only ever forwards, and only by one
-        allow write: if isStaff(s)
+        allow create, update: if isStaff(s)
           && request.resource.data.next is int
           && (!exists(/databases/$(database)/documents/schools/$(s)/counters/$(counterId))
               || request.resource.data.next == resource.data.next + 1);
+        // Cleared with the rest, so a new school's numbering starts at 1.
+        allow delete: if clearing(s);
       }
 
       // ---- expenses --------------------------------------------------------
 
       match /expenseHeads/{id} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /expenses/{id} {
         allow read: if hasRole(s, ['ADMIN', 'ACCOUNTS']);
-        allow write: if hasRole(s, ['ADMIN', 'ACCOUNTS']) && stamped();
+        allow create, update: if hasRole(s, ['ADMIN', 'ACCOUNTS']) && stamped();
+        allow delete: if clearing(s);
       }
 
       // ---- exams and results -----------------------------------------------
 
       match /exams/{examId} {
         allow read: if isStaff(s) || isGuardian(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /results/{resultId} {
         allow read: if isStaff(s) || guardianSees(s, resource.data.studentId);
-        allow write: if hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+        allow create, update: if hasRole(s, ['ADMIN', 'TEACHER']) && stamped();
+        allow delete: if clearing(s);
       }
 
       // ---- payroll: never visible to anyone but ADMIN ----------------------
 
       match /salaryStructure/{id} {
         allow read: if isAdmin(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       match /salaryPayments/{id} {
         allow read: if isAdmin(s);
-        allow write: if isAdmin(s) && stamped();
+        allow create, update: if isAdmin(s) && stamped();
+        allow delete: if clearing(s);
       }
 
       // ---- issued documents -------------------------------------------------
 
       match /documents/{id} {
         allow read: if hasRole(s, ['ADMIN', 'OFFICE']);
-        allow write: if hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+        allow create, update: if hasRole(s, ['ADMIN', 'OFFICE']) && stamped();
+        allow delete: if clearing(s);
       }
 
       // ---- generated reports -------------------------------------------------

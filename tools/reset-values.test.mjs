@@ -47,3 +47,26 @@ test('a type it does not know STOPS the backup, naming the field', () => {
   // Better than writing something unreadable into the file the wipe trusts.
   assert.throws(() => toJson({ when: new Date() }), /when is a Date/);
 });
+
+test('reads what the APP writes, so a backup taken in Setup restores here', () => {
+  // Copied from a real download by web/src/pages/ResetSchool.tsx. The two
+  // encoders are written separately — one in TypeScript for the browser, one
+  // here for node — and this is what stops them drifting. If it ever fails,
+  // a backup taken in the app no longer restores with --restore.
+  const fromTheApp = {
+    id: '76',
+    data: {
+      fullName: 'Ayesha Rahman',
+      rollNo: 1,
+      classId: '61',
+      status: 'A',
+      updatedAt: { __type: 'timestamp', iso: '2026-11-20T02:54:29.414Z', nanos: 414000000 },
+    },
+  };
+  const back = fromJson(fromTheApp.data);
+  assert.ok(back.updatedAt instanceof Timestamp);
+  assert.equal(back.updatedAt.toDate().toISOString(), '2026-11-20T02:54:29.414Z');
+  assert.equal(back.updatedAt.nanoseconds, 414000000);
+  assert.equal(back.fullName, 'Ayesha Rahman');
+  assert.equal(back.rollNo, 1);
+});

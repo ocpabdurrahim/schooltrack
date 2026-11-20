@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   DEFAULT_SETTINGS,
   type SchoolSettings,
@@ -202,6 +203,26 @@ export default function Setup() {
 
         {keyNote && <div style={{ marginTop: 10, color: 'var(--accent)' }}>{keyNote}</div>}
         {keyProblem && <div className="err">{keyProblem}</div>}
+      </div>
+
+      {/*
+        Last on the page, and a link rather than a button that does it: the
+        screen it opens counts what would go, insists on a backup, and makes
+        the school's name be typed. Nothing here deletes anything.
+      */}
+      <div className="card">
+        <h1>Start a new school</h1>
+        <h2>Empties this school so another can be set up in it</h2>
+        <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 0 }}>
+          Clears the students, marks, attendance and money — everything, or just the
+          records, keeping the classes and subjects. Your sign-in, the school&rsquo;s
+          name and the Gemini key are kept either way, so you are not locked out.
+          The next screen counts what would go and takes a backup first;{' '}
+          <strong>nothing is deleted until you type the school&rsquo;s name</strong>.
+        </p>
+        <Link to="/setup/reset">
+          <button className="ghost">Start a new school…</button>
+        </Link>
       </div>
     </div>
   );

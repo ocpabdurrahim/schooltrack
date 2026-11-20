@@ -80,3 +80,9 @@ ocr/_selftest-sheet.png
 # Fixtures that belong in git live under web/src/data/fixtures/.
 /*.xlsx
 /*.csv
+
+# Backups taken by Setup -> Start a new school. They are the WHOLE school:
+# every child's name, their guardians, marks and money. THIS REPO IS PUBLIC.
+# The browser puts downloads here when the app is run from this folder.
+Backup/
+schooltrack-backup-*.json

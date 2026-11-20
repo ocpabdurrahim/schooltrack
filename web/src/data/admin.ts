@@ -7,12 +7,14 @@
  * hard delete would leave the history pointing at nothing.
  */
 import {
+  Timestamp,
   collection,
   deleteDoc,
   doc,
   getCountFromServer,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   runTransaction,
@@ -21,7 +23,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { SCHOOL_ID, db } from '../firebase';
+import { SCHOOL_ID, auth, db } from '../firebase';
 import type { StudentDetail } from './people';
 import type { ClassUse } from './classuse';
 import type { Move } from './promotion';
@@ -163,6 +165,112 @@ export async function classUse(classId: string): Promise<ClassUse> {
  */
 export async function removeClass(classId: string) {
   await deleteDoc(doc(school(), 'classes', classId));
+}
+
+// ---------------------------------------------------------------------------
+// emptying the school — see reset.ts for what is cleared and why
+
+/** How many documents each collection holds, counted rather than fetched. */
+export async function countCollections(names: readonly string[]): Promise<Record<string, number>> {
+  const counts = await Promise.all(names.map(async (n) => {
+    try {
+      return [n, (await getCountFromServer(collection(school(), n))).data().count] as const;
+    } catch {
+      // A collection this account may not read counts as unknown rather than
+      // failing the whole screen. An ADMIN can read all of them.
+      return [n, 0] as const;
+    }
+  }));
+  return Object.fromEntries(counts);
+}
+
+/**
+ * Opens the fifteen-minute window in which the rules allow deletes.
+ *
+ * Arming is a deliberate, recorded write — that is the point of it. Outside
+ * the window nothing in this database can be deleted that could not be
+ * deleted before the reset feature existed.
+ */
+export async function armReset() {
+  await setDoc(doc(school(), 'settings', 'reset'), {
+    armed: true,
+    armedAt: serverTimestamp(),
+    armedBy: auth.currentUser?.email ?? '',
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Shuts the window again, which the reset does as soon as it is finished. */
+export async function disarmReset() {
+  await setDoc(doc(school(), 'settings', 'reset'), {
+    armed: false,
+    armedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Firestore values as JSON, tagged so the types JSON cannot hold survive.
+ *
+ * THE SAME SHAPE tools/reset-values.mjs writes, so a backup downloaded here
+ * can be put back with `node reset-school.mjs --restore=<file>`. A timestamp
+ * written straight to JSON comes back as an ordinary map, and a restore would
+ * look perfect while every "last changed" was quietly wrong.
+ */
+function toJson(value: unknown): unknown {
+  if (value instanceof Timestamp) {
+    return { __type: 'timestamp', iso: value.toDate().toISOString(), nanos: value.nanoseconds };
+  }
+  if (Array.isArray(value)) return value.map(toJson);
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJson(v)]));
+  }
+  return value;
+}
+
+/**
+ * The whole school as a file, before anything is deleted.
+ *
+ * EVERY collection, not only the ones going: a backup that restores a school
+ * to a state it was never in is not a backup.
+ */
+export async function backupEverything(names: readonly string[]) {
+  const collections: Record<string, { id: string; data: unknown }[]> = {};
+  for (const name of names) {
+    const snap = await getDocs(collection(school(), name));
+    collections[name] = snap.docs.map((d) => ({ id: d.id, data: toJson(d.data()) }));
+  }
+  return {
+    school: SCHOOL_ID,
+    projectId: db.app.options.projectId ?? '',
+    takenAt: new Date().toISOString(),
+    collections,
+  };
+}
+
+/**
+ * Deletes every document in the named collections, in batches.
+ *
+ * Nothing cascades and nothing is clever: it reads what is there and removes
+ * it. `onProgress` is called per collection so a reset of four hundred
+ * documents does not look like a frozen screen.
+ */
+export async function clearCollections(
+  names: readonly string[],
+  onProgress: (name: string, removed: number) => void,
+) {
+  for (const name of names) {
+    let removed = 0;
+    for (;;) {
+      const snap = await getDocs(query(collection(school(), name), limit(400)));
+      if (snap.empty) break;
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      removed += snap.size;
+    }
+    onProgress(name, removed);
+  }
 }
 
 // ---------------------------------------------------------------------------
