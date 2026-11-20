@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 
 enum class Screen {
     Home, Register, Scan, Students, Student, Children,
-    Setup, Classes, StaffAdmin, Users, StudentEdit, StudentsBatch,
+    Setup, ResetSchool, Classes, StaffAdmin, Users, StudentEdit, StudentsBatch,
     ExamSetup, MarkEntry, QuickMarks, ScanMarks, Results, ReportCard, Promote,
     Routine, SeatPlan, AdmitCards,
     MonthlySheet, LowAttendance, HolidayCalendar, StudentAttendance, StudentResults, StudentFees,
@@ -285,7 +285,13 @@ fun SchoolTrackApp(repo: AccessRepository = remember { AccessRepository() }) {
                     FeeSetupScreen(onBack = { back() })
 
                 screen == Screen.Setup && current.isAdmin ->
-                    SchoolSetupScreen(onBack = { back() })
+                    SchoolSetupScreen(
+                        onBack = { back() },
+                        onReset = { go(Screen.ResetSchool) },
+                    )
+
+                screen == Screen.ResetSchool && current.isAdmin ->
+                    ResetSchoolScreen(onBack = { back() })
 
                 screen == Screen.Classes && current.isAdmin ->
                     ClassesScreen(onBack = { back() })

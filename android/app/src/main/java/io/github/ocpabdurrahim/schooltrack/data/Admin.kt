@@ -1,5 +1,6 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -252,6 +253,113 @@ class AdminRepository(
      */
     suspend fun removeClass(classId: String) {
         school().collection("classes").document(classId).delete().await()
+    }
+
+    // -----------------------------------------------------------------------
+    // emptying the school — see Reset.kt for what is cleared and why
+
+    /** How many documents each collection holds, counted rather than fetched. */
+    suspend fun countCollections(names: List<String>): Map<String, Int> =
+        names.associateWith { n ->
+            try {
+                school().collection(n).count().get(AggregateSource.SERVER).await().count.toInt()
+            } catch (_: Exception) {
+                // A collection this account may not read counts as unknown
+                // rather than failing the whole screen. An ADMIN reads all.
+                0
+            }
+        }
+
+    /**
+     * Opens the fifteen-minute window in which the rules allow deletes.
+     *
+     * Arming is a deliberate, recorded write — that is the point of it.
+     * Outside the window nothing here can be deleted that could not be
+     * deleted before the reset feature existed.
+     */
+    suspend fun armReset(by: String) {
+        school().collection("settings").document("reset").set(
+            mapOf(
+                "armed" to true,
+                "armedAt" to FieldValue.serverTimestamp(),
+                "armedBy" to by,
+                "updatedAt" to FieldValue.serverTimestamp(),
+            ),
+        ).await()
+    }
+
+    /** Shuts the window again, which the reset does as soon as it is finished. */
+    suspend fun disarmReset() {
+        school().collection("settings").document("reset").set(
+            mapOf(
+                "armed" to false,
+                "armedAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp(),
+            ),
+        ).await()
+    }
+
+    /**
+     * Firestore values as JSON, tagged so the types JSON cannot hold survive.
+     *
+     * THE SAME SHAPE tools/reset-values.mjs writes and the web downloads, so a
+     * backup taken on the phone can be put back with
+     * `node reset-school.mjs --restore=<file>`. A timestamp written straight
+     * to JSON comes back as an ordinary map, and a restore would look perfect
+     * while every "last changed" was quietly wrong.
+     */
+    private fun toJson(value: Any?): Any? = when (value) {
+        is Timestamp -> mapOf(
+            "__type" to "timestamp",
+            "iso" to java.time.Instant.ofEpochSecond(value.seconds, value.nanoseconds.toLong())
+                .toString(),
+            "nanos" to value.nanoseconds,
+        )
+        is List<*> -> value.map { toJson(it) }
+        is Map<*, *> -> value.entries.associate { (k, v) -> k.toString() to toJson(v) }
+        else -> value
+    }
+
+    /**
+     * The whole school as JSON, before anything is deleted.
+     *
+     * EVERY collection, not only the ones going: a backup that restores a
+     * school to a state it was never in is not a backup.
+     */
+    suspend fun backupEverything(names: List<String>, projectId: String): Map<String, Any?> {
+        val collections = names.associateWith { name ->
+            school().collection(name).get().await().documents.map { d ->
+                mapOf("id" to d.id, "data" to toJson(d.data ?: emptyMap<String, Any?>()))
+            }
+        }
+        return mapOf(
+            "school" to SCHOOL_ID,
+            "projectId" to projectId,
+            "takenAt" to java.time.Instant.now().toString(),
+            "collections" to collections,
+        )
+    }
+
+    /**
+     * Deletes every document in the named collections, in batches.
+     *
+     * Nothing cascades and nothing is clever: it reads what is there and
+     * removes it. `onProgress` is called per collection so a reset of four
+     * hundred documents does not look like a frozen screen.
+     */
+    suspend fun clearCollections(names: List<String>, onProgress: (String, Int) -> Unit) {
+        for (name in names) {
+            var removed = 0
+            while (true) {
+                val snap = school().collection(name).limit(400).get().await()
+                if (snap.isEmpty) break
+                val batch = db.batch()
+                snap.documents.forEach { batch.delete(it.reference) }
+                batch.commit().await()
+                removed += snap.size()
+            }
+            onProgress(name, removed)
+        }
     }
 
     // -----------------------------------------------------------------------

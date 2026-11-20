@@ -158,6 +158,7 @@ fun Problem(text: String) {
 @Composable
 fun SchoolSetupScreen(
     onBack: () -> Unit,
+    onReset: () -> Unit = {},
     repo: AdminRepository = remember { AdminRepository() },
 ) {
     val scope = rememberCoroutineScope()
@@ -335,6 +336,29 @@ fun SchoolSetupScreen(
                          modifier = Modifier.padding(top = 8.dp))
                 }
                 Problem(keyProblem)
+            }
+        }
+
+        // Last on the screen, and it only OPENS the reset: that screen counts
+        // what would go, insists on a backup and makes the school's name be
+        // typed. Nothing here deletes anything.
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Start a new school", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Clears the students, marks, attendance and money — everything, or just " +
+                        "the records, keeping the classes and subjects. Your sign-in, the " +
+                        "school's name and the Gemini key are kept either way, so you are " +
+                        "not locked out. The next screen counts what would go and saves a " +
+                        "backup first; nothing is deleted until you type the school's name.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                OutlinedButton(
+                    onClick = onReset,
+                    modifier = Modifier.padding(top = 10.dp),
+                ) { Text("Start a new school…") }
             }
         }
     }
