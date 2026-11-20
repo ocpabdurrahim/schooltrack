@@ -86,3 +86,7 @@ ocr/_selftest-sheet.png
 # The browser puts downloads here when the app is run from this folder.
 Backup/
 schooltrack-backup-*.json
+
+# Mark-entry templates carry the section's real roll numbers and names.
+# Regenerate them with tools/mark-templates.mjs; never commit them.
+Mark entry templates/
