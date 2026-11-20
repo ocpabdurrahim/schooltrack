@@ -18,6 +18,9 @@ import {
   singleMark,
 } from '../data/batch';
 import { SHEET_ACCEPT, readSheetGrid } from '../data/sheet';
+import { templateFileName, templateRows } from '../data/marktemplate';
+// `save` here would collide with this page's own save() for marks.
+import { safeFileName, save as saveFile, xlsxOf, zip } from '../data/xlsx';
 import { gradeForSubject } from '../data/grading';
 import {
   type Typed,
@@ -94,6 +97,40 @@ export default function MarkEntry() {
     ? students.filter((s) => sitsSubject(subject, s))
     : students;
   const notSitting = students.length - sitters.length;
+
+  const [zipping, setZipping] = useState(false);
+
+  /** The blank form for the subject on screen, with this section's rolls. */
+  function downloadForm() {
+    if (!subject) return;
+    const label = section?.displayName ?? className;
+    saveFile(
+      safeFileName(templateFileName(label, subject.subjectName)),
+      xlsxOf(templateRows(subject, sitters, label)),
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+  }
+
+  /**
+   * One form per subject this class takes, as a single zip.
+   *
+   * Each sheet carries only the students who SIT that paper — the same rule
+   * the grid below uses — so the Humanities half of a year is not handed a
+   * Physics sheet to leave blank.
+   */
+  function downloadAllForms() {
+    const label = section?.displayName ?? className;
+    setZipping(true);
+    try {
+      const files = classSubjects.map((s) => ({
+        name: safeFileName(templateFileName(label, s.subjectName)),
+        data: xlsxOf(templateRows(s, students.filter((st) => sitsSubject(s, st)), label)),
+      }));
+      saveFile(`${safeFileName(label)} — blank mark sheets.zip`, zip(files), 'application/zip');
+    } finally {
+      setZipping(false);
+    }
+  }
 
   // the roll, and whatever has already been entered for this exam + subject
   useEffect(() => {
@@ -306,6 +343,23 @@ export default function MarkEntry() {
       */}
       <div className="card">
         <h2>A spreadsheet of marks</h2>
+
+        {/*
+          The blank form comes from here rather than from somebody's old copy,
+          so the columns are always the ones this subject is actually marked
+          in and the rolls are always this section's. A form that is a year out
+          of date is the thing that makes an upload land on the wrong child.
+        */}
+        <div className="btn-row" style={{ marginBottom: 12 }}>
+          <button className="ghost" disabled={!subject || !sitters.length}
+                  onClick={downloadForm}>
+            Blank form for {subject?.subjectName ?? 'this subject'}
+          </button>
+          <button className="ghost" disabled={!classSubjects.length || !students.length}
+                  onClick={downloadAllForms}>
+            {zipping ? 'Building…' : `Every subject in ${section?.displayName ?? 'this class'}`}
+          </button>
+        </div>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 10px' }}>
           {parts.length
             ? `${subject?.subjectName} is marked in ${parts.join(' and ')}, so the
