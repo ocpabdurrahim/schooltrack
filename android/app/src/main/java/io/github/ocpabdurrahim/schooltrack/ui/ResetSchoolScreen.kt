@@ -29,9 +29,12 @@ import com.google.firebase.auth.FirebaseAuth
 import io.github.ocpabdurrahim.schooltrack.data.ALL_COLLECTIONS
 import io.github.ocpabdurrahim.schooltrack.data.ARMED_FOR_MINUTES
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
+import io.github.ocpabdurrahim.schooltrack.data.Leftover
 import io.github.ocpabdurrahim.schooltrack.data.ResetMode
 import io.github.ocpabdurrahim.schooltrack.data.confirms
+import io.github.ocpabdurrahim.schooltrack.data.leftoverList
 import io.github.ocpabdurrahim.schooltrack.data.planFor
+import io.github.ocpabdurrahim.schooltrack.data.stillThere
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,6 +84,7 @@ fun ResetSchoolScreen(
     var done by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(true) }
     var finished by remember { mutableStateOf(false) }
+    var left by remember { mutableStateOf<List<Leftover>>(emptyList()) }
     var problem by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -137,10 +141,11 @@ fun ResetSchoolScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "Done. ${done.size} collection(s) cleared. Your sign-in, the school's " +
-                            "name and the Gemini key are untouched, so you can set the school " +
-                            "up again from Setup. The backup you saved is the only copy of " +
-                            "what was here.",
+                        "Done. ${done.size} collection(s) cleared, and every one of them " +
+                            "counted again and found empty. Your sign-in, the school's " +
+                            "name and the Gemini key are untouched, so you can set the " +
+                            "school up again from Setup. The backup you saved is the only " +
+                            "copy of what was here.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Green,
                     )
@@ -277,15 +282,23 @@ fun ResetSchoolScreen(
                     Button(
                         enabled = !busy && ready,
                         onClick = {
-                            busy = true; problem = ""; done = emptyList()
+                            busy = true; problem = ""; done = emptyList(); left = emptyList()
                             scope.launch {
                                 try {
                                     repo.armReset(FirebaseAuth.getInstance().currentUser?.email ?: "")
                                     repo.clearCollections(plan.clear) { name, removed ->
                                         done = done + "$name — $removed"
                                     }
-                                    finished = true
+
+                                    // COUNTED AGAIN, from the database. A loop
+                                    // that finished without throwing has shown
+                                    // only that nothing threw: a batch refused
+                                    // because the window ran out leaves records
+                                    // the new school starts with and nobody is
+                                    // expecting.
                                     counts = repo.countCollections(ALL_COLLECTIONS)
+                                    left = stillThere(counts, plan.clear)
+                                    finished = left.isEmpty()
                                 } catch (_: Exception) {
                                     problem = "Some of it was refused and the rest was left " +
                                         "alone. The window may have run out — read the list, " +
@@ -303,6 +316,20 @@ fun ResetSchoolScreen(
                             else "Empty ${schoolName.ifBlank { "this school" }}",
                         )
                     }
+                }
+
+                if (left.isNotEmpty()) {
+                    Text(
+                        "Not finished. " + leftoverList(left) +
+                            (if (left.size == 1) " is" else " are") + " still there. Nothing " +
+                            "is wrong with what WAS cleared — the rest was refused, most " +
+                            "likely because the $ARMED_FOR_MINUTES-minute window ran out. " +
+                            "Press the button again: the backup you took still covers " +
+                            "everything, and clearing what is already empty costs nothing.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Bad,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
                 }
 
                 if (!ready && !busy) {

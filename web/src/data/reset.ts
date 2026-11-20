@@ -125,3 +125,33 @@ export function confirms(typed: string, schoolName: string): boolean {
 
 /** How long the rules let deletes through once a reset is armed. */
 export const ARMED_FOR_MINUTES = 15;
+
+/** A collection that was meant to be cleared and still has documents in it. */
+export type Leftover = { name: string; count: number };
+
+/**
+ * What is STILL THERE after a reset says it finished.
+ *
+ * Counted from the database again, not worked out from what the deleting
+ * loop thought it did. A batch that was refused — the armed window ran out,
+ * the connection dropped, a rule said no — leaves documents behind, and
+ * every one of them is a record the new school starts with and nobody is
+ * expecting. Reporting success from a loop that finished without throwing is
+ * reporting the absence of an exception, which is not the same thing.
+ */
+export function stillThere(
+  counts: Record<string, number>,
+  cleared: readonly string[],
+): Leftover[] {
+  return cleared
+    .filter((name) => (counts[name] ?? 0) > 0)
+    .map((name) => ({ name, count: counts[name] }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/** "students (78) and results (36)" — for telling somebody what to look at. */
+export function leftoverList(left: readonly Leftover[]): string {
+  const parts = left.map((l) => `${l.name} (${l.count})`);
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}

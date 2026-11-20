@@ -118,3 +118,29 @@ fun confirms(typed: String, schoolName: String): Boolean {
 
 /** How long the rules let deletes through once a reset is armed. */
 const val ARMED_FOR_MINUTES = 15
+
+/** A collection that was meant to be cleared and still has documents in it. */
+data class Leftover(val name: String, val count: Int)
+
+/**
+ * What is STILL THERE after a reset says it finished.
+ *
+ * Counted from the database again, not worked out from what the deleting
+ * loop thought it did. A batch that was refused — the armed window ran out,
+ * the connection dropped, a rule said no — leaves documents behind, and
+ * every one of them is a record the new school starts with and nobody is
+ * expecting. Reporting success from a loop that finished without throwing is
+ * reporting the absence of an exception, which is not the same thing.
+ */
+fun stillThere(counts: Map<String, Int>, cleared: List<String>): List<Leftover> =
+    cleared
+        .filter { (counts[it] ?: 0) > 0 }
+        .map { Leftover(it, counts.getValue(it)) }
+        .sortedWith(compareByDescending<Leftover> { it.count }.thenBy { it.name })
+
+/** "students (78) and results (36)" — for telling somebody what to look at. */
+fun leftoverList(left: List<Leftover>): String {
+    val parts = left.map { "${it.name} (${it.count})" }
+    return if (parts.size <= 1) parts.joinToString("")
+    else parts.dropLast(1).joinToString(", ") + " and " + parts.last()
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_COLLECTIONS, ALWAYS_KEPT, confirms, planFor } from './reset';
+import {
+  ALL_COLLECTIONS, ALWAYS_KEPT, confirms, leftoverList, planFor, stillThere,
+} from './reset';
 
 /** The SAME cases exist in android/.../data/ResetTest.kt. */
 
@@ -77,5 +79,38 @@ describe('the confirmation', () => {
   it('cannot be satisfied by typing nothing at a school with no name', () => {
     expect(confirms('', '')).toBe(false);
     expect(confirms('  ', ' ')).toBe(false);
+  });
+});
+
+describe('what is still there afterwards', () => {
+  it('is nothing when the clearing worked', () => {
+    expect(stillThere({ students: 0, results: 0 }, ['students', 'results'])).toEqual([]);
+  });
+
+  it('names what survived, biggest first', () => {
+    // A refused batch — the armed window ran out, the connection dropped —
+    // leaves records the new school starts with and nobody is expecting.
+    expect(stillThere({ students: 78, results: 36, payments: 0 }, ['students', 'results', 'payments']))
+      .toEqual([{ name: 'students', count: 78 }, { name: 'results', count: 36 }]);
+  });
+
+  it('ignores a collection that was never going to be cleared', () => {
+    expect(stillThere({ members: 1, students: 0 }, ['students'])).toEqual([]);
+  });
+
+  it('treats a count it never got as nothing left, not as a failure', () => {
+    // A collection the count could not read says nothing either way; the
+    // alternative is crying wolf on every reset.
+    expect(stillThere({}, ['students'])).toEqual([]);
+  });
+
+  it('reads as a sentence', () => {
+    expect(leftoverList([{ name: 'students', count: 78 }])).toBe('students (78)');
+    expect(leftoverList([
+      { name: 'students', count: 78 }, { name: 'results', count: 36 },
+    ])).toBe('students (78) and results (36)');
+    expect(leftoverList([
+      { name: 'students', count: 78 }, { name: 'results', count: 36 }, { name: 'exams', count: 2 },
+    ])).toBe('students (78), results (36) and exams (2)');
   });
 });

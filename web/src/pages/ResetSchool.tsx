@@ -11,9 +11,12 @@ import {
 import {
   ALL_COLLECTIONS,
   ARMED_FOR_MINUTES,
+  type Leftover,
   type ResetMode,
   confirms,
+  leftoverList,
   planFor,
+  stillThere,
 } from '../data/reset';
 
 /**
@@ -43,6 +46,7 @@ export default function ResetSchool() {
   const [done, setDone] = useState<string[]>([]);
   const [busy, setBusy] = useState(true);
   const [finished, setFinished] = useState(false);
+  const [left, setLeft] = useState<Leftover[]>([]);
   const [problem, setProblem] = useState('');
 
   useEffect(() => {
@@ -87,14 +91,23 @@ export default function ResetSchool() {
   }
 
   async function wipe() {
-    setBusy(true); setProblem(''); setDone([]);
+    setBusy(true); setProblem(''); setDone([]); setLeft([]);
     try {
       await armReset();
       await clearCollections(plan.clear, (name, removed) => {
         setDone((d) => [...d, `${name} — ${removed}`]);
       });
-      setFinished(true);
-      setCounts(await countCollections(ALL_COLLECTIONS));
+
+      // COUNTED AGAIN, from the database. A loop that finished without
+      // throwing has shown only that nothing threw: a batch refused because
+      // the window ran out, or the connection dropped, leaves documents
+      // behind, and every one of them is a record the new school starts with
+      // and nobody is expecting.
+      const after = await countCollections(ALL_COLLECTIONS);
+      setCounts(after);
+      const remaining = stillThere(after, plan.clear);
+      setLeft(remaining);
+      setFinished(remaining.length === 0);
     } catch {
       setProblem(
         'Some of it was refused and the rest was left alone. The window may have '
@@ -118,9 +131,21 @@ export default function ResetSchool() {
           {' · '}<Link to="/setup">back to setup</Link>
         </h2>
 
+        {left.length > 0 && (
+          <p className="callout bad">
+            <strong>Not finished.</strong> {leftoverList(left)}{' '}
+            {left.length === 1 ? 'is' : 'are'} still there. Nothing is wrong with what
+            WAS cleared — but the rest was refused, most likely because the{' '}
+            {ARMED_FOR_MINUTES}-minute window ran out. Press the button again: the
+            backup you took still covers everything, and clearing what is already
+            empty costs nothing.
+          </p>
+        )}
+
         {finished ? (
           <p className="callout">
-            <strong>Done.</strong> {done.length} collection{done.length === 1 ? '' : 's'} cleared.
+            <strong>Done.</strong> {done.length} collection{done.length === 1 ? '' : 's'} cleared,
+            and every one of them counted again and found empty.
             Your sign-in, the school&rsquo;s name and the Gemini key are untouched, so you can
             set the school up again from Setup. The backup you downloaded is the only copy
             of what was here.

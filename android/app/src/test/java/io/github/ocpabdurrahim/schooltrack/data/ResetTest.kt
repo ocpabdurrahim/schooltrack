@@ -90,4 +90,58 @@ class ResetTest {
         assertFalse(confirms("", ""))
         assertFalse(confirms("  ", " "))
     }
+
+    // -----------------------------------------------------------------------
+    // what is still there afterwards
+
+    @Test
+    fun `is nothing when the clearing worked`() {
+        assertEquals(
+            emptyList<Leftover>(),
+            stillThere(mapOf("students" to 0, "results" to 0), listOf("students", "results")),
+        )
+    }
+
+    @Test
+    fun `names what survived, biggest first`() {
+        // A refused batch — the armed window ran out, the connection dropped
+        // — leaves records the new school starts with and nobody expects.
+        assertEquals(
+            listOf(Leftover("students", 78), Leftover("results", 36)),
+            stillThere(
+                mapOf("students" to 78, "results" to 36, "payments" to 0),
+                listOf("students", "results", "payments"),
+            ),
+        )
+    }
+
+    @Test
+    fun `ignores a collection that was never going to be cleared`() {
+        assertEquals(
+            emptyList<Leftover>(),
+            stillThere(mapOf("members" to 1, "students" to 0), listOf("students")),
+        )
+    }
+
+    @Test
+    fun `treats a count it never got as nothing left, not as a failure`() {
+        // A collection the count could not read says nothing either way; the
+        // alternative is crying wolf on every reset.
+        assertEquals(emptyList<Leftover>(), stillThere(emptyMap(), listOf("students")))
+    }
+
+    @Test
+    fun `reads as a sentence`() {
+        assertEquals("students (78)", leftoverList(listOf(Leftover("students", 78))))
+        assertEquals(
+            "students (78) and results (36)",
+            leftoverList(listOf(Leftover("students", 78), Leftover("results", 36))),
+        )
+        assertEquals(
+            "students (78), results (36) and exams (2)",
+            leftoverList(
+                listOf(Leftover("students", 78), Leftover("results", 36), Leftover("exams", 2)),
+            ),
+        )
+    }
 }
