@@ -1,0 +1,328 @@
+===============================================================================
+GRADING LOGIC - CLASSES 9 AND 10 (SSC)
+SchoolTrack / Matkhola ML High School
+===============================================================================
+
+How a mark becomes a grade, and how grades become a GPA.
+
+This describes what the software actually DOES, not grading rules in general.
+Every rule below is in web/src/data/grading.ts and its twin
+android/.../data/Grading.kt, pinned by 37 test cases on each side.
+
+Nothing is stored. Grades, totals and GPA are worked out from the marks every
+time, so correcting one mark corrects the marksheet, the tabulation, the
+progress report and the merit list together. Only publishing an exam freezes
+it.
+
+
+-------------------------------------------------------------------------------
+1. WHICH SUBJECTS A STUDENT SITS
+-------------------------------------------------------------------------------
+
+A result is only as right as the list of subjects it is built from, so this
+comes first. Each subject carries three filters and a student must pass all
+three to sit it:
+
+   Class     - the subject's class list must contain the student's class
+   Stream    - empty means everyone; otherwise must contain the student's group
+   Religion  - empty means everyone; otherwise must contain their religion
+
+A student whose group or religion is BLANK is excluded by nothing. A missing
+field means "not known yet", not "does not match", so a half-entered student
+still appears on every sheet instead of quietly vanishing.
+
+AS THIS SCHOOL IS SET UP
+
+   Everyone in 9-10 sits:
+      Bangla 1st Paper, Bangla 2nd Paper
+      English 1st Paper, English 2nd Paper
+      Mathematics
+      ICT
+      ONE religion paper - Islam or Hindu, by the student's religion
+      (a student recorded as "Other" sits neither)
+
+   Stream            Also sits                                 Optional (4th)
+   ---------------   ---------------------------------------   --------------
+   Science           Bangladesh & Global Studies               Higher Maths
+                     Physics, Chemistry, Biology
+   Humanities        General Science                           Agriculture
+                     Civics & Citizenship
+                     History of Bangladesh
+                     Geography
+   Business Studies  General Science                           Agriculture
+                     Accounting
+                     Finance & Banking
+                     Business Entrepreneurship
+
+
+-------------------------------------------------------------------------------
+2. FROM PARTS TO A SUBJECT TOTAL
+-------------------------------------------------------------------------------
+
+Most papers are marked in PARTS, and each part has its own maximum AND its own
+pass mark:
+
+   Shape                          Pass marks     Subjects
+   ----------------------------   ------------   -----------------------------
+   CQ 70 + MCQ 30                 23 and 10      Bangla, Maths, Religion, BGS,
+                                                 General Science, Civics,
+                                                 History, Geography,
+                                                 Accounting, Finance,
+                                                 Business Entrepreneurship
+   CQ 50 + MCQ 25 + Practical 25  17, 8 and 8    Physics, Chemistry, Biology,
+                                                 Higher Maths, Agriculture
+   CQ 25 + MCQ 25  (out of 50)    8 and 8        ICT
+   Written 100                    0              English 1st, English 2nd
+
+The subject total is the sum of its parts.
+
+ONE PART STILL BLANK MEANS NO TOTAL - not a zero. A subject whose practical
+has not been marked yet has no total, no grade and no GPA, and every sheet
+shows a dash. A student is never failed for work a teacher has not finished
+entering.
+
+The screen can still show what HAS arrived, which matters most for English:
+1st and 2nd Paper are one subject out of 200, so until the second paper is in
+the subject has no mark at all. The sheet shows the part that has been keyed
+in, so the teacher can see their work went somewhere.
+
+
+-------------------------------------------------------------------------------
+3. A FAILED PART FAILS THE SUBJECT
+-------------------------------------------------------------------------------
+
+This is the rule people are surprised by, and the reason parts are stored at
+all rather than added up and forgotten:
+
+      60 in CQ and 8 in MCQ is 68 out of 100 - AND STILL F,
+      because the MCQ pass mark is 10.
+
+The order the software applies, and the order matters:
+
+   1. Absent                        -> F, 0.00
+   2. Any part not yet marked       -> no grade, a dash. NOT a fail.
+   3. Any part below ITS OWN pass   -> F, 0.00, however high the total.
+                                       The failed part is named, so the
+                                       marksheet can say which one.
+   4. Otherwise                     -> the percentage scale in section 4.
+
+English passes at 0 per part, so the English papers can never fail on the part
+rule - only on the percentage.
+
+
+-------------------------------------------------------------------------------
+4. THE LETTER SCALE
+-------------------------------------------------------------------------------
+
+Applied to the subject's PERCENTAGE of its own full marks:
+
+   From      Letter    Point
+   -------   ------    -----
+   80%       A+        5.00
+   70%       A         4.00
+   60%       A-        3.50
+   50%       B         3.00
+   40%       C         2.00
+   33%       D         1.00
+   below 33% F         0.00
+
+33% is the pass mark. ICT is out of 50, so 33% of it is 16.5 - the scale is
+always a percentage of THAT paper's full marks, never a fixed number of marks.
+
+
+-------------------------------------------------------------------------------
+5. COMBINED PAPERS - BANGLA AND ENGLISH
+-------------------------------------------------------------------------------
+
+Bangla 1st and 2nd Paper are ONE subject out of 200. So are the two English
+papers. Grading them separately gives a different GPA for the same marks - two
+A- grades where the school's own sheet shows a single A.
+
+So the papers are merged into one unit BEFORE anything is graded:
+
+   - The unit takes the place of the FIRST of its papers, so Bangla stays
+     where Bangla was on the sheet instead of dropping to the bottom.
+   - Full marks add up: 100 + 100 = 200. So do the totals.
+   - If EITHER paper is unmarked the unit has no total, which is why a
+     half-entered English shows a dash rather than a bad grade.
+   - Each part keeps its paper's name in front of it - "BANGLA 1ST PAPER MCQ",
+     not "MCQ". A student told they failed "MCQ" would not know which paper.
+   - The unit is named from the common part of its papers: "BANGLA".
+
+A combine group with only ONE paper in it is left alone. ICT is tagged with a
+combine group but is a single paper, so it is graded on its own. Harmless, but
+worth knowing before someone goes looking for a bug.
+
+
+-------------------------------------------------------------------------------
+6. THE GPA
+-------------------------------------------------------------------------------
+
+Worked out over the graded UNITS - after combining, and only the ones that
+student sits.
+
+            sum of compulsory points  +  optional bonus
+   GPA  =   -------------------------------------------      capped at 5.00
+                  number of compulsory subjects
+
+   - THE OPTIONAL (4th) SUBJECT ONLY EVER HELPS. Points ABOVE 2.00 are added
+     to the top of the fraction. It is never counted in the divisor, and
+     failing it costs nothing.
+        optional A+ (5.00) adds 3.00
+        optional A  (4.00) adds 2.00
+        optional C  (2.00) adds 0.00
+        optional F or absent adds 0.00 and cannot fail the student
+   - The answer is rounded to two decimals, and the overall letter is read
+     from the rounded number.
+
+THE OVERALL LETTER, FROM THE GPA
+
+   GPA            Letter
+   ------------   ------
+   5.00           A+
+   4.00 - 4.99    A
+   3.50 - 3.99    A-
+   3.00 - 3.49    B
+   2.00 - 2.99    C
+   1.00 - 1.99    D
+   below 1.00     F
+
+This is read from the GPA, not from any single subject. A+ needs the full
+5.00, which is why the cap at 5.00 matters.
+
+
+-------------------------------------------------------------------------------
+7. FAILED, INCOMPLETE, ABSENT - THREE DIFFERENT THINGS
+-------------------------------------------------------------------------------
+
+   INCOMPLETE   any compulsory subject has no total and the student was not
+                marked absent
+                -> GPA blank, letter dash, no position in the merit list,
+                   nothing published
+
+   FAILED       any compulsory subject grades F
+                -> GPA 0.00, letter F, and the failed subjects are named
+
+   ABSENT       marked absent in a compulsory subject
+                -> that subject is F, so the exam is failed
+
+An OPTIONAL subject may be missing without making the result incomplete. A
+student takes one 4th subject, not every optional one the class offers.
+
+An incomplete result is never published and never ranked - it is left out of
+the merit order rather than placed last, because "not finished" is not a
+position.
+
+
+-------------------------------------------------------------------------------
+8. TOTAL MARKS
+-------------------------------------------------------------------------------
+
+The printed total follows EXACTLY the same test as the GPA - withheld while
+any compulsory subject is unmarked.
+
+   - An optional subject with no mark is left out of BOTH sides. Counting its
+     100 full marks against a student who never sat it would read as a zero.
+   - An optional subject that WAS sat counts on both sides, so the total can
+     be larger than the compulsory out-of.
+   - An absent subject counts 0 obtained, and its full marks in the out-of.
+
+This rule exists because the other way round was built first and found in use:
+a sheet showed "GPA 4.33" beside "Total -", which reads as a mistake in the
+arithmetic even though both numbers were right by their own rules.
+
+
+-------------------------------------------------------------------------------
+9. WORKED EXAMPLES
+-------------------------------------------------------------------------------
+
+All figures below are the software's own output, not arithmetic done by hand.
+
+9.1  A SCIENCE STUDENT, EVERYTHING PASSED
+
+   Subject                        Marks        %     Letter   Point
+   ----------------------------   ----------   ---   ------   -----
+   Bangla (1st + 2nd)             150 / 200    75    A        4.00
+   English (1st + 2nd)            130 / 200    65    A-       3.50
+   Mathematics                     82 / 100    82    A+       5.00
+   ICT                             40 /  50    80    A+       5.00
+   Islam & Moral Education         71 / 100    71    A        4.00
+   Bangladesh & Global Studies     66 / 100    66    A-       3.50
+   Physics                         60 / 100    60    A-       3.50
+   Chemistry                       55 / 100    55    B        3.00
+   Biology                         72 / 100    72    A        4.00
+   Higher Maths (OPTIONAL)         78 / 100    78    A        4.00
+
+   Compulsory points: 4.00 + 3.50 + 5.00 + 5.00 + 4.00 + 3.50 + 3.50 + 3.00
+                      + 4.00  =  35.50,  over 9 compulsory subjects
+   Optional bonus   : 4.00 - 2.00 = 2.00
+
+   GPA   = (35.50 + 2.00) / 9 = 4.17   ->   A
+   TOTAL = 804 out of 1150
+
+   The optional subject was sat, so its 78 marks AND its 100 full marks count
+   on both sides of the total.
+
+   Had this student taken no 4th subject, the same compulsory marks would read
+   726 out of 1050, and the GPA would be 35.50 / 9 = 3.94 (A-).
+
+   3.94 -> 4.17 is what the optional subject is worth.
+
+
+9.2  THE SAME STUDENT, THREE MARKS LOWER IN ONE PLACE
+
+   Chemistry: CQ 40, MCQ 7, Practical 8. Total 55 - exactly as above.
+   But the MCQ pass mark is 8.
+
+   CHEMISTRY IS F.
+   GPA 0.00, letter F, and Chemistry named as the reason.
+
+   Every other grade still prints on the marksheet exactly as in 9.1, so the
+   student can see that one part of one paper did it.
+
+
+9.3  A HUMANITIES STUDENT, ONE SUBJECT NOT YET ENTERED
+
+   Geography has CQ 55 keyed in and the MCQ box still empty.
+
+   Geography has no total, so the whole result is INCOMPLETE:
+      GPA   : blank
+      Total : blank
+      Merit : not ranked
+      Nothing is published.
+
+   Entering the missing MCQ mark completes it. Nothing else has to be redone.
+
+
+-------------------------------------------------------------------------------
+10. WHAT THE SOFTWARE DELIBERATELY DOES NOT DO
+-------------------------------------------------------------------------------
+
+   - No grace marks, and no rounding 32 up to 33. A pass mark is a threshold,
+     not a target.
+   - No "golden A+" as a separate award. It is visible from the subject
+     grades and plays no part in the GPA.
+   - No weighting. Every compulsory subject counts once, whatever its full
+     marks: ICT out of 50 carries the same weight as Physics out of 100,
+     which is how the SSC scale works.
+   - No stored grades. Nothing is frozen except by publishing an exam.
+
+
+-------------------------------------------------------------------------------
+11. WHERE IT LIVES IN THE CODE
+-------------------------------------------------------------------------------
+
+   The rules          web/src/data/grading.ts
+                      android/.../data/Grading.kt
+   The tests          web/src/data/grading.test.ts  (37 cases)
+                      android/.../data/GradingTest.kt
+   Who sits what      sitsSubject / excludedBy, in exams.ts
+   Tabulation, merit  sheetFor / tabulate, in exams.ts
+   Subject setup      in the app: Exams -> Exams and subjects
+                      (parts, pass marks, streams, optional, full marks)
+
+The two versions must agree exactly - a student will be shown a GPA by
+whichever app is to hand. The same test cases run against both, so changing
+one without the other fails the build.
+
+===============================================================================
