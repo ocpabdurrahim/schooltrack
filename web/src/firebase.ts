@@ -1,6 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 
 /**
  * The Firebase *web* config is not a secret. It identifies the project; it does
@@ -23,7 +28,29 @@ export const SCHOOL_ID = 'matkhola';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+/**
+ * Firestore, with the school kept on this device.
+ *
+ * The phone gets this free — the Android SDK keeps a local copy by default —
+ * but the web SDK does NOT unless it is asked, and a school on mobile data
+ * loses the signal in the middle of a register more often than it loses it
+ * for a whole morning. Without a cache the page simply stalls; with one, the
+ * register, the roll and the marks already fetched stay on screen and writes
+ * queue up until the signal comes back.
+ *
+ * persistentMultipleTabManager, not the default single-tab manager: an office
+ * with the register open in one tab and fees in another is the normal way
+ * this app gets used, and the single-tab manager refuses the cache outright
+ * in the second tab.
+ *
+ * initializeFirestore, not getFirestore: the cache can only be chosen while
+ * the instance is being made, so this must come before anything calls
+ * getFirestore() anywhere in the app.
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 
 // `npm run dev:emulator` talks to the emulators instead of the real project,
 // so a half-finished screen can never write to the school's data.

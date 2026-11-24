@@ -7,6 +7,7 @@ import {
   saveGuardian,
   saveMember,
 } from '../data/admin';
+import { lockoutRisk } from '../data/lockout';
 import { type StudentDetail, findStudents, getStudent } from '../data/people';
 
 const ROLES: Record<MemberRow['role'], string> = {
@@ -29,6 +30,13 @@ export default function Users() {
   const [found, setFound] = useState<StudentDetail[]>([]);
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState('');
+
+  /**
+   * Whether anybody could still get into this school if this account
+   * were lost. Recomputed from the list on screen, so switching the
+   * second administrator off brings the warning straight back.
+   */
+  const risk = lockoutRisk(members);
 
   const load = () =>
     Promise.all([
@@ -114,6 +122,19 @@ export default function Users() {
       <div className="card">
         <h1>Staff access</h1>
         <h2>{busy ? 'Working…' : `${members.length} account${members.length === 1 ? '' : 's'}`}</h2>
+
+        {/*
+          Shown here rather than on the dashboard because the fix is on this
+          page: whoever reads it can act on it without going anywhere.
+        */}
+        {!busy && risk.atRisk && (
+          <p className="callout bad" style={{ marginTop: 0 }}>
+            <strong>
+              {risk.admins === 1 ? 'Only one person can get in.' : 'Nobody can grant access.'}
+            </strong>{' '}
+            {risk.warning}
+          </p>
+        )}
 
         {members.map((row) => (
           <div className="row" key={row.email}>

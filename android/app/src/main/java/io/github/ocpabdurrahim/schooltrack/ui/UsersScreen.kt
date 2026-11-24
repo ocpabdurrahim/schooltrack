@@ -29,6 +29,7 @@ import io.github.ocpabdurrahim.schooltrack.data.MemberRow
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.ROLES
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
+import io.github.ocpabdurrahim.schooltrack.data.lockoutRisk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -90,6 +91,20 @@ fun UsersScreen(
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Staff access", style = MaterialTheme.typography.titleMedium)
+
+                // Shown here rather than on the dashboard because the fix is
+                // on this screen: whoever reads it can act on it without
+                // going anywhere.
+                val risk = lockoutRisk(members)
+                if (risk.atRisk) {
+                    Text(
+                        (if (risk.admins == 1) "Only one person can get in. "
+                         else "Nobody can grant access. ") + risk.warning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Bad,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
 
                 members.forEach { row ->
                     Row(
