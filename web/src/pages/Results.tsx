@@ -232,7 +232,7 @@ export default function Results() {
     + commonAfter.length + shape.groupSlots.length + (shape.optional.length ? 1 : 0);
   // Each share is the heading plus its padding -- Grade is the longest of
   // them and was breaking into "Grad e" when it was given the same as GPA.
-  const FIXED = { roll: 3.8, name: 12.4, grp: 3.6, total: 4.8, gpa: 4.2, grade: 5.2, pos: 3.4 };
+  const FIXED = { roll: 3.8, name: 11.2, grp: 3.6, total: 4.8, gpa: 4.2, grade: 5.2, pos: 4.6 };
   const fixedTotal = FIXED.roll + FIXED.name + (streamed ? FIXED.grp : 0)
     + FIXED.total + FIXED.gpa + FIXED.grade + FIXED.pos;
   const markWidth = markCols > 0 ? (100 - fixedTotal) / markCols : 0;
@@ -405,7 +405,11 @@ export default function Results() {
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>GPA</th>
                     <th style={{ padding: '6px 4px', textAlign: 'center' }}>Grade</th>
-                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>Pos</th>
+                    {/* The merit position, by the chain in merit.ts — the same
+                        number the merit list is ordered by. Headed "Merit"
+                        rather than "Pos" because that is the question a
+                        teacher is reading the column to answer. */}
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>Merit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -482,6 +486,12 @@ export default function Results() {
                 above 2.00. A short dash among the parts is a part not entered; a long dash
                 below it means the subject has no total yet, and that student has no GPA
                 and no position. A dot is a paper that student does not sit.
+                {' '}
+                <strong>Merit</strong> is the position on the merit list: GPA first, then
+                fewer subjects failed, then total marks, then{' '}
+                {tiePaper ? tiePaper.subjectName : 'the first paper of the order'}, then the
+                roll — so no two students share a position. Pick{' '}
+                <strong>Merit list</strong> above for the figures behind it.
               </p>
 
               {/* Per-subject statistics, which cannot live in the columns any

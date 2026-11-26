@@ -1269,7 +1269,7 @@ fun ResultsScreen(
                             Text(
                                 r.tabulation.letter +
                                     (if (view == "tabulation")
-                                        (r.position?.let { "  ·  pos " + it } ?: "") else ""),
+                                        (r.position?.let { "  ·  merit " + it } ?: "") else ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
