@@ -58,7 +58,7 @@ import io.github.ocpabdurrahim.schooltrack.data.TemplateStudent
 import io.github.ocpabdurrahim.schooltrack.data.Typed
 import io.github.ocpabdurrahim.schooltrack.data.ZipEntry
 import io.github.ocpabdurrahim.schooltrack.data.asSitter
-import io.github.ocpabdurrahim.schooltrack.data.enteredSoFar
+import io.github.ocpabdurrahim.schooltrack.data.cellText
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
 import io.github.ocpabdurrahim.schooltrack.data.gradeDistribution
 import io.github.ocpabdurrahim.schooltrack.data.gradeFor
@@ -1139,25 +1139,58 @@ fun ResultsScreen(
                                 val cells = r.tabulation.subjects
                                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                                     cells.forEach { s ->
-                                        Text(
-                                            shortName(s.mark.subjectName) + " " +
-                                                when {
-                                                    // "—" says "theirs, still missing";
-                                                    // "(50)" says half of a combined
-                                                    // subject is in, which is not the same.
-                                                    s.mark.absent -> "abs"
-                                                    s.mark.marks == null ->
-                                                        enteredSoFar(s.mark)
-                                                            ?.let { "(" + it.toInt() + ")" }
-                                                            ?: "—"
-                                                    else -> s.mark.marks.toInt().toString() +
-                                                        " " + s.grade.letter
-                                                } + "   ",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (s.grade.letter == "F")
-                                                MaterialTheme.colorScheme.error
-                                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        // Two tiers, as on the printed sheet
+                                        // (CellParts.kt, twinned with the web):
+                                        // the parts small above, the total and
+                                        // the letter below. The parts are what
+                                        // explain an F on a high total, since a
+                                        // part below ITS own pass mark fails the
+                                        // whole subject.
+                                        val t = cellText(s)
+                                        Column(
+                                            Modifier.padding(end = 12.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Row {
+                                                if (t.parts.isEmpty()) {
+                                                    // A blank line keeps the
+                                                    // totals on one line across
+                                                    // the row, so the chips read
+                                                    // as a row and not a stagger.
+                                                    Text(
+                                                        " ",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                    )
+                                                }
+                                                t.parts.forEachIndexed { i, p ->
+                                                    Text(
+                                                        p.text,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = if (p.failed)
+                                                            FontWeight.Bold else null,
+                                                        color = if (p.failed)
+                                                            MaterialTheme.colorScheme.error
+                                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.padding(
+                                                            start = when {
+                                                                i == 0 -> 0.dp
+                                                                // where the next paper starts
+                                                                p.opensPaper -> 7.dp
+                                                                else -> 3.dp
+                                                            },
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                shortName(s.mark.subjectName) + " " + t.main +
+                                                    (if (t.letter.isEmpty()) "" else " " + t.letter),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (s.grade.letter == "F")
+                                                    MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     }
                                 }
                                 Text(

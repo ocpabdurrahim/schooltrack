@@ -636,6 +636,43 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 .print-page + .print-page { margin-top: 16px; }
 
 /* ---------------------------------------------------------------------------
+   The tabulation cell, in two tiers
+
+   Upper tier the parts, lower tier the total and the letter, split by a
+   hairline. The point is that an F can be explained on the sheet: the reason
+   is always a part below its own pass mark, and until the parts were printed
+   the sheet showed "68 F" and left the teacher to go and look it up.
+
+   Everything here is built for PRINT as much as for screen. A school that
+   prints its tabulation on a mono laser loses red entirely, so the failing
+   part is bold as well as coloured, and the tiers are tuned down a size on
+   paper, where the sheet has ten subject columns to fit across a landscape
+   page.
+   --------------------------------------------------------------------------- */
+
+.tier { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tier-parts {
+  font-size: 10px; line-height: 12px; color: var(--muted); letter-spacing: .01em;
+}
+.tier-parts span + span { margin-left: 4px; }
+/* Where the next paper of a combined subject starts, so that the four numbers
+   of a Bangla cell read as two papers and not as one run. */
+.tier-parts span + span.gap { margin-left: 9px; }
+.tier-parts .bad { color: var(--bad); font-weight: 600; }
+.tier-main { line-height: 16px; }
+.tier-main.split { border-top: 1px solid var(--line); }
+.tier-main.bad { color: var(--bad); }
+.tier-main .letter { color: var(--muted); }
+
+@media print {
+  .tier-parts { font-size: 8.5px; line-height: 10px; color: #333; }
+  .tier-main { line-height: 14px; }
+  .tier-main.split { border-top: 1px solid #b8bcc4; }
+  /* No colour to rely on: the failing part is the bold one. */
+  .tier-parts .bad, .tier-main.bad { color: #000; font-weight: 700; }
+}
+
+/* ---------------------------------------------------------------------------
    Scanning a mark sheet
    --------------------------------------------------------------------------- */
 

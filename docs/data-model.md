@@ -287,7 +287,15 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    grade, the total, GPA, grade and position, with highest / lowest / average
    / failed per subject at the foot. It prints landscape — `@page` cannot be
    scoped to an element, so the rule is injected for the duration of the
-   print. The **result sheet** is what goes on the noticeboard: merit order,
+   print.
+   Each cell is in **two tiers** (`cellparts.ts` / `CellParts.kt`, twinned):
+   the parts above in small type — CQ, MCQ, Practical, in the order the paper
+   is marked in, the failing one bold — and the subject total with its letter
+   below. Without the parts the sheet could show "68 F" and give no way to see
+   why, the reason always being a part below *its own* pass mark; the marks
+   that explain the letter were stored all along and thrown away at the last
+   step. A wider gap between the small numbers is where the second paper of a
+   combined subject starts. The **result sheet** is what goes on the noticeboard: merit order,
    total, GPA, grade, passed or failed with the failed subjects named, and a
    summary with the pass percentage and grade distribution.
    The **total includes the optional subject** even though it only partly

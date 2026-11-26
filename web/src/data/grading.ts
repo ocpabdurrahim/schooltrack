@@ -48,6 +48,14 @@ export type Component = {
   name: string;   // CQ | MCQ | PRACTICAL | WRITTEN
   max: number;
   pass: number;
+  /**
+   * Which paper this part came from, set only when papers are merged into one
+   * graded unit (combineUnits below). The name carries the paper in front of
+   * it there — "Bangla 1st Paper MCQ" — so a sheet that wants to print "MCQ"
+   * on its own, or to show where one paper's parts end and the next begins,
+   * needs to be told the prefix rather than guess at it. Never stored.
+   */
+  paper?: string;
 };
 
 /** What was entered, keyed by component name. null = not entered yet. */
@@ -216,7 +224,7 @@ function mergeUnit(group: string, papers: SubjectMark[]): SubjectMark {
   for (const p of papers) {
     for (const c of p.components ?? []) {
       const key = `${p.subjectName} ${c.name}`;
-      components.push({ ...c, name: key });
+      components.push({ ...c, name: key, paper: p.subjectName });
       parts[key] = p.parts?.[c.name] ?? null;
     }
   }

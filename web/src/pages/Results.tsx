@@ -19,7 +19,8 @@ import {
   sheetColumns,
   totalMarks,
 } from '../data/exams';
-import { type SubjectGrade, type SubjectMark, enteredSoFar, gpaText } from '../data/grading';
+import { type SubjectGrade, type SubjectMark, gpaText } from '../data/grading';
+import { cellText, partsTitle } from '../data/cellparts';
 import { shortNames } from '../data/shortnames';
 import { layout, slot } from '../data/tabsheet';
 import { findStudents } from '../data/people';
@@ -39,11 +40,18 @@ type View = 'tabulation' | 'sheet';
  * Neither stores anything. Correct a mark and both correct themselves.
  */
 /**
- * One mark on the tabulation sheet.
+ * One mark on the tabulation sheet, in two tiers.
+ *
+ * Upper tier: the parts, small — CQ, MCQ, Practical, in the order the paper is
+ * marked in. Lower tier: the subject total and its letter. The split is what
+ * makes an F explicable on the sheet itself, because the reason is always a
+ * part: 60 in CQ and 8 in MCQ is 68 out of 100 and still F, the MCQ pass mark
+ * being 10. The failing part is the one in bold, so the eye lands on it.
  *
  * Four things look alike here and must not: a mark, a mark not entered yet, a
  * subject half entered (the two Bangla papers are one subject out of 200), and
- * a paper this student does not sit at all.
+ * a paper this student does not sit at all. See cellparts.ts, which decides
+ * all four and is twinned with the phone.
  *
  * The cell does not name its subject. A slot column is headed with the
  * subjects it holds — PHY/CIV — and the stream beside the student's name says
@@ -55,16 +63,28 @@ function Mark({ cell }: { cell?: SubjectMark & SubjectGrade }) {
       <td style={{ padding: '5px 4px', textAlign: 'center', color: 'var(--line)' }}>·</td>
     );
   }
-  const sofar = cell.marks === null && !cell.absent ? enteredSoFar(cell) : null;
+  const t = cellText(cell);
   return (
-    <td style={{
-      padding: '5px 4px', textAlign: 'center',
-      color: cell.letter === 'F' ? 'var(--bad)' : sofar !== null ? 'var(--muted)' : undefined,
-    }}>
-      {cell.absent ? 'abs' : cell.marks ?? (sofar !== null ? `(${sofar})` : '—')}
-      {!cell.absent && cell.marks !== null && (
-        <span style={{ color: 'var(--muted)' }}> {cell.letter}</span>
-      )}
+    <td className="tier" style={{ padding: '3px 4px' }} title={partsTitle(cell)}>
+      {/* The parts. A blank line where a paper has none, so that the totals
+          across a row stay on one line and the sheet reads as a grid. */}
+      <div className="tier-parts">
+        {t.parts.length === 0 ? '\u00a0' : t.parts.map((p, i) => (
+          <span
+            key={p.label + i}
+            className={`${p.failed ? 'bad' : ''}${p.opensPaper ? ' gap' : ''}`}
+          >
+            {p.text}
+          </span>
+        ))}
+      </div>
+      <div
+        className={`tier-main${t.parts.length ? ' split' : ''}${t.letter === 'F' ? ' bad' : ''}`}
+        style={{ color: t.provisional ? 'var(--muted)' : undefined }}
+      >
+        {t.main}
+        {t.letter && <span className="letter"> {t.letter}</span>}
+      </div>
     </td>
   );
 }
@@ -362,13 +382,20 @@ export default function Results() {
               </table>
 
               <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
+                Each cell is in two tiers: the small numbers above are the parts in the
+                order the paper is marked in (CQ, MCQ, Practical — hover a cell to see
+                which is which), and below them the subject total and its letter. A part
+                in <strong>bold</strong> fell below its own pass mark, which is how a
+                subject can total 68 and still be F. A wider gap between the small numbers
+                is where the second paper of a combined subject starts — the two Bangla
+                papers are one subject out of 200.
+                {' '}
                 A column headed PHY/CIV holds Physics for the Science rows and Civics for
                 the Humanities ones — the <strong>Grp</strong> column beside the name says
                 which. * is the 4th subject: it adds to the total, and to the GPA only
-                above 2.00. A dash is a mark not entered; that student has no total, no GPA
-                and no position. A number in brackets, like (50), means part of that subject
-                is in and part is not — the two Bangla papers are one subject out of 200. A
-                dot is a paper that student does not sit.
+                above 2.00. A short dash among the parts is a part not entered; a long dash
+                below it means the subject has no total yet, and that student has no GPA
+                and no position. A dot is a paper that student does not sit.
               </p>
 
               {/* Per-subject statistics, which cannot live in the columns any

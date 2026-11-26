@@ -51,7 +51,20 @@ fun gradeFor(marks: Double?, fullMarks: Double = 100.0, absent: Boolean = false)
 // whole reason components exist here rather than being added up in the UI and
 // forgotten.
 
-data class Component(val name: String, val max: Double, val pass: Double)
+data class Component(
+    val name: String,
+    val max: Double,
+    val pass: Double,
+    /**
+     * Which paper this part came from, set only when papers are merged into
+     * one graded unit (combineUnits below). The name carries the paper in
+     * front of it there -- "Bangla 1st Paper MCQ" -- so a sheet that wants to
+     * print "MCQ" on its own, or to show where one paper's parts end and the
+     * next begins, needs to be told the prefix rather than guess at it.
+     * Never stored.
+     */
+    val paper: String? = null,
+)
 
 data class SubjectMark(
     val subjectId: String,
@@ -217,7 +230,7 @@ private fun mergeUnit(group: String, papers: List<SubjectMark>): SubjectMark {
     for (p in papers) {
         for (c in p.components) {
             val key = p.subjectName + " " + c.name
-            components.add(c.copy(name = key))
+            components.add(c.copy(name = key, paper = p.subjectName))
             parts[key] = p.parts[c.name]
         }
     }
