@@ -285,7 +285,10 @@ export default function Results() {
 
           {!busy && rows.length > 0 && view === 'tabulation' && (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table
+                className="ruled"
+                style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}
+              >
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '6px 4px' }}>Roll</th>
@@ -402,7 +405,10 @@ export default function Results() {
                   more: Grp 1 is Physics on one row and History on the next, and
                   a highest mark across the two would mean nothing. */}
               <h2 style={{ marginTop: 18 }}>By subject</h2>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table
+                className="ruled"
+                style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}
+              >
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '5px 4px' }}>Subject</th>
@@ -444,7 +450,10 @@ export default function Results() {
 
           {!busy && rows.length > 0 && view === 'sheet' && (
             <>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <table
+                className="ruled"
+                style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}
+              >
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '6px 4px' }}>Position</th>

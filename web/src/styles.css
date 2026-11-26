@@ -636,6 +636,31 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 .print-page + .print-page { margin-top: 16px; }
 
 /* ---------------------------------------------------------------------------
+   Ruled tables -- the result sheets
+
+   A tabulation sheet is a GRID on paper, and for a reason: fourteen columns
+   of numbers, and a teacher reading along row 23 needs the column to hold the
+   eye. Horizontal rules on their own let it drift one column sideways, which
+   on a marksheet is a child's mark landing against the wrong subject.
+
+   Between the columns only -- the outer edge is the card's on screen and the
+   printed frame on paper, and a second line against either would read as a
+   mistake. In print the rules firm up: --line is a screen grey and comes out
+   of a school's laser as almost nothing, and the horizontal ones have to be
+   told twice because they are set on the rows themselves.
+   --------------------------------------------------------------------------- */
+
+.ruled th + th,
+.ruled td + td { border-left: 1px solid var(--line); }
+
+@media print {
+  .ruled th + th,
+  .ruled td + td { border-left: 1px solid #b8bcc4; }
+  .ruled tbody tr { border-bottom-color: #b8bcc4 !important; }
+  .ruled thead tr { border-bottom-color: #666 !important; }
+}
+
+/* ---------------------------------------------------------------------------
    The tabulation cell, in two tiers
 
    Upper tier the parts, lower tier the total and the letter, split by a
