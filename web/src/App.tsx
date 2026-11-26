@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Nav from './components/Nav';
+import UpdateBar from './components/UpdateBar';
 import { useAuth } from './auth';
 import AdmitCards from './pages/AdmitCards';
 import Attendance from './pages/Attendance';
@@ -85,6 +86,9 @@ export default function App() {
   return (
     <>
       <Nav />
+      {/* Above everything, because a page running last week's code is the one
+          thing the screen cannot otherwise tell you. */}
+      <UpdateBar />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/students" element={staffOnly(<Students />)} />

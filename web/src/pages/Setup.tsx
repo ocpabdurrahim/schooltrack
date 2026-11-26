@@ -8,6 +8,7 @@ import {
 } from '../data/admin';
 import { getIntegrations, maskKey, saveIntegrations } from '../data/integrations';
 import { listModels, rankVisionModels } from '../data/gemini';
+import { BUILD, isStale, liveBuild } from '../data/freshness';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -26,6 +27,14 @@ export default function Setup() {
   const [keyNote, setKeyNote] = useState('');
   const [keyProblem, setKeyProblem] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
+
+  // Which build this page is running, and whether it is the one deployed.
+  // Readable aloud down a telephone, which is the whole point of it.
+  const [live, setLive] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+  useEffect(() => {
+    liveBuild().then((b) => { setLive(b); setChecked(true); });
+  }, []);
 
   useEffect(() => {
     getSettings()
@@ -223,6 +232,33 @@ export default function Setup() {
         <Link to="/setup/reset">
           <button className="ghost">Start a new school…</button>
         </Link>
+      </div>
+
+      {/* Which version is on screen. It is here because "I cannot see the
+          change you deployed" has no answer without it — the page and the
+          server can now be compared instead of guessed at. */}
+      <div className="card">
+        <h1>This version</h1>
+        <div className="row">
+          <span>Running on this screen</span>
+          <span style={{ fontFamily: 'monospace' }}>{BUILD}</span>
+        </div>
+        <div className="row">
+          <span>Published on the server</span>
+          <span style={{ fontFamily: 'monospace' }}>
+            {!checked ? 'checking…' : live ?? 'could not be read'}
+          </span>
+        </div>
+        {isStale(BUILD, live) ? (
+          <p style={{ marginBottom: 0 }}>
+            <strong>This page is running an older version.</strong>{' '}
+            <button onClick={() => window.location.reload()}>Reload now</button>
+          </p>
+        ) : checked && live !== null ? (
+          <p style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 0 }}>
+            Up to date — this page is the version on the server.
+          </p>
+        ) : null}
       </div>
     </div>
   );

@@ -636,6 +636,58 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 .print-page + .print-page { margin-top: 16px; }
 
 /* ---------------------------------------------------------------------------
+   A table that scrolls sideways says so
+
+   Below about 850px the tabulation is wider than the window and the columns
+   at its right-hand end -- Total, GPA, Grade, Merit -- sit outside the view
+   with nothing on screen to say they exist. A column you cannot see and do
+   not know to look for is a column that is missing.
+
+   Shadows at the edges, in CSS alone: the two `local` layers scroll with the
+   content and cover the shadow underneath when there is nothing more that
+   way, so each edge is shaded only while something is hidden beyond it. No
+   measuring, no resize listener, and nothing to go stale when the window
+   changes.
+   --------------------------------------------------------------------------- */
+
+.scroll-x {
+  overflow-x: auto;
+  background:
+    linear-gradient(to right, var(--surface) 30%, rgba(255, 255, 255, 0)) left center,
+    linear-gradient(to left, var(--surface) 30%, rgba(255, 255, 255, 0)) right center,
+    radial-gradient(farthest-side at 0 50%, rgba(16, 24, 40, .16), transparent) left center,
+    radial-gradient(farthest-side at 100% 50%, rgba(16, 24, 40, .16), transparent) right center;
+  background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 14px 100%, 14px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+@media print {
+  /* On paper nothing scrolls and the sheet is laid out to fit, so a shadow
+     at the edge would print as a grey smudge down the margin. */
+  .scroll-x { overflow: visible; background: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The update bar
+
+   Across the top, above the page, in the one colour the app uses for "this is
+   information, not a fault". It is not a modal and not a toast that leaves:
+   a teacher should be able to finish the column of marks they are typing and
+   take the new version afterwards.
+   --------------------------------------------------------------------------- */
+
+.update-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--info-soft); color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.update-bar span { flex: 1 1 260px; }
+.update-bar button { padding: 6px 12px; font-size: 13px; }
+
+/* ---------------------------------------------------------------------------
    Ruled tables -- the result sheets
 
    A tabulation sheet is a GRID on paper, and for a reason: fourteen columns

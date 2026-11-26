@@ -358,7 +358,7 @@ export default function Results() {
           </div>
 
           {!busy && rows.length > 0 && view === 'tabulation' && (
-            <div style={{ overflowX: 'auto' }}>
+            <div className="scroll-x">
               <table className="ruled fit" style={{ borderCollapse: 'collapse' }}>
                 <colgroup>
                   <col style={{ width: `${FIXED.roll}%` }} />
