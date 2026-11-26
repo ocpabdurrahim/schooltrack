@@ -50,16 +50,17 @@ const STUDENTS = [
   { studentId: '80', fullName: 'Eshita Khatun',  rollNo: 5, classId: '61' },
   { studentId: '91', fullName: 'Farid Mia',      rollNo: 1, classId: '62' },
   { studentId: '92', fullName: 'Gulshan Ara',    rollNo: 2, classId: '62' },
-  // Class 9: two streams and two religions in one section, which is what the
-  // tabulation's slot columns exist for.
+  // Class 9: the streams and religions of one real section, which is what the
+  // tabulation's slot columns exist for. A long name among them on purpose --
+  // the Name column is what pushes a printed sheet off the edge of the page.
   { studentId: '101', fullName: 'Hasan Ali',    rollNo: 1, classId: '91',
     groupName: 'Science', religion: 'Islam' },
   { studentId: '102', fullName: 'Ishrat Jahan', rollNo: 2, classId: '91',
     groupName: 'Science', religion: 'Islam' },
   { studentId: '103', fullName: 'Joy Barua',    rollNo: 3, classId: '91',
     groupName: 'Humanities', religion: 'Hindu' },
-  { studentId: '104', fullName: 'Kamrul Islam', rollNo: 4, classId: '91',
-    groupName: 'Humanities', religion: 'Islam' },
+  { studentId: '104', fullName: 'Mohammad Kamrul Islam Chowdhury', rollNo: 4,
+    classId: '91', groupName: 'Humanities', religion: 'Islam' },
 ];
 
 async function user(email, uid) {
@@ -129,35 +130,64 @@ const WITH_PRACTICAL = [
   { name: 'MCQ', max: 25, pass: 8 },
   { name: 'PRACTICAL', max: 25, pass: 8 },
 ];
+const WRITTEN = [{ name: 'WRITTEN', max: 100, pass: 0 }];
 const NINE = ['Class 9'];
 
+// The real school's Class 9, paper for paper, because the SHAPE of the sheet
+// is what has to be got right: four papers everybody sits, one religion slot,
+// four group slots (the widest stream needs four) and one 4th subject. Ten
+// subject columns, seventeen in all, which is what a landscape page has to
+// hold without cropping one off the right edge.
 const SUBJECTS = [
-  { subjectId: 'BAN1', subjectName: 'Bangla 1st Paper', sortOrder: 1,
+  { subjectId: 'BAN1', subjectName: 'BANGLA 1ST PAPER', sortOrder: 1,
     components: CQ_MCQ, combineGroup: 'BAN' },
-  { subjectId: 'BAN2', subjectName: 'Bangla 2nd Paper', sortOrder: 2,
+  { subjectId: 'BAN2', subjectName: 'BANGLA 2ND PAPER', sortOrder: 2,
     components: CQ_MCQ, combineGroup: 'BAN' },
-  // Marked whole, out of 100: these cells have no parts tier to show.
-  { subjectId: 'ENG1', subjectName: 'English 1st Paper', sortOrder: 3,
-    components: [], combineGroup: 'ENG' },
-  { subjectId: 'ENG2', subjectName: 'English 2nd Paper', sortOrder: 4,
-    components: [], combineGroup: 'ENG' },
-  { subjectId: 'MATH', subjectName: 'Mathematics', sortOrder: 5, components: CQ_MCQ },
-  { subjectId: 'ISL', subjectName: 'Islam & Moral Education', sortOrder: 6,
+  { subjectId: 'ENG1', subjectName: 'ENGLISH 1ST PAPER', sortOrder: 3,
+    components: WRITTEN, combineGroup: 'ENG' },
+  { subjectId: 'ENG2', subjectName: 'ENGLISH 2ND PAPER', sortOrder: 4,
+    components: WRITTEN, combineGroup: 'ENG' },
+  { subjectId: 'MATH', subjectName: 'MATHEMATICS', sortOrder: 5, components: CQ_MCQ },
+  { subjectId: 'ISL', subjectName: 'ISLAM AND MORALITY EDUCATION', sortOrder: 6,
     components: CQ_MCQ, religions: ['Islam'] },
-  { subjectId: 'HIN', subjectName: 'Hindu Religion', sortOrder: 6,
+  { subjectId: 'HIN', subjectName: 'HINDU AND MORALITY EDUCATION', sortOrder: 6,
     components: CQ_MCQ, religions: ['Hindu'] },
   { subjectId: 'ICT', subjectName: 'ICT', sortOrder: 7, fullMarks: 50,
-    components: [{ name: 'CQ', max: 25, pass: 8 }, { name: 'MCQ', max: 25, pass: 8 }] },
-  { subjectId: 'PHY', subjectName: 'Physics', sortOrder: 8,
+    components: [{ name: 'CQ', max: 25, pass: 8 }, { name: 'MCQ', max: 25, pass: 8 }],
+    combineGroup: 'ICT' },
+
+  // Science
+  { subjectId: 'BGS', subjectName: 'BANGLADESH AND GLOBAL STUDIES', sortOrder: 8,
+    components: CQ_MCQ, groupNames: ['Science'] },
+  { subjectId: 'PHY', subjectName: 'PHYSICS', sortOrder: 9,
     components: WITH_PRACTICAL, groupNames: ['Science'] },
-  { subjectId: 'CHE', subjectName: 'Chemistry', sortOrder: 9,
+  { subjectId: 'CHE', subjectName: 'CHEMISTRY', sortOrder: 10,
     components: WITH_PRACTICAL, groupNames: ['Science'] },
-  { subjectId: 'CIV', subjectName: 'Civics & Citizenship', sortOrder: 8,
+  { subjectId: 'BIO', subjectName: 'BIOLOGY', sortOrder: 11,
+    components: WITH_PRACTICAL, groupNames: ['Science'] },
+
+  // Humanities and Business Studies
+  { subjectId: 'SCI', subjectName: 'SCIENCE', sortOrder: 8,
+    components: CQ_MCQ, groupNames: ['Humanities', 'Business Studies'] },
+  { subjectId: 'CIV', subjectName: 'CIVICS AND CITIZENSHIP', sortOrder: 9,
     components: CQ_MCQ, groupNames: ['Humanities'] },
-  { subjectId: 'GEO', subjectName: 'Geography', sortOrder: 9,
+  { subjectId: 'HIST', subjectName: 'HISTORY OF BANGLADESH AND WORLD CIVILIZATION',
+    sortOrder: 10, components: CQ_MCQ, groupNames: ['Humanities'] },
+  { subjectId: 'GEO', subjectName: 'GEOGRAPHY', sortOrder: 11,
     components: CQ_MCQ, groupNames: ['Humanities'] },
-  { subjectId: 'HMATH', subjectName: 'Higher Mathematics', sortOrder: 20,
+  { subjectId: 'ACC', subjectName: 'ACCOUNTING', sortOrder: 9,
+    components: CQ_MCQ, groupNames: ['Business Studies'] },
+  { subjectId: 'FIN', subjectName: 'FINANCE AND BANKING', sortOrder: 10,
+    components: CQ_MCQ, groupNames: ['Business Studies'] },
+  { subjectId: 'BUS', subjectName: 'BUSINESS ENTREPRENEURSHIP', sortOrder: 11,
+    components: CQ_MCQ, groupNames: ['Business Studies'] },
+
+  // the 4th subjects
+  { subjectId: 'HMATH', subjectName: 'HIGHER MATHS', sortOrder: 20,
     components: WITH_PRACTICAL, groupNames: ['Science'], isOptional: true },
+  { subjectId: 'AGRI', subjectName: 'AGRICULTURE', sortOrder: 20,
+    components: WITH_PRACTICAL, groupNames: ['Humanities', 'Business Studies'],
+    isOptional: true },
 ];
 
 const fullOf = (s) => s.fullMarks
@@ -195,40 +225,49 @@ const sumParts = (parts) => {
 const MARKS = {
   101: {
     BAN1: { CQ: 50, MCQ: 22 }, BAN2: { CQ: 48, MCQ: 20 },
-    ENG1: 71, ENG2: 59,
+    ENG1: { WRITTEN: 71 }, ENG2: { WRITTEN: 59 },
     MATH: { CQ: 55, MCQ: 27 },
     ISL: { CQ: 48, MCQ: 23 },
     ICT: { CQ: 20, MCQ: 20 },
+    BGS: { CQ: 44, MCQ: 22 },
     PHY: { CQ: 40, MCQ: 22, PRACTICAL: 20 },
     CHE: { CQ: 30, MCQ: 15, PRACTICAL: 10 },
+    BIO: { CQ: 38, MCQ: 20, PRACTICAL: 14 },
     HMATH: { CQ: 40, MCQ: 20, PRACTICAL: 18 },
   },
   102: {
     BAN1: { CQ: 45, MCQ: 20 }, BAN2: { CQ: 44, MCQ: 19 },
-    ENG1: 62, ENG2: 55,
+    ENG1: { WRITTEN: 62 }, ENG2: { WRITTEN: 55 },
     MATH: { CQ: 60, MCQ: 8 },
     ISL: { CQ: 40, MCQ: 20 },
     ICT: { CQ: 18, MCQ: 17 },
+    BGS: { CQ: 38, MCQ: 19 },
     PHY: { CQ: 35, MCQ: 18, PRACTICAL: 18 },
     CHE: { CQ: 28, MCQ: 14, PRACTICAL: 12 },
+    BIO: { CQ: 30, MCQ: 16, PRACTICAL: 15 },
   },
   103: {
     BAN1: { CQ: 42, MCQ: 18 }, BAN2: { CQ: 40, MCQ: 17 },
-    ENG1: 55, ENG2: 48,
+    ENG1: { WRITTEN: 55 }, ENG2: { WRITTEN: 48 },
     MATH: { CQ: 38, MCQ: 15 },
     HIN: { CQ: 44, MCQ: 21 },
     ICT: { CQ: 16, MCQ: 15 },
+    SCI: { CQ: 41, MCQ: 19 },
     CIV: { CQ: 40, MCQ: 18 },
+    HIST: { CQ: 37, MCQ: 16 },
     GEO: { CQ: 55, MCQ: null },
   },
   104: {
     BAN1: { CQ: 52, MCQ: 24 }, BAN2: { CQ: 50, MCQ: 22 },
-    ENG1: 68, ENG2: 64,
+    ENG1: { WRITTEN: 68 }, ENG2: { WRITTEN: 64 },
     MATH: { CQ: 58, MCQ: 25 },
     ISL: { CQ: 50, MCQ: 24 },
     ICT: 'abs',
+    SCI: { CQ: 46, MCQ: 21 },
     CIV: { CQ: 45, MCQ: 20 },
+    HIST: { CQ: 43, MCQ: 19 },
     GEO: { CQ: 48, MCQ: 22 },
+    AGRI: { CQ: 36, MCQ: 18, PRACTICAL: 16 },
   },
 };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { type SchoolSettings, getSettings } from '../data/admin';
@@ -89,6 +89,33 @@ function Mark({ cell }: { cell?: SubjectMark & SubjectGrade }) {
   );
 }
 
+/**
+ * A column heading that may break after a slash.
+ *
+ * A slot column is headed with every subject it holds — H.MATH/AGRI, or
+ * CHEM/HIST — and the browser treats that as ONE word, so the column is
+ * forced as wide as the whole string and seventeen of them run off the right
+ * edge of a landscape page. A <wbr> after each slash lets it fall onto a
+ * second line instead, which costs a few millimetres of height and saves the
+ * column that would otherwise be cropped off the sheet.
+ *
+ * The names themselves are untouched — they are shortened by shortNames() and
+ * stay exactly as they were.
+ */
+function Head({ text }: { text: string }) {
+  const bits = text.split('/');
+  return (
+    <>
+      {bits.map((bit, i) => (
+        <Fragment key={i}>
+          {bit}
+          {i < bits.length - 1 && <>/<wbr /></>}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 export default function Results() {
   const { access } = useAuth();
   const admin = access.kind === 'staff' && access.role === 'ADMIN';
@@ -167,6 +194,27 @@ export default function Results() {
   // The stream column earns its place only when the slots hold more than one
   // subject each — in an unstreamed class it would be an empty column.
   const streamed = shape.groupSlots.some((names) => names.length > 1);
+  /**
+   * The sheet is told its own column widths, because a printed tabulation
+   * that runs off the page has lost a subject and nobody can tell which.
+   *
+   * Left to itself the browser gives every column the width of its widest
+   * content: one long student name, and the marks at the right-hand end are
+   * pushed over the edge of the paper. So the widths are shares of the page
+   * instead — the fixed ones for roll, name and the four summary columns, and
+   * what is left split evenly between however many subject columns this
+   * section turns out to need. They are hints on screen, where the table may
+   * still scroll sideways on a phone, and law in print, where the table is
+   * laid out fixed and so CANNOT exceed the page.
+   */
+  const markCols = commonBefore.length + (shape.religion.length ? 1 : 0)
+    + commonAfter.length + shape.groupSlots.length + (shape.optional.length ? 1 : 0);
+  // Each share is the heading plus its padding -- Grade is the longest of
+  // them and was breaking into "Grad e" when it was given the same as GPA.
+  const FIXED = { roll: 3.8, name: 12.4, grp: 3.6, total: 4.8, gpa: 4.2, grade: 5.2, pos: 3.4 };
+  const fixedTotal = FIXED.roll + FIXED.name + (streamed ? FIXED.grp : 0)
+    + FIXED.total + FIXED.gpa + FIXED.grade + FIXED.pos;
+  const markWidth = markCols > 0 ? (100 - fixedTotal) / markCols : 0;
   const complete = rows.filter((r) => !r.tabulation.incomplete).length;
   const passed = rows.filter((r) => (r.tabulation.gpa ?? 0) > 0).length;
   const stats = subjectStats(rows, columns);
@@ -285,10 +333,19 @@ export default function Results() {
 
           {!busy && rows.length > 0 && view === 'tabulation' && (
             <div style={{ overflowX: 'auto' }}>
-              <table
-                className="ruled"
-                style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}
-              >
+              <table className="ruled fit" style={{ borderCollapse: 'collapse' }}>
+                <colgroup>
+                  <col style={{ width: `${FIXED.roll}%` }} />
+                  <col style={{ width: `${FIXED.name}%` }} />
+                  {streamed && <col style={{ width: `${FIXED.grp}%` }} />}
+                  {Array.from({ length: markCols }, (_, i) => (
+                    <col key={i} style={{ width: `${markWidth}%` }} />
+                  ))}
+                  <col style={{ width: `${FIXED.total}%` }} />
+                  <col style={{ width: `${FIXED.gpa}%` }} />
+                  <col style={{ width: `${FIXED.grade}%` }} />
+                  <col style={{ width: `${FIXED.pos}%` }} />
+                </colgroup>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
                     <th style={{ padding: '6px 4px' }}>Roll</th>
@@ -301,7 +358,7 @@ export default function Results() {
                     ))}
                     {shape.religion.length > 0 && (
                       <th style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {slotHead(shape.religion)}
+                        <Head text={slotHead(shape.religion)} />
                       </th>
                     )}
                     {commonAfter.map((c) => (
@@ -311,12 +368,12 @@ export default function Results() {
                     ))}
                     {shape.groupSlots.map((names, i) => (
                       <th key={`grp${i}`} style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {slotHead(names)}
+                        <Head text={slotHead(names)} />
                       </th>
                     ))}
                     {shape.optional.length > 0 && (
                       <th style={{ padding: '6px 4px', textAlign: 'center' }}>
-                        {slotHead(shape.optional)}*
+                        <Head text={`${slotHead(shape.optional)}*`} />
                       </th>
                     )}
                     <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>

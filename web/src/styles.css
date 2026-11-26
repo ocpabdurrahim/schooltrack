@@ -653,6 +653,37 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 .ruled th + th,
 .ruled td + td { border-left: 1px solid var(--line); }
 
+/* ---------------------------------------------------------------------------
+   ...and the tabulation has to FIT
+
+   Seventeen columns -- roll, name, stream, ten subjects and four summary
+   figures. A column cropped off the right edge of a printed sheet is a
+   subject nobody can see is missing, so in print the table is laid out FIXED:
+   the widths the page gives it are the widths it gets, and it cannot grow to
+   suit a long student name. The name wraps instead, and so does a slot
+   heading, at the slash the markup puts a break opportunity in.
+
+   On screen it stays automatic and may scroll sideways, because a phone
+   cannot show seventeen columns at once however they are measured and a
+   sheet squeezed into 380px is unreadable rather than merely wide.
+   --------------------------------------------------------------------------- */
+
+.ruled.fit { width: 100%; font-size: 13px; }
+/* break-word, NOT anywhere: "anywhere" lets the browser count a heading's
+   minimum width as one letter, so the column shrinks under the word and
+   H.MATH comes out as H.MAT / H. The shortened names must survive whole --
+   they are the whole point of shortening them. The slash is where a slot
+   heading is MEANT to break, and the markup puts the opportunity there. */
+.ruled.fit th { white-space: normal; overflow-wrap: break-word; line-height: 1.15; }
+
+@media print {
+  .ruled.fit { table-layout: fixed; font-size: 9.5px; }
+  .ruled.fit th, .ruled.fit td { padding: 2px 3px !important; }
+  /* The last resort in a very narrow column: let the parts fall onto a second
+     line rather than spill out of the cell. The total below them never wraps. */
+  .ruled.fit .tier-parts { white-space: normal; }
+}
+
 @media print {
   .ruled th + th,
   .ruled td + td { border-left: 1px solid #b8bcc4; }
@@ -676,6 +707,8 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
    --------------------------------------------------------------------------- */
 
 .tier { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The figure and its letter stay on one line whatever the column does. */
+.tier-main { white-space: nowrap; }
 .tier-parts {
   font-size: 10px; line-height: 12px; color: var(--muted); letter-spacing: .01em;
 }
