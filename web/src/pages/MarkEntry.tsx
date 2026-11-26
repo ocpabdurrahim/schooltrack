@@ -18,7 +18,11 @@ import {
   singleMark,
 } from '../data/batch';
 import { SHEET_ACCEPT, readSheetGrid } from '../data/sheet';
-import { templateFileName, templateRows } from '../data/marktemplate';
+import {
+  type TemplateStudent,
+  templateFileName,
+  templateRows,
+} from '../data/marktemplate';
 // `save` here would collide with this page's own save() for marks.
 import { safeFileName, save as saveFile, xlsxOf, zip } from '../data/xlsx';
 import { gradeForSubject } from '../data/grading';
@@ -61,6 +65,10 @@ export default function MarkEntry() {
   const [subjectId, setSubjectId] = useState('');
 
   const [students, setStudents] = useState<StudentDetail[]>([]);
+  // Every subject's marks for this exam and class, not only the subject on
+  // screen: the sheets below are offered for all of them at once, and the
+  // page has already paid for the query.
+  const [allMarks, setAllMarks] = useState<ResultRow[]>([]);
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [busy, setBusy] = useState(true);
   const [note, setNote] = useState('');
@@ -99,20 +107,45 @@ export default function MarkEntry() {
   const notSitting = students.length - sitters.length;
 
   const [zipping, setZipping] = useState(false);
+  /**
+   * Blank form, or the same form with the marks already in it?
+   *
+   * One switch rather than four buttons. The filled sheet is the blank one
+   * with its boxes filled, reads back through the same parser, and is how a
+   * teacher corrects a mark in Excel and uploads it — so they belong on the
+   * same pair of buttons, not in separate corners of the page.
+   */
+  const [withMarks, setWithMarks] = useState(false);
 
-  /** The blank form for the subject on screen, with this section's rolls. */
+  /** One student's row for a sheet: the roll, who they are, what is entered. */
+  const rowsFor = (s: Subject, who: StudentDetail[]): TemplateStudent[] =>
+    who.map((st) => {
+      const got = allMarks.find(
+        (m) => m.subjectId === s.subjectId && m.studentId === st.studentId,
+      );
+      return {
+        rollNo: st.rollNo,
+        fullName: st.fullName,
+        groupName: st.groupName ?? undefined,
+        entered: got
+          ? { parts: got.parts ?? undefined, total: got.marks, absent: got.absent }
+          : undefined,
+      };
+    });
+
+  /** The form for the subject on screen, with this section's rolls. */
   function downloadForm() {
     if (!subject) return;
     const label = section?.displayName ?? className;
     saveFile(
-      safeFileName(templateFileName(label, subject.subjectName)),
-      xlsxOf(templateRows(subject, sitters, label)),
+      safeFileName(templateFileName(label, subject.subjectName, withMarks)),
+      xlsxOf(templateRows(subject, rowsFor(subject, sitters), label, withMarks)),
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
   }
 
   /**
-   * One form per subject this class takes, as a single zip.
+   * One sheet per subject this class takes, as a single zip.
    *
    * Each sheet carries only the students who SIT that paper — the same rule
    * the grid below uses — so the Humanities half of a year is not handed a
@@ -123,10 +156,19 @@ export default function MarkEntry() {
     setZipping(true);
     try {
       const files = classSubjects.map((s) => ({
-        name: safeFileName(templateFileName(label, s.subjectName)),
-        data: xlsxOf(templateRows(s, students.filter((st) => sitsSubject(s, st)), label)),
+        name: safeFileName(templateFileName(label, s.subjectName, withMarks)),
+        data: xlsxOf(templateRows(
+          s,
+          rowsFor(s, students.filter((st) => sitsSubject(s, st))),
+          label,
+          withMarks,
+        )),
       }));
-      saveFile(`${safeFileName(label)} — blank mark sheets.zip`, zip(files), 'application/zip');
+      saveFile(
+        `${safeFileName(label)} — ${withMarks ? 'marks entered' : 'blank mark sheets'}.zip`,
+        zip(files),
+        'application/zip',
+      );
     } finally {
       setZipping(false);
     }
@@ -145,6 +187,7 @@ export default function MarkEntry() {
         ]);
         if (!live) return;
         setStudents(roll);
+        setAllMarks(marks);
         const mine = marks.filter((m) => m.subjectId === subjectId);
         setEntries(Object.fromEntries(roll.map((s) => {
           const got = mine.find((m) => m.studentId === s.studentId);
@@ -350,16 +393,42 @@ export default function MarkEntry() {
           in and the rolls are always this section's. A form that is a year out
           of date is the thing that makes an upload land on the wrong child.
         */}
-        <div className="btn-row" style={{ marginBottom: 12 }}>
+        <div className="btn-row" style={{ marginBottom: 8 }}>
           <button className="ghost" disabled={!subject || !sitters.length}
                   onClick={downloadForm}>
-            Blank form for {subject?.subjectName ?? 'this subject'}
+            {withMarks ? '' : 'Blank form for '}{subject?.subjectName ?? 'this subject'}
+            {withMarks ? ' — with the marks entered' : ''}
           </button>
           <button className="ghost" disabled={!classSubjects.length || !students.length}
                   onClick={downloadAllForms}>
             {zipping ? 'Building…' : `Every subject in ${section?.displayName ?? 'this class'}`}
+            {!zipping && withMarks ? ', with marks' : ''}
           </button>
         </div>
+        {/*
+          Downloading what is already entered is how a mark gets corrected in
+          Excel, or kept as a record of the exam. It is the same sheet, so it
+          uploads straight back — and an empty box still changes nothing,
+          which is what makes correcting one box safe.
+        */}
+        <label style={{
+          display: 'flex', gap: 8, alignItems: 'baseline',
+          margin: '0 0 12px', fontSize: 14, color: 'var(--ink)',
+        }}>
+          {/* width:auto, because every other input on the page is full width */}
+          <input
+            type="checkbox"
+            style={{ width: 'auto', margin: 0 }}
+            checked={withMarks}
+            onChange={(e) => setWithMarks(e.target.checked)}
+          />
+          <span>
+          Include the marks already entered{' '}
+          <span style={{ color: 'var(--muted)' }}>
+            — correct a box and upload the file back to change that mark
+          </span>
+          </span>
+        </label>
         <p style={{ color: 'var(--muted)', fontSize: 14, margin: '0 0 10px' }}>
           {parts.length
             ? `${subject?.subjectName} is marked in ${parts.join(' and ')}, so the

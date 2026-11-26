@@ -106,3 +106,105 @@ describe('a sheet written here and read back by the upload', () => {
     expect(sheet.rows[0].parts.Marks).toBe(64);
   });
 });
+
+describe('the same sheet, carrying the marks already entered', () => {
+  const entered = [
+    {
+      rollNo: 1,
+      fullName: 'Ayesha Rahman',
+      entered: { parts: { CQ: 51, MCQ: 18 }, total: 69 },
+    },
+    {
+      rollNo: 2,
+      fullName: 'Bashir Uddin',
+      entered: { absent: true },
+    },
+    {
+      // Half entered: the MCQ has not been marked yet, so there is no total.
+      rollNo: 3,
+      fullName: 'Chaity Das',
+      entered: { parts: { CQ: 44, MCQ: null }, total: null },
+    },
+    // Roll 4 has nothing at all against them.
+    { rollNo: 4, fullName: 'Delwar Hossain' },
+  ];
+
+  it('puts each part in its own column, and the total in the Total column', () => {
+    const rows = templateRows(PARTS, entered, 'Class 9 - A', true);
+    expect(rows[2]).toEqual([1, 'Ayesha Rahman', '', 51, 18, 69]);
+  });
+
+  it('LEAVES A PART NOT ENTERED EMPTY, never zero', () => {
+    // A zero is a mark, and a failing one. The total is withheld too, the
+    // same way every other sheet withholds it.
+    const rows = templateRows(PARTS, entered, 'Class 9 - A', true);
+    expect(rows[4]).toEqual([3, 'Chaity Das', '', 44, '', '']);
+  });
+
+  it('writes one A for an absence, in the first column the parser reads', () => {
+    const rows = templateRows(PARTS, entered, 'Class 9 - A', true);
+    expect(rows[3]).toEqual([2, 'Bashir Uddin', '', 'A', '', '']);
+  });
+
+  it('leaves a student with nothing entered completely empty', () => {
+    const rows = templateRows(PARTS, entered, 'Class 9 - A', true);
+    expect(rows[5]).toEqual([4, 'Delwar Hossain', '', '', '', '']);
+  });
+
+  it('puts the mark in the one column of a paper marked out of one number', () => {
+    const rows = templateRows(WHOLE, [{ rollNo: 1, entered: { total: 71 } }], 'Class 9 - A', true);
+    expect(rows[2]).toEqual([1, '', '', 71]);
+  });
+
+  it('IGNORES the marks when a blank form was asked for', () => {
+    // A blank form must be blank however much the caller knows.
+    const rows = templateRows(PARTS, entered, 'Class 9 - A');
+    expect(rows[2]).toEqual([1, 'Ayesha Rahman', '', '', '', '']);
+  });
+
+  it('says what it is, and that uploading it back changes marks', () => {
+    const note = templateNote(PARTS, 'Class 9 - A', true);
+    expect(note).toContain('the marks entered so far');
+    expect(note).toContain('upload this file to change');
+    // The warning that matters: an empty box is not a zero on the way back.
+    expect(note).toContain('changes nothing');
+  });
+
+  it('is named so it cannot be confused with the blank form', () => {
+    expect(templateFileName('Class 9 - A', 'MATHEMATICS'))
+      .toBe('Class 9 - A — MATHEMATICS.xlsx');
+    expect(templateFileName('Class 9 - A', 'MATHEMATICS', true))
+      .toBe('Class 9 - A — MATHEMATICS — marks entered.xlsx');
+  });
+
+  it('READS BACK AS THE SAME MARKS — the whole point of it', async () => {
+    // Downloaded, not touched, uploaded again: every mark must come back
+    // exactly as it went out, or correcting one box in Excel would quietly
+    // change others.
+    const file = new File(
+      [new Uint8Array(xlsxOf(templateRows(PARTS, entered, 'Class 9 - A', true))) as BlobPart],
+      'marks.xlsx',
+    );
+    const sheet = parseMarkParts(await readSheetGrid(file), ['CQ', 'MCQ']);
+    expect(sheet.problem).toBe('');
+    expect(sheet.rows.map((r) => ({ roll: r.rollNo, parts: r.parts, absent: r.absent })))
+      .toEqual([
+        { roll: 1, parts: { CQ: 51, MCQ: 18 }, absent: false },
+        { roll: 2, parts: {}, absent: true },
+        { roll: 3, parts: { CQ: 44 }, absent: false },
+        // Roll 4 carried nothing, so it is not a row at all — uploading the
+        // sheet leaves that student exactly as they were.
+      ]);
+  });
+
+  it('comes back unchanged after a correction, and only there', async () => {
+    const rows = templateRows(PARTS, entered, 'Class 9 - A', true);
+    rows[2][4] = 21;                       // roll 1's MCQ corrected, 18 -> 21
+    const file = new File(
+      [new Uint8Array(xlsxOf(rows)) as BlobPart], 'marks.xlsx',
+    );
+    const sheet = parseMarkParts(await readSheetGrid(file), ['CQ', 'MCQ']);
+    expect(sheet.rows[0]).toMatchObject({ rollNo: 1, parts: { CQ: 51, MCQ: 21 } });
+    expect(sheet.rows[2]).toMatchObject({ rollNo: 3, parts: { CQ: 44 } });
+  });
+});

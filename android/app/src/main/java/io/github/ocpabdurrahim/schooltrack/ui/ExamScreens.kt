@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import io.github.ocpabdurrahim.schooltrack.data.AdminRepository
 import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.Component
+import io.github.ocpabdurrahim.schooltrack.data.EnteredMark
 import io.github.ocpabdurrahim.schooltrack.data.Exam
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
 import io.github.ocpabdurrahim.schooltrack.data.GROUPS
@@ -487,6 +488,12 @@ fun MarkEntryScreen(
     var classId by remember { mutableStateOf("") }
     var subjectId by remember { mutableStateOf("") }
     var students by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
+    // Every subject's marks for this exam and class, for the sheets below.
+    var allMarks by remember { mutableStateOf<List<ResultRow>>(emptyList()) }
+    // Blank form, or the same form with the marks already in it? One switch
+    // rather than four buttons: the filled sheet IS the blank one with its
+    // boxes filled, and reads back through the same parser.
+    var withMarks by remember { mutableStateOf(false) }
     var entries by remember { mutableStateOf<Map<String, Typed>>(emptyMap()) }
     var busy by remember { mutableStateOf(true) }
     var note by remember { mutableStateOf("") }
@@ -557,8 +564,28 @@ fun MarkEntryScreen(
         }
     }
 
-    fun asTemplateStudents(list: List<StudentDetail>) =
-        list.map { TemplateStudent(it.rollNo, it.fullName, it.groupName) }
+    /**
+     * One student's row for a sheet: the roll, who they are, and — when the
+     * sheet is to carry them — what is already entered for that subject.
+     */
+    fun asTemplateStudents(list: List<StudentDetail>, sub: Subject) =
+        list.map { st ->
+            val got = allMarks.firstOrNull {
+                it.subjectId == sub.subjectId && it.studentId == st.studentId
+            }
+            TemplateStudent(
+                rollNo = st.rollNo,
+                fullName = st.fullName,
+                groupName = st.groupName,
+                entered = got?.let {
+                    EnteredMark(
+                        parts = it.parts.orEmpty(),
+                        total = it.marks,
+                        absent = it.absent,
+                    )
+                },
+            )
+        }
 
     fun offer(name: String, bytes: ByteArray) {
         formNote = ""
@@ -628,8 +655,13 @@ fun MarkEntryScreen(
         busy = true
         try {
             val roll = people.findStudents(classId, "")
-            val marks = repo.marksForExam(examId, classId).filter { it.subjectId == subjectId }
+            // Every subject's marks, not only the subject on screen: the
+            // sheets below are offered for all of them at once, and the
+            // screen has already paid for the query.
+            val everything = repo.marksForExam(examId, classId)
+            val marks = everything.filter { it.subjectId == subjectId }
             students = roll
+            allMarks = everything
             entries = roll.associate { s ->
                 val got = marks.firstOrNull { it.studentId == s.studentId }
                 s.studentId to typedFrom(got?.marks, got?.parts, got?.absent ?: false)
@@ -720,12 +752,27 @@ fun MarkEntryScreen(
                     onClick = {
                         val sub = subject ?: return@OutlinedButton
                         offer(
-                            safeFileName(templateFileName(classLabel, sub.subjectName)),
-                            xlsxOf(templateRows(sub, asTemplateStudents(sitters), classLabel)),
+                            safeFileName(
+                                templateFileName(classLabel, sub.subjectName, withMarks),
+                            ),
+                            xlsxOf(
+                                templateRows(
+                                    sub,
+                                    asTemplateStudents(sitters, sub),
+                                    classLabel,
+                                    withMarks,
+                                ),
+                            ),
                         )
                     },
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                ) { Text("Blank form for " + (subject?.subjectName ?: "this subject")) }
+                ) {
+                    Text(
+                        (if (withMarks) "" else "Blank form for ") +
+                            (subject?.subjectName ?: "this subject") +
+                            (if (withMarks) " — with the marks entered" else ""),
+                    )
+                }
 
                 OutlinedButton(
                     enabled = classSubjects.isNotEmpty() && students.isNotEmpty(),
@@ -734,25 +781,53 @@ fun MarkEntryScreen(
                         // paper — the same rule the boxes below use.
                         val files = classSubjects.map { sub ->
                             ZipEntry(
-                                safeFileName(templateFileName(classLabel, sub.subjectName)),
+                                safeFileName(
+                                    templateFileName(classLabel, sub.subjectName, withMarks),
+                                ),
                                 xlsxOf(
                                     templateRows(
                                         sub,
                                         asTemplateStudents(
                                             students.filter { sitsSubject(sub, it.asSitter()) },
+                                            sub,
                                         ),
                                         classLabel,
+                                        withMarks,
                                     ),
                                 ),
                             )
                         }
                         offer(
-                            safeFileName("$classLabel — blank mark sheets") + ".zip",
+                            safeFileName(
+                                "$classLabel — " +
+                                    (if (withMarks) "marks entered" else "blank mark sheets"),
+                            ) + ".zip",
                             zip(files),
                         )
                     },
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                ) { Text("Every subject in $classLabel") }
+                ) {
+                    Text(
+                        "Every subject in $classLabel" +
+                            (if (withMarks) ", with marks" else ""),
+                    )
+                }
+
+                // Downloading what is already entered is how a mark gets
+                // corrected in a spreadsheet, or kept as a record of the
+                // exam. It is the same sheet, so it uploads straight back —
+                // and an empty box still changes nothing, which is what
+                // makes correcting one box safe.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    Checkbox(checked = withMarks, onCheckedChange = { withMarks = it })
+                    Text(
+                        "Include the marks already entered",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
 
                 if (formNote.isNotBlank()) {
                     Text(
