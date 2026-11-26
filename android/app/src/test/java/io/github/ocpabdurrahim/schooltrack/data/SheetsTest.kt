@@ -49,7 +49,24 @@ class SheetsTest {
                 isOptional = s.isOptional,
             )
         }
-        return StudentResult(student(id, roll), tabulate(subjectMarks), null)
+        val tabulation = tabulate(subjectMarks)
+        // Built the way sheetFor builds it. Bangla is the first paper of the
+        // school's order (SubjectOrder.kt), so it is the one the chain breaks
+        // a tie on -- and a mark is a mark here, not the 200 a real Bangla
+        // unit is.
+        return StudentResult(
+            student = student(id, roll),
+            tabulation = tabulation,
+            position = null,
+            merit = MeritKey(
+                incomplete = tabulation.incomplete,
+                gpa = tabulation.gpa,
+                failed = tabulation.failed.size,
+                total = totalMarks(tabulation),
+                firstPaper = marks["Bangla"],
+                rollNo = roll,
+            ),
+        )
     }
 
     @Test
@@ -126,6 +143,38 @@ class SheetsTest {
             result("2", 2, mapOf("Bangla" to 75.0, "English" to 75.0, "Maths" to 75.0, "Agri" to 40.0)),
         )
         assertEquals(listOf(1L, 2L, 3L), meritOrder(rows).map { it.student.rollNo })
+    }
+
+    @Test
+    fun meritOrderBreaksAnEqualGpaOnTheTotalBeforeItReachesTheRoll() {
+        // Both 4.00. Roll 2 is eleven marks ahead and goes first, which the
+        // old rule -- GPA then roll -- got backwards.
+        val rows = listOf(
+            result("1", 1, mapOf("Bangla" to 70.0, "English" to 78.0, "Maths" to 72.0, "Agri" to 40.0)),
+            result("2", 2, mapOf("Bangla" to 79.0, "English" to 75.0, "Maths" to 77.0, "Agri" to 40.0)),
+        )
+        assertEquals(listOf(2L, 1L), meritOrder(rows).map { it.student.rollNo })
+    }
+
+    @Test
+    fun meritOrderBreaksAnEqualTotalOnBanglaTheFirstPaperOfTheOrder() {
+        val rows = listOf(
+            result("1", 1, mapOf("Bangla" to 70.0, "English" to 76.0, "Maths" to 74.0, "Agri" to 40.0)),
+            result("2", 2, mapOf("Bangla" to 76.0, "English" to 70.0, "Maths" to 74.0, "Agri" to 40.0)),
+        )
+        assertEquals(listOf(2L, 1L), meritOrder(rows).map { it.student.rollNo })
+    }
+
+    @Test
+    fun meritOrderRanksTheFailureWithFewerSubjectsFailedAboveTheOneWithMore() {
+        // Roll 2 scored more over the exam and still comes second: one
+        // subject failed beats two, which is the school's own rule.
+        val rows = listOf(
+            result("1", 1, mapOf("Bangla" to 60.0, "English" to 20.0, "Maths" to 55.0, "Agri" to 50.0)),
+            result("2", 2, mapOf("Bangla" to 70.0, "English" to 20.0, "Maths" to 25.0, "Agri" to 50.0)),
+        )
+        assertEquals(listOf(1, 2), rows.map { it.tabulation.failed.size })
+        assertEquals(listOf(1L, 2L), meritOrder(rows).map { it.student.rollNo })
     }
 
     @Test

@@ -30,9 +30,10 @@ import {
   tabulate,
 } from './grading';
 import { normalGroup } from './groups';
+import { type MeritKey, compareMerit, meritPositions } from './merit';
 import { normalReligion } from './religions';
 import { type Sitting, satAs } from './sitting';
-import { sortSubjects } from './subjectorder';
+import { sortSubjects, subjectRank } from './subjectorder';
 import type { StudentDetail } from './people';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
@@ -388,6 +389,12 @@ export type StudentResult = {
   student: StudentDetail;
   tabulation: Tabulation;
   position: number | null;     // null while the result is incomplete
+  /**
+   * What decided that position, kept rather than recomputed: the sheet, the
+   * merit list and the phone all order the same students, and working the
+   * answer out three times is three chances to work it out differently.
+   */
+  merit: MeritKey;
 };
 
 /**
@@ -395,8 +402,14 @@ export type StudentResult = {
  *
  * Position is computed, not stored, and an incomplete result has no position
  * at all — ranking a student whose maths mark has not been entered would put
- * them last for no reason. Equal GPAs share a position, and the next position
- * skips accordingly (1, 2, 2, 4), the way a result sheet has always done it.
+ * them last for no reason.
+ *
+ * The order itself is merit.ts: GPA, then fewer subjects failed, then total
+ * marks, then the first paper of the school's order, then the roll. Each
+ * student's key is built here because this is the only place that can see
+ * BOTH the graded tabulation and the raw papers behind it — Bangla 1st Paper
+ * is a mark in its own right, and by the time it reaches the tabulation it
+ * has been added to Bangla 2nd and graded as one subject out of 200.
  */
 export function sheetFor(
   students: StudentDetail[],
@@ -412,24 +425,36 @@ export function sheetFor(
 
   const rows = students.map((student) => {
     const mine = byStudent.get(student.studentId) ?? [];
-    const subjectMarks: SubjectMark[] = subjectsForStudent(subjects, student)
+    const sits = subjectsForStudent(subjects, student);
+    const subjectMarks: SubjectMark[] = sits
       .map((s) => subjectMarkFor(s, mine.find((m) => m.subjectId === s.subjectId)));
-    return { student, tabulation: tabulate(subjectMarks), position: null as number | null };
+    const tabulation = tabulate(subjectMarks);
+    // The first paper of the school's order — Bangla 1st Paper here, found by
+    // its place in that order rather than by its name, so a school that spells
+    // it Bengali, or renames it, still breaks its ties on the same paper.
+    const first = sits.reduce<Subject | null>(
+      (best, s) => (best === null || subjectRank(s) < subjectRank(best) ? s : best),
+      null,
+    );
+    return {
+      student,
+      tabulation,
+      position: null as number | null,
+      merit: {
+        incomplete: tabulation.incomplete,
+        gpa: tabulation.gpa,
+        failed: tabulation.failed.length,
+        total: totalMarks(tabulation),
+        firstPaper: first
+          ? mine.find((m) => m.subjectId === first.subjectId)?.marks ?? null
+          : null,
+        rollNo: student.rollNo,
+      },
+    };
   });
 
-  const ranked = rows
-    .filter((r) => !r.tabulation.incomplete && r.tabulation.gpa !== null)
-    .sort((a, b) => (b.tabulation.gpa ?? 0) - (a.tabulation.gpa ?? 0));
-
-  let position = 0;
-  let lastGpa: number | null = null;
-  ranked.forEach((r, i) => {
-    if (r.tabulation.gpa !== lastGpa) {
-      position = i + 1;
-      lastGpa = r.tabulation.gpa;
-    }
-    r.position = position;
-  });
+  const positions = meritPositions(rows.map((r) => r.merit));
+  rows.forEach((r, i) => { r.position = positions[i]; });
 
   return rows.sort((a, b) => a.student.rollNo - b.student.rollNo);
 }
@@ -622,17 +647,12 @@ export function gradeDistribution(results: StudentResult[]): { letter: string; c
 }
 
 /**
- * Merit order: best first, then by roll so the order is stable between runs.
- * Students whose marks are not all in have no position and go last — they are
+ * Merit order: best first, by the chain in merit.ts — the same chain that
+ * numbered the positions, so the list reads 1, 2, 3 straight down.
+ *
+ * Students whose marks are not all in go last and have no position: they are
  * not failures, they are simply not finished.
  */
 export function meritOrder(results: StudentResult[]): StudentResult[] {
-  return [...results].sort((a, b) => {
-    if (a.tabulation.incomplete !== b.tabulation.incomplete) {
-      return a.tabulation.incomplete ? 1 : -1;
-    }
-    const diff = (b.tabulation.gpa ?? -1) - (a.tabulation.gpa ?? -1);
-    if (diff !== 0) return diff;
-    return a.student.rollNo - b.student.rollNo;
-  });
+  return [...results].sort((a, b) => compareMerit(a.merit, b.merit));
 }

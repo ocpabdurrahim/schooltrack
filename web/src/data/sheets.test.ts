@@ -43,7 +43,23 @@ const result = (id: string, roll: number, marks: Marks, absent: string[] = []): 
     absent: absent.includes(s.subjectId),
     isOptional: s.isOptional,
   }));
-  return { student: student(id, roll), tabulation: tabulate(subjectMarks), position: null };
+  const tabulation = tabulate(subjectMarks);
+  return {
+    student: student(id, roll),
+    tabulation,
+    position: null,
+    // Built the way sheetFor builds it. Bangla is the first paper of the
+    // school's order (subjectorder.ts), so it is the one the chain breaks a
+    // tie on — and a mark is a mark here, not the 200 a real Bangla unit is.
+    merit: {
+      incomplete: tabulation.incomplete,
+      gpa: tabulation.gpa,
+      failed: tabulation.failed.length,
+      total: totalMarks(tabulation),
+      firstPaper: marks.Bangla ?? null,
+      rollNo: roll,
+    },
+  };
 };
 
 describe('totalMarks', () => {
@@ -122,6 +138,35 @@ describe('meritOrder', () => {
       result('2', 2, { Bangla: 10, English: 10, Maths: 10, Agri: 10 }),   // failed
     ];
     expect(meritOrder(rows).map((r) => r.student.rollNo)).toEqual([2, 1]);
+  });
+
+  it('breaks an equal GPA on the total before it reaches the roll', () => {
+    // Both 4.00. Roll 2 is eleven marks ahead and goes first, which the old
+    // rule — GPA then roll — got backwards.
+    const rows = [
+      result('1', 1, { Bangla: 70, English: 78, Maths: 72, Agri: 40 }),
+      result('2', 2, { Bangla: 79, English: 75, Maths: 77, Agri: 40 }),
+    ];
+    expect(meritOrder(rows).map((r) => r.student.rollNo)).toEqual([2, 1]);
+  });
+
+  it('breaks an equal total on Bangla, the first paper of the order', () => {
+    const rows = [
+      result('1', 1, { Bangla: 70, English: 76, Maths: 74, Agri: 40 }),
+      result('2', 2, { Bangla: 76, English: 70, Maths: 74, Agri: 40 }),
+    ];
+    expect(meritOrder(rows).map((r) => r.student.rollNo)).toEqual([2, 1]);
+  });
+
+  it('ranks the failure with fewer subjects failed above the one with more', () => {
+    // Roll 2 scored more over the exam and still comes second: one subject
+    // failed beats two, which is the school's own rule.
+    const rows = [
+      result('1', 1, { Bangla: 60, English: 20, Maths: 55, Agri: 50 }),
+      result('2', 2, { Bangla: 70, English: 20, Maths: 25, Agri: 50 }),
+    ];
+    expect(rows.map((r) => r.tabulation.failed.length)).toEqual([1, 2]);
+    expect(meritOrder(rows).map((r) => r.student.rollNo)).toEqual([1, 2]);
   });
 });
 

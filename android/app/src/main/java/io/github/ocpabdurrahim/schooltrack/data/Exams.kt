@@ -104,6 +104,15 @@ data class StudentResult(
     val student: StudentDetail,
     val tabulation: Tabulation,
     val position: Int?,        // null while the result is incomplete
+    /**
+     * What decided that position, kept rather than recomputed: the sheet, the
+     * merit list and the browser all order the same students, and working the
+     * answer out three times is three chances to work it out differently.
+     *
+     * No default: a key left behind is a section ordered by nothing at all,
+     * and it would look like a working list rather than an error.
+     */
+    val merit: MeritKey,
 )
 
 /** JULY_EXAM-2026 — upper case, underscores, year appended, as in Oracle. */
@@ -426,25 +435,35 @@ fun sheetFor(
 
     val rows = students.map { student ->
         val mine = byStudent[student.studentId].orEmpty()
-        val subjectMarks = subjectsForStudent(subjects, student.asSitter()).map { s ->
+        val sits = subjectsForStudent(subjects, student.asSitter())
+        val subjectMarks = sits.map { s ->
             subjectMarkFor(s, mine.firstOrNull { it.subjectId == s.subjectId })
         }
-        StudentResult(student, tabulate(subjectMarks), null)
+        val tabulation = tabulate(subjectMarks)
+        // The first paper of the school's order -- Bangla 1st Paper here,
+        // found by its place in that order rather than by its name, so a
+        // school that spells it Bengali, or renames it, still breaks its ties
+        // on the same paper.
+        val first = sits.minByOrNull { subjectRank(it) }
+        StudentResult(
+            student = student,
+            tabulation = tabulation,
+            position = null,
+            merit = MeritKey(
+                incomplete = tabulation.incomplete,
+                gpa = tabulation.gpa,
+                failed = tabulation.failed.size,
+                total = totalMarks(tabulation),
+                firstPaper = first?.let { f ->
+                    mine.firstOrNull { it.subjectId == f.subjectId }?.marks
+                },
+                rollNo = student.rollNo,
+            ),
+        )
     }.toMutableList()
 
-    val ranked = rows.filter { !it.tabulation.incomplete && it.tabulation.gpa != null }
-        .sortedByDescending { it.tabulation.gpa }
-
-    var position = 0
-    var lastGpa: Double? = null
-    ranked.forEachIndexed { index, r ->
-        if (r.tabulation.gpa != lastGpa) {
-            position = index + 1
-            lastGpa = r.tabulation.gpa
-        }
-        val at = rows.indexOfFirst { it.student.studentId == r.student.studentId }
-        rows[at] = rows[at].copy(position = position)
-    }
+    val positions = meritPositions(rows.map { it.merit })
+    positions.forEachIndexed { i, p -> rows[i] = rows[i].copy(position = p) }
 
     return rows.sortedBy { it.student.rollNo }
 }
@@ -598,8 +617,4 @@ fun gradeDistribution(results: List<StudentResult>): List<Pair<String, Int>> {
  * not failures, they are simply not finished.
  */
 fun meritOrder(results: List<StudentResult>): List<StudentResult> =
-    results.sortedWith(
-        compareBy<StudentResult> { it.tabulation.incomplete }
-            .thenByDescending { it.tabulation.gpa ?: -1.0 }
-            .thenBy { it.student.rollNo },
-    )
+    results.sortedWith { a, b -> compareMerit(a.merit, b.merit) }

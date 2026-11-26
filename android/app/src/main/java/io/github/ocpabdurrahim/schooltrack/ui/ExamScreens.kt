@@ -69,8 +69,11 @@ import io.github.ocpabdurrahim.schooltrack.data.partsAndTotal
 import io.github.ocpabdurrahim.schooltrack.data.periodLabelFor
 import io.github.ocpabdurrahim.schooltrack.data.safeFileName
 import io.github.ocpabdurrahim.schooltrack.data.sheetColumns
+import io.github.ocpabdurrahim.schooltrack.data.subjectsForClass
+import io.github.ocpabdurrahim.schooltrack.data.fmtMark
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.shortName
+import io.github.ocpabdurrahim.schooltrack.data.subjectRank
 import io.github.ocpabdurrahim.schooltrack.data.singleMark
 import io.github.ocpabdurrahim.schooltrack.data.sitsSubject
 import io.github.ocpabdurrahim.schooltrack.data.subjectMarkFor
@@ -1045,10 +1048,24 @@ fun ResultsScreen(
     val passed = rows.count { (it.tabulation.gpa ?: 0.0) > 0 }
     val stats = subjectStats(rows, columns)
     val distribution = gradeDistribution(rows)
-    val shown = if (view == "sheet") meritOrder(rows) else rows
+    val shown = if (view == "tabulation") rows else meritOrder(rows)
+    // The paper a tie is broken on: the first of the school's order, which is
+    // Bangla 1st Paper here. Named on the merit list so the figure beside it
+    // can be checked against the mark sheet.
+    //
+    // From the PAPERS, not from `columns`: those are the sheet's columns,
+    // where Bangla 1st and 2nd have already been combined into one unit out
+    // of 200. The tie is broken on the first paper's own mark, so the label
+    // has to name the first paper and not the unit it ends up inside.
+    val tiePaper = if (className.isBlank()) null
+    else subjectsForClass(subjects, className).minByOrNull { subjectRank(it) }
 
     AdminScaffold(
-        if (view == "sheet") "Result sheet" else "Tabulation sheet",
+        when (view) {
+            "sheet" -> "Result sheet"
+            "merit" -> "Merit list"
+            else -> "Tabulation sheet"
+        },
         listOfNotNull(
             exam?.let { it.examName + " " + it.examYear },
             classes.firstOrNull { it.classId == classId }?.displayName,
@@ -1072,6 +1089,7 @@ fun ResultsScreen(
                     listOf(
                         "tabulation" to "Tabulation (marks and grades)",
                         "sheet" to "Result sheet (merit order)",
+                        "merit" to "Merit list (ranked, with the tie-breaks)",
                     ),
                     view,
                 ) { view = it }
@@ -1114,8 +1132,8 @@ fun ResultsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            if (view == "sheet") (r.position?.toString() ?: "—")
-                            else r.student.rollNo.toString(),
+                            if (view == "tabulation") r.student.rollNo.toString()
+                            else (r.position?.toString() ?: "—"),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.width(32.dp),
                         )
@@ -1197,6 +1215,29 @@ fun ResultsScreen(
                                     "total " + (totalMarks(r.tabulation)?.toInt()?.toString() ?: "—"),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else if (view == "merit") {
+                                // The figures the order actually used, in the
+                                // order it used them (Merit.kt), so a position
+                                // can be answered for rather than taken on
+                                // trust. A student with no failures shows none
+                                // -- the rung only ever separates failures.
+                                Text(
+                                    "roll " + r.student.rollNo +
+                                        "  ·  total " +
+                                        (r.merit.total?.let { fmtMark(it) } ?: "—") +
+                                        (if (r.merit.failed > 0)
+                                            "  ·  " + r.merit.failed + " failed" else "") +
+                                        (r.merit.firstPaper?.let {
+                                            "  ·  " + (tiePaper?.let { p -> shortName(p.subjectName) }
+                                                ?: "1st paper") + " " + fmtMark(it)
+                                        } ?: "") +
+                                        (if (r.tabulation.incomplete)
+                                            "  ·  marks not all in" else ""),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (r.merit.failed > 0)
+                                        MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             } else {
                                 Text(

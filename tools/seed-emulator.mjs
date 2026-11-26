@@ -61,6 +61,15 @@ const STUDENTS = [
     groupName: 'Humanities', religion: 'Hindu' },
   { studentId: '104', fullName: 'Mohammad Kamrul Islam Chowdhury', rollNo: 4,
     classId: '91', groupName: 'Humanities', religion: 'Islam' },
+  // Four more, built to land on each rung of the merit chain in turn.
+  { studentId: '105', fullName: 'Nadia Akter',     rollNo: 5, classId: '91',
+    groupName: 'Science', religion: 'Islam' },
+  { studentId: '106', fullName: 'Omar Faruk',      rollNo: 6, classId: '91',
+    groupName: 'Science', religion: 'Islam' },
+  { studentId: '107', fullName: 'Parvin Sultana',  rollNo: 7, classId: '91',
+    groupName: 'Science', religion: 'Islam' },
+  { studentId: '108', fullName: 'Rakib Hasan',     rollNo: 8, classId: '91',
+    groupName: 'Humanities', religion: 'Islam' },
 ];
 
 async function user(email, uid) {
@@ -269,6 +278,53 @@ const MARKS = {
     GEO: { CQ: 48, MCQ: 22 },
     AGRI: { CQ: 36, MCQ: 18, PRACTICAL: 16 },
   },
+};
+
+// --- the merit chain, one rung at a time -----------------------------------
+//
+// 105, 106 and 107 sit the same papers and differ in one place each, so the
+// list they come out in is the rule itself and nothing else:
+//
+//   107  3.72, total 703          ahead on TOTAL MARKS
+//   106  3.72, total 696, Ban 72  level on total, ahead on BANGLA 1ST PAPER
+//   105  3.72, total 696, Ban 68  level to the last rung, behind on the roll
+//
+// and 108 against 102, who are both failures:
+//
+//   102  one subject failed,  total 651   AHEAD, on fewer failures
+//   108  two subjects failed, total 709   behind, 58 marks and all
+//
+// which is the school's rule and the one worth having a test and a sheet for.
+
+const NADIA = {
+  BAN1: { CQ: 48, MCQ: 20 }, BAN2: { CQ: 50, MCQ: 22 },   // 68 + 72 = 140
+  ENG1: { WRITTEN: 60 }, ENG2: { WRITTEN: 60 },
+  MATH: { CQ: 50, MCQ: 22 },
+  ISL: { CQ: 45, MCQ: 20 },
+  ICT: { CQ: 18, MCQ: 17 },
+  BGS: { CQ: 42, MCQ: 20 },
+  PHY: { CQ: 35, MCQ: 18, PRACTICAL: 18 },
+  CHE: { CQ: 33, MCQ: 17, PRACTICAL: 16 },
+  BIO: { CQ: 32, MCQ: 17, PRACTICAL: 16 },
+};
+
+MARKS[105] = NADIA;
+// The same 140 in Bangla, the other way round: same GPA, same total, and
+// ahead of Nadia on the first paper alone.
+MARKS[106] = { ...NADIA, BAN1: { CQ: 50, MCQ: 22 }, BAN2: { CQ: 48, MCQ: 20 } };
+// Seven more marks in Maths, which is the same grade and so the same GPA.
+MARKS[107] = { ...NADIA, MATH: { CQ: 55, MCQ: 24 } };
+// The better exam of the two failures, and second of them all the same.
+MARKS[108] = {
+  BAN1: { CQ: 50, MCQ: 22 }, BAN2: { CQ: 50, MCQ: 22 },
+  ENG1: { WRITTEN: 70 }, ENG2: { WRITTEN: 70 },
+  MATH: { CQ: 60, MCQ: 8 },     // 68, and F: the MCQ pass is 10
+  ISL: { CQ: 50, MCQ: 24 },
+  ICT: { CQ: 20, MCQ: 6 },      // 26, and F: the MCQ pass is 8
+  SCI: { CQ: 45, MCQ: 20 },
+  CIV: { CQ: 44, MCQ: 20 },
+  HIST: { CQ: 42, MCQ: 19 },
+  GEO: { CQ: 46, MCQ: 21 },
 };
 
 let written = 0;

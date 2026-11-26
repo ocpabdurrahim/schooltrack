@@ -298,6 +298,22 @@ Each item is a module of the APEX app being rebuilt here. Done means: works on
    combined subject starts. The **result sheet** is what goes on the noticeboard: merit order,
    total, GPA, grade, passed or failed with the failed subjects named, and a
    summary with the pass percentage and grade distribution.
+   The **merit list** is the ranked notice, and the one sheet that shows *why*
+   each position was given. Position comes from `merit.ts` / `Merit.kt`
+   (twinned, same cases): **GPA**, then **fewer subjects failed** — which
+   separates one failing student from another and nobody else, since everybody
+   who passed failed none — then **total marks**, then the **first paper of the
+   school's order** (Bangla 1st Paper here, found by its place in
+   `subjectorder.ts` rather than by name, so a school spelling it Bengali
+   breaks its ties on the same paper), and last the **roll**. The roll is
+   unique within a section, so no two students stay level: every position is a
+   single name and none is shared. The figures each rung used are columns on
+   the list, so a tie can be answered for at the counter.
+   The chain is built in `sheetFor`, the only place that can see both the
+   graded tabulation and the raw papers behind it — Bangla 1st Paper is a mark
+   in its own right, and by the time it reaches the tabulation it has been
+   added to Bangla 2nd and graded as one subject out of 200. An incomplete
+   result is still unranked, on every sheet.
    The **total includes the optional subject** even though it only partly
    counts towards the GPA — that is how a tabulation has always been read —
    and is null while any mark is missing, because a part-total is worse than

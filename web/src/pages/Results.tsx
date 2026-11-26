@@ -17,15 +17,17 @@ import {
   sheetFor,
   subjectStats,
   sheetColumns,
+  subjectsForClass,
   totalMarks,
 } from '../data/exams';
 import { type SubjectGrade, type SubjectMark, gpaText } from '../data/grading';
 import { cellText, partsTitle } from '../data/cellparts';
-import { shortNames } from '../data/shortnames';
+import { shortName, shortNames } from '../data/shortnames';
 import { layout, slot } from '../data/tabsheet';
+import { subjectRank } from '../data/subjectorder';
 import { findStudents } from '../data/people';
 
-type View = 'tabulation' | 'sheet';
+type View = 'tabulation' | 'sheet' | 'merit';
 
 /**
  * Two sheets over one set of marks.
@@ -36,6 +38,11 @@ type View = 'tabulation' | 'sheet';
  *
  *   RESULT SHEET — what goes on the noticeboard: merit order, GPA, grade,
  *   passed or failed, with the grade distribution at the foot.
+ *
+ *   MERIT LIST — the ranked notice, and the one sheet that shows WHY each
+ *   position was given: the figures the chain in merit.ts actually used, in
+ *   the order it used them, so a tie can be answered for at the counter
+ *   rather than taken on trust.
  *
  * Neither stores anything. Correct a mark and both correct themselves.
  */
@@ -167,6 +174,20 @@ export default function Results() {
 
   const className = rows[0]?.student.className ?? '';
   const columns = className ? sheetColumns(subjects, className) : [];
+  /**
+   * The paper a tie is broken on: the first of the school's order, which is
+   * Bangla 1st Paper here. Named on the merit list so the figure in that
+   * column can be checked against the mark sheet.
+   *
+   * From the PAPERS, not from `columns`: those are the sheet's columns, where
+   * Bangla 1st and 2nd have already been combined into one unit out of 200.
+   * The tie is broken on the first paper's own mark, so the heading has to
+   * name the first paper and not the unit it ends up inside.
+   */
+  const tiePaper = className
+    ? [...subjectsForClass(subjects, className)]
+      .sort((a, b) => subjectRank(a) - subjectRank(b))[0] ?? null
+    : null;
   // The sheet's shape comes from the students actually on it: as many group
   // columns as the widest of them needs, and none at all for a class that has
   // not been streamed.
@@ -254,7 +275,8 @@ export default function Results() {
     <div style={{ textAlign: 'center', marginBottom: 12 }}>
       <div style={{ fontSize: 18, fontWeight: 700 }}>{school?.instituteName ?? 'School'}</div>
       <div style={{ fontWeight: 600 }}>
-        {view === 'tabulation' ? 'TABULATION SHEET' : 'RESULT SHEET'}
+        {view === 'tabulation' ? 'TABULATION SHEET'
+          : view === 'merit' ? 'MERIT LIST' : 'RESULT SHEET'}
         {exam ? ` — ${exam.examName.toUpperCase()} ${exam.examYear}` : ''}
       </div>
       <div style={{ fontSize: 13 }}>{section?.displayName}</div>
@@ -264,7 +286,10 @@ export default function Results() {
   return (
     <div className="wrap">
       <div className="card no-print">
-        <h1>{view === 'tabulation' ? 'Tabulation sheet' : 'Result sheet'}</h1>
+        <h1>
+          {view === 'tabulation' ? 'Tabulation sheet'
+            : view === 'merit' ? 'Merit list' : 'Result sheet'}
+        </h1>
         <h2>
           {exam ? `${exam.examName} ${exam.examYear}` : 'Pick an exam'}
           {section ? ` · ${section.displayName}` : ''}
@@ -299,6 +324,7 @@ export default function Results() {
             <select id="vw" value={view} onChange={(e) => setView(e.target.value as View)}>
               <option value="tabulation">Tabulation (marks and grades)</option>
               <option value="sheet">Result sheet (merit order)</option>
+              <option value="merit">Merit list (ranked, with the tie-breaks)</option>
             </select>
           </div>
         </div>
@@ -575,6 +601,97 @@ export default function Results() {
                   </div>
                 ))}
               </div>
+            </>
+          )}
+
+          {!busy && rows.length > 0 && view === 'merit' && (
+            <>
+              <table
+                className="ruled"
+                style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}
+              >
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--line)', textAlign: 'left' }}>
+                    <th style={{ padding: '6px 4px' }}>Position</th>
+                    <th style={{ padding: '6px 4px' }}>Roll</th>
+                    <th style={{ padding: '6px 4px' }}>Name</th>
+                    {streamed && <th style={{ padding: '6px 4px' }}>Grp</th>}
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>GPA</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'center' }}>Grade</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'right' }}>Failed</th>
+                    {tiePaper && (
+                      <th
+                        style={{ padding: '6px 4px', textAlign: 'right' }}
+                        title={`${tiePaper.subjectName} — the first paper of the school's order`}
+                      >
+                        {shortName(tiePaper.subjectName)}
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {merit.map((r) => (
+                    <tr key={r.student.studentId} style={{ borderBottom: '1px solid var(--line)' }}>
+                      <td style={{ padding: '6px 4px', fontWeight: 700 }}>
+                        {r.position ?? <span style={{ color: 'var(--muted)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '6px 4px' }}>{r.student.rollNo}</td>
+                      <td style={{ padding: '6px 4px' }}>
+                        <Link to={`/students/${r.student.studentId}`}>{r.student.fullName}</Link>
+                        {r.tabulation.incomplete && (
+                          <span style={{ color: 'var(--muted)' }}> · marks not all in</span>
+                        )}
+                      </td>
+                      {streamed && (
+                        <td style={{ padding: '6px 4px', color: 'var(--muted)' }}>
+                          {shortGroup(r.student.groupName)}
+                        </td>
+                      )}
+                      <td style={{
+                        padding: '6px 4px', textAlign: 'right', fontWeight: 700,
+                        color: r.tabulation.letter === 'F' ? 'var(--bad)' : undefined,
+                      }}>
+                        {gpaText(r.tabulation.gpa)}
+                      </td>
+                      <td style={{
+                        padding: '6px 4px', textAlign: 'center',
+                        color: r.tabulation.letter === 'F' ? 'var(--bad)' : undefined,
+                      }}>
+                        {r.tabulation.letter}
+                      </td>
+                      <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                        {r.merit.total ?? '—'}
+                      </td>
+                      {/* The rung that orders the failures. A blank means
+                          none, which is every student who passed. */}
+                      <td style={{
+                        padding: '6px 4px', textAlign: 'right',
+                        color: r.merit.failed > 0 ? 'var(--bad)' : 'var(--muted)',
+                      }}>
+                        {r.merit.failed > 0 ? r.merit.failed : '—'}
+                      </td>
+                      {tiePaper && (
+                        <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                          {r.merit.firstPaper ?? '—'}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <p style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
+                Position is decided in this order, each step used only when the one
+                before it is level: <strong>GPA</strong> highest first; then{' '}
+                <strong>fewer subjects failed</strong>, which separates one failing
+                student from another and nobody else; then <strong>total marks</strong>;
+                then <strong>{tiePaper ? tiePaper.subjectName : 'the first paper'}</strong>;
+                and last the <strong>roll</strong>, which is unique, so every position is
+                a single name and none is shared. A student whose marks are not all in is
+                not ranked — they are not last, they are not finished, and a position
+                printed against them now would change when the mark arrives.
+              </p>
             </>
           )}
 
