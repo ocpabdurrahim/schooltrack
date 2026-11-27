@@ -476,9 +476,12 @@ export default function Results() {
                 order the paper is marked in (CQ, MCQ, Practical — hover a cell to see
                 which is which), and below them the subject total and its letter. A part
                 in <strong>bold</strong> fell below its own pass mark, which is how a
-                subject can total 68 and still be F. A wider gap between the small numbers
-                is where the second paper of a combined subject starts — the two Bangla
-                papers are one subject out of 200.
+                subject can total 68 and still be F. A <strong>line</strong> between the
+                small numbers divides one paper from the next, where a subject is two
+                papers graded as one: Bangla reads 50 22 | 48 20, its CQ and MCQ for each
+                paper, and English reads 71 | 59, which is the 1st paper and the 2nd —
+                not a CQ and an MCQ. A space divides the parts of one paper; a line
+                divides the papers.
                 {' '}
                 A column headed PHY/CIV holds Physics for the Science rows and Civics for
                 the Humanities ones — the <strong>Grp</strong> column beside the name says

@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
@@ -1256,6 +1259,26 @@ fun ResultsScreen(
                                                     )
                                                 }
                                                 t.parts.forEachIndexed { i, p ->
+                                                    // A LINE divides one paper
+                                                    // from the next; a space
+                                                    // divides the parts of one
+                                                    // paper. Without it English's
+                                                    // two numbers -- its 1st and
+                                                    // 2nd paper -- look exactly
+                                                    // like the CQ and MCQ beside
+                                                    // them in every other subject.
+                                                    if (p.opensPaper) {
+                                                        Box(
+                                                            Modifier
+                                                                .padding(horizontal = 3.dp)
+                                                                .width(1.dp)
+                                                                .height(9.dp)
+                                                                .background(
+                                                                    MaterialTheme.colorScheme
+                                                                        .outlineVariant,
+                                                                ),
+                                                        )
+                                                    }
                                                     Text(
                                                         p.text,
                                                         style = MaterialTheme.typography.labelSmall,
@@ -1266,9 +1289,7 @@ fun ResultsScreen(
                                                         else MaterialTheme.colorScheme.onSurfaceVariant,
                                                         modifier = Modifier.padding(
                                                             start = when {
-                                                                i == 0 -> 0.dp
-                                                                // where the next paper starts
-                                                                p.opensPaper -> 7.dp
+                                                                i == 0 || p.opensPaper -> 0.dp
                                                                 else -> 3.dp
                                                             },
                                                         ),

@@ -246,7 +246,7 @@ const MARKS = {
   },
   102: {
     BAN1: { CQ: 45, MCQ: 20 }, BAN2: { CQ: 44, MCQ: 19 },
-    ENG1: { WRITTEN: 62 }, ENG2: { WRITTEN: 55 },
+    ENG1: { WRITTEN: 62 },   // 2nd paper not marked yet, as in the live school
     MATH: { CQ: 60, MCQ: 8 },
     ISL: { CQ: 40, MCQ: 20 },
     ICT: { CQ: 18, MCQ: 17 },
@@ -257,7 +257,7 @@ const MARKS = {
   },
   103: {
     BAN1: { CQ: 42, MCQ: 18 }, BAN2: { CQ: 40, MCQ: 17 },
-    ENG1: { WRITTEN: 55 }, ENG2: { WRITTEN: 48 },
+    ENG1: { WRITTEN: 55 },
     MATH: { CQ: 38, MCQ: 15 },
     HIN: { CQ: 44, MCQ: 21 },
     ICT: { CQ: 16, MCQ: 15 },
@@ -268,7 +268,7 @@ const MARKS = {
   },
   104: {
     BAN1: { CQ: 52, MCQ: 24 }, BAN2: { CQ: 50, MCQ: 22 },
-    ENG1: { WRITTEN: 68 }, ENG2: { WRITTEN: 64 },
+    ENG1: { WRITTEN: 68 },
     MATH: { CQ: 58, MCQ: 25 },
     ISL: { CQ: 50, MCQ: 24 },
     ICT: 'abs',
@@ -298,7 +298,7 @@ const MARKS = {
 
 const NADIA = {
   BAN1: { CQ: 48, MCQ: 20 }, BAN2: { CQ: 50, MCQ: 22 },   // 68 + 72 = 140
-  ENG1: { WRITTEN: 60 }, ENG2: { WRITTEN: 60 },
+  ENG1: { WRITTEN: 60 },
   MATH: { CQ: 50, MCQ: 22 },
   ISL: { CQ: 45, MCQ: 20 },
   ICT: { CQ: 18, MCQ: 17 },
@@ -326,6 +326,59 @@ MARKS[108] = {
   HIST: { CQ: 42, MCQ: 19 },
   GEO: { CQ: 46, MCQ: 21 },
 };
+
+// --- enough students to fill more than one printed page -------------------
+//
+// A tabulation of eight students fits a page and so can never show what goes
+// wrong on the second one. The live section has eighty-three. These forty
+// are invented, marked by a formula, and exist so that the PRINTED sheet can
+// be looked at over a page break -- which is where a two-tier row can be
+// torn in half, and where a heading row that does not repeat leaves the
+// second page a field of unlabelled numbers.
+const FILLER_NAMES = [
+  'Abdul Karim', 'Bilkis Begum', 'Chandan Roy', 'Dalia Parvin', 'Emdad Hossain',
+  'Farzana Yasmin', 'Golam Mostafa', 'Habiba Khatun', 'Imran Sheikh', 'Jesmin Ara',
+];
+
+for (let i = 0; i < 40; i += 1) {
+  const roll = 9 + i;
+  const id = String(200 + i);
+  const science = i % 2 === 0;
+  STUDENTS.push({
+    studentId: id,
+    fullName: `${FILLER_NAMES[i % FILLER_NAMES.length]} ${Math.floor(i / 10) + 1}`,
+    rollNo: roll,
+    classId: '91',
+    groupName: science ? 'Science' : 'Humanities',
+    religion: i % 7 === 0 ? 'Hindu' : 'Islam',
+  });
+
+  // Spread the marks about so the sheet is not forty identical rows.
+  const n = (lo, hi) => lo + ((i * 7) % (hi - lo + 1));
+  const cqMcq = { CQ: n(30, 60), MCQ: n(12, 28) };
+  const prac = { CQ: n(22, 45), MCQ: n(9, 23), PRACTICAL: n(10, 24) };
+  const common = {
+    BAN1: cqMcq, BAN2: { CQ: n(28, 58), MCQ: n(11, 27) },
+    ENG1: { WRITTEN: n(35, 85) },
+    MATH: cqMcq,
+    ICT: { CQ: n(10, 24), MCQ: n(9, 23) },
+  };
+  const religion = i % 7 === 0 ? { HIN: cqMcq } : { ISL: cqMcq };
+  const stream = science
+    ? { BGS: cqMcq, PHY: prac, CHE: prac, BIO: prac }
+    : { SCI: cqMcq, CIV: cqMcq, HIST: cqMcq, GEO: cqMcq };
+  MARKS[id] = { ...common, ...religion, ...stream };
+
+  const cls = CLASSES.find((c) => c.classId === '91');
+  await school.collection('students').doc(id).set({
+    fullName: STUDENTS[STUDENTS.length - 1].fullName,
+    rollNo: roll, classId: '91',
+    className: cls.className, section: cls.section,
+    groupName: STUDENTS[STUDENTS.length - 1].groupName,
+    religion: STUDENTS[STUDENTS.length - 1].religion,
+    status: 'A', updatedAt: now,
+  });
+}
 
 let written = 0;
 for (const [studentId, got] of Object.entries(MARKS)) {

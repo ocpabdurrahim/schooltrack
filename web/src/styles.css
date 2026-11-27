@@ -731,6 +731,16 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 @media print {
   .ruled.fit { table-layout: fixed; font-size: 9.5px; }
   .ruled.fit th, .ruled.fit td { padding: 2px 3px !important; }
+
+  /*
+    A row is two tiers now, so a break through the middle of one would put a
+    student's parts at the foot of a page and their total at the head of the
+    next. Chrome already keeps a table row whole -- printing a three-page
+    tabulation to PDF with and without this rule gives byte-identical
+    pagination -- so this is a guard and not a fix, kept because the rows
+    have more to lose than they used to.
+  */
+  .ruled.fit tr { break-inside: avoid; page-break-inside: avoid; }
   /* The last resort in a very narrow column: let the parts fall onto a second
      line rather than spill out of the cell. The total below them never wraps. */
   .ruled.fit .tier-parts { white-space: normal; }
@@ -765,9 +775,24 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   font-size: 10px; line-height: 12px; color: var(--muted); letter-spacing: .01em;
 }
 .tier-parts span + span { margin-left: 4px; }
-/* Where the next paper of a combined subject starts, so that the four numbers
-   of a Bangla cell read as two papers and not as one run. */
-.tier-parts span + span.gap { margin-left: 9px; }
+/*
+  Where the next PAPER of a combined subject starts.
+
+  A wider gap was not enough, and English is why. Every other column's two
+  small numbers are CQ and MCQ; English's two are 1st Paper and 2nd Paper --
+  the same two positions, the same look, a different meaning. A teacher reads
+  the second number as an MCQ mark, because in every column beside it that is
+  what the second number is.
+
+  So the papers are divided by a line rather than by a space. A space
+  separates the parts of one paper; a line separates the papers. Bangla reads
+  50 22 | 48 20, English reads 71 | 59, and neither can be taken for the
+  other.
+*/
+.tier-parts span + span.gap {
+  margin-left: 4px; padding-left: 5px;
+  border-left: 1px solid var(--line);
+}
 .tier-parts .bad { color: var(--bad); font-weight: 600; }
 .tier-main { line-height: 16px; }
 .tier-main.split { border-top: 1px solid var(--line); }
@@ -778,6 +803,8 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   .tier-parts { font-size: 8.5px; line-height: 10px; color: #333; }
   .tier-main { line-height: 14px; }
   .tier-main.split { border-top: 1px solid #b8bcc4; }
+  /* The paper divider has to survive a mono laser as surely as the grid. */
+  .tier-parts span + span.gap { border-left-color: #8b9099; }
   /* No colour to rely on: the failing part is the bold one. */
   .tier-parts .bad, .tier-main.bad { color: #000; font-weight: 700; }
 }
