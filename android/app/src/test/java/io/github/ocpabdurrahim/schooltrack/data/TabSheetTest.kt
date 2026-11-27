@@ -43,6 +43,25 @@ class TabSheetTest {
         subject("AGRICULTURE", 14, groups = listOf("Humanities"), optional = true),
     )
 
+    /**
+     * A student with NO stream recorded, who is therefore excluded by
+     * nothing and sits every group paper in the school -- the real rule from
+     * Exams.kt, not an invention of this test. One of these is what widened
+     * the live school's Annual Exam sheet from four group columns to eleven.
+     */
+    private fun unstreamedTabulation(religion: String) = tabulate(
+        all.filter { it.religions.isEmpty() || religion in it.religions }.map { s ->
+            subjectMarkFor(
+                s,
+                ResultRow(
+                    examId = "e", studentId = "u", subjectId = s.subjectId,
+                    subjectName = s.subjectName, marks = 70.0, absent = false,
+                    classId = "c", rollNo = 9, fullMarks = 100.0, isOptional = s.isOptional,
+                ),
+            )
+        },
+    )
+
     private fun tabulationFor(group: String, religion: String) = tabulate(
         all.filter {
             (it.groupNames.isEmpty() || group in it.groupNames) &&
@@ -254,5 +273,47 @@ class TabSheetTest {
         assertEquals("PHY", clash[0])
         assertEquals(2, clash.toSet().size)
         assertEquals(3, shortNames(listOf("SCIENCE", "SCIENCE", "SCIENCE")).toSet().size)
+    }
+
+    // --- a student with no stream recorded ---------------------------------
+
+    @Test
+    fun aStudentWithNoStreamDoesNotWidenTheSheet() {
+        // The live sheet went to eleven group columns because one student of
+        // eighty-three had no group: seven of them held a subject already
+        // paired into one of the four real columns, and the sheet ran off
+        // the page.
+        val science = tabulationFor("Science", "Islam")
+        val humanities = tabulationFor("Humanities", "Hindu")
+        assertEquals(4, layout(listOf(science, humanities)).groupSlots.size)
+        assertEquals(
+            4,
+            layout(listOf(science, humanities, unstreamedTabulation("Islam"))).groupSlots.size,
+        )
+    }
+
+    @Test
+    fun aStudentWithNoStreamIsNotInTheHeadingsEither() {
+        val science = tabulationFor("Science", "Islam")
+        val humanities = tabulationFor("Humanities", "Hindu")
+        assertEquals(
+            layout(listOf(science, humanities)).groupSlots,
+            layout(listOf(science, humanities, unstreamedTabulation("Islam"))).groupSlots,
+        )
+    }
+
+    @Test
+    fun stillShowsTheGroupColumnsWhenNobodyHasAStream() {
+        // A class that has not been streamed sits its group papers all the
+        // same, and they still need somewhere to appear.
+        assertTrue(layout(listOf(unstreamedTabulation("Islam"))).groupSlots.isNotEmpty())
+    }
+
+    @Test
+    fun readsAStreamOffThePapersAStudentSits() {
+        assertEquals("Science", streamOf(slot(tabulationFor("Science", "Islam")).group))
+        assertEquals("Humanities", streamOf(slot(tabulationFor("Humanities", "Hindu")).group))
+        assertNull(streamOf(slot(unstreamedTabulation("Islam")).group))
+        assertNull(streamOf(emptyList()))
     }
 }

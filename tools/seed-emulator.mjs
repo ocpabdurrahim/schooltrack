@@ -70,6 +70,11 @@ const STUDENTS = [
     groupName: 'Science', religion: 'Islam' },
   { studentId: '108', fullName: 'Rakib Hasan',     rollNo: 8, classId: '91',
     groupName: 'Humanities', religion: 'Islam' },
+  // One student with NO group, as the live school has: excluded by nothing,
+  // so they count as sitting every group paper there is. The sheet must not
+  // let them set its width -- see tabsheet.ts.
+  { studentId: '109', fullName: 'Shahin Alam',     rollNo: 9, classId: '91',
+    groupName: '', religion: 'Islam' },
 ];
 
 async function user(email, uid) {
@@ -341,7 +346,7 @@ const FILLER_NAMES = [
 ];
 
 for (let i = 0; i < 40; i += 1) {
-  const roll = 9 + i;
+  const roll = 10 + i;
   const id = String(200 + i);
   const science = i % 2 === 0;
   STUDENTS.push({

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Subject } from './exams';
 import { subjectMarkFor } from './exams';
 import { tabulate } from './grading';
-import { layout, slot } from './tabsheet';
+import { layout, slot, streamOf } from './tabsheet';
 
 /**
  * The SAME cases exist in android/.../data/TabSheetTest.kt, and the subjects
@@ -35,6 +35,20 @@ const ALL = [
   subject({ subjectId: 'HIGHER_MATHS', groupNames: ['Science'], isOptional: true, sortOrder: 13 }),
   subject({ subjectId: 'AGRICULTURE', groupNames: ['Humanities'], isOptional: true, sortOrder: 14 }),
 ];
+
+/**
+ * A student with NO stream recorded, who is therefore excluded by nothing
+ * and sits every group paper in the school — the real rule from exams.ts,
+ * not an invention of this test. One of these is what widened the live
+ * school's Annual Exam sheet from four group columns to eleven.
+ */
+const unstreamedTabulation = (religion: string) => tabulate(
+  ALL.filter((s) => !(s.religions ?? []).length || (s.religions ?? []).includes(religion))
+    .map((s) => subjectMarkFor(s, {
+      examId: 'e', studentId: 'u', subjectId: s.subjectId, subjectName: s.subjectName,
+      marks: 70, absent: false, classId: 'c', rollNo: 9, fullMarks: 100, isOptional: s.isOptional,
+    })),
+);
 
 /** One student's tabulation: the subjects their stream and religion sit. */
 const tabulationFor = (group: string, religion: string) => tabulate(
@@ -147,5 +161,53 @@ describe('layout', () => {
     expect(got.groupSlots).toEqual([]);
     expect(got.religion).toEqual([]);
     expect(got.optional).toEqual([]);
+  });
+});
+
+describe('a student with no stream recorded', () => {
+  const science = tabulationFor('Science', 'Islam');
+  const humanities = tabulationFor('Humanities', 'Hindu');
+  const nobody = unstreamedTabulation('Islam');
+
+  it('does NOT widen the sheet to every group paper in the school', () => {
+    // The live sheet went to eleven group columns because one student of
+    // eighty-three had no group: seven of them held a subject already paired
+    // into one of the four real columns, and the sheet ran off the page.
+    expect(layout([science, humanities]).groupSlots).toHaveLength(4);
+    expect(layout([science, humanities, nobody]).groupSlots).toHaveLength(4);
+  });
+
+  it('does not put their papers into the headings either', () => {
+    const withThem = layout([science, humanities, nobody]);
+    const without = layout([science, humanities]);
+    expect(withThem.groupSlots).toEqual(without.groupSlots);
+  });
+
+  it('still shows the group columns when NOBODY has a stream', () => {
+    // A class that has not been streamed sits its group papers all the same,
+    // and they still need somewhere to appear.
+    expect(layout([nobody]).groupSlots.length).toBeGreaterThan(0);
+  });
+
+  it('leaves the common, religion and 4th subject columns to everyone', () => {
+    const got = layout([science, humanities, nobody]);
+    expect(got.common.map((c) => c.subjectId))
+      .toEqual(['BANGLA', 'ENGLISH', 'MATHEMATICS', 'ICT']);
+    expect(got.religion).toEqual(['ISLAM', 'HINDU']);
+  });
+});
+
+describe('streamOf', () => {
+  it('reads a stream off the papers a student sits', () => {
+    expect(streamOf(slot(tabulationFor('Science', 'Islam')).group)).toBe('Science');
+    expect(streamOf(slot(tabulationFor('Humanities', 'Hindu')).group)).toBe('Humanities');
+  });
+
+  it('says none when the papers agree on none', () => {
+    expect(streamOf(slot(unstreamedTabulation('Islam')).group)).toBeNull();
+  });
+
+  it('says none for a student with no group papers at all', () => {
+    expect(streamOf([])).toBeNull();
   });
 });

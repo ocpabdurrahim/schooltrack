@@ -79,6 +79,28 @@ function note(into: string[], name?: string) {
 }
 
 /**
+ * The stream this student's group papers agree on, or null if they agree on
+ * none.
+ *
+ * Not read from the student — it is read from the papers they sit, because
+ * that is what the sheet has to lay out. A Science student's four papers are
+ * all Science; a Humanities student's four are all Humanities. A student
+ * with NO stream recorded is excluded by nothing (see excludedBy in
+ * exams.ts, where a missing field means "not known yet" rather than "does
+ * not match"), so they sit every group paper there is and their papers agree
+ * on nothing at all.
+ */
+export function streamOf(group: readonly Cell[]): string | null {
+  if (group.length === 0) return null;
+  let shared: string[] | null = null;
+  for (const c of group) {
+    const names = c.groupNames ?? [];
+    shared = shared === null ? [...names] : shared.filter((n) => names.includes(n));
+  }
+  return shared && shared.length ? shared[0] : null;
+}
+
+/**
  * The sheet's shape, from the students actually on it.
  *
  * Nothing is assumed about how many group papers a stream has: the sheet is
@@ -95,6 +117,28 @@ export function layout(results: Tabulation[]): Layout {
   // slot, so the first one found places the column for all of them.
   let relCell: Cell | null = null;
 
+  /**
+   * WHO DECIDES HOW MANY GROUP COLUMNS THERE ARE: the students who have a
+   * stream, and only them.
+   *
+   * One student with no stream recorded sits every group paper in the
+   * school — eleven of them here, where a stream sits four. Left to set the
+   * width, that single student gave the sheet seven extra columns, each one
+   * holding a subject already paired into one of the four real ones, and
+   * pushed the whole thing off the page.
+   *
+   * The slots exist to line PARALLEL papers up across streams: Physics above
+   * History above Accounting, one column. A student with no stream has no
+   * parallel papers — they have everybody's — so they do not get a say in
+   * how many columns that takes.
+   *
+   * Unless nobody has a stream at all. A class that has not been streamed
+   * still sits its group papers and still needs somewhere to show them, so
+   * then every student counts, as before.
+   */
+  const streamed = results.filter((t) => streamOf(slot(t).group) !== null);
+  const setsTheWidth = streamed.length ? streamed : results;
+
   for (const t of results) {
     const s = slot(t);
     relCell = relCell ?? s.religion;
@@ -103,12 +147,15 @@ export function layout(results: Tabulation[]): Layout {
       seen.add(c.subjectId);
       common.push({ subjectId: c.subjectId, subjectName: c.subjectName });
     }
-    s.group.forEach((c, i) => {
+    note(religion, s.religion?.subjectName);
+    note(optional, s.optional?.subjectName);
+  }
+
+  for (const t of setsTheWidth) {
+    slot(t).group.forEach((c, i) => {
       while (groupSlots.length <= i) groupSlots.push([]);
       note(groupSlots[i], c.subjectName);
     });
-    note(religion, s.religion?.subjectName);
-    note(optional, s.optional?.subjectName);
   }
 
   // A common subject the order has never heard of counts as coming after the

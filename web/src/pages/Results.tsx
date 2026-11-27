@@ -245,6 +245,18 @@ export default function Results() {
   const fixedTotal = FIXED.roll + FIXED.name + (streamed ? FIXED.grp : 0)
     + FIXED.total + FIXED.gpa + FIXED.grade + FIXED.pos;
   const markWidth = markCols > 0 ? (100 - fixedTotal) / markCols : 0;
+  /**
+   * Students with no group recorded, in a section that has streams.
+   *
+   * They are excluded by nothing, so they count as sitting EVERY group paper
+   * in the school — eleven of them here. The sheet no longer lets one of
+   * them set its width (tabsheet.ts), which is what put seven duplicate
+   * columns on the Annual Exam, but their group marks have no column to go
+   * in either. The cure is one field on one student, so the page says whose.
+   */
+  const noGroup = streamed
+    ? rows.filter((r) => !(r.student.groupName ?? '').trim())
+    : [];
   const complete = rows.filter((r) => !r.tabulation.incomplete).length;
   const passed = rows.filter((r) => (r.tabulation.gpa ?? 0) > 0).length;
   const stats = subjectStats(rows, columns);
@@ -374,6 +386,22 @@ export default function Results() {
               {busy ? 'Working…'
                 : `${rows.length} student${rows.length === 1 ? '' : 's'} · ${complete} complete · ${passed} passed`}
             </h2>
+            {!busy && noGroup.length > 0 && (
+              <p style={{ color: 'var(--warn)', fontSize: 14, margin: '8px 0 0' }}>
+                {noGroup.length === 1 ? 'One student has' : `${noGroup.length} students have`}
+                {' '}no group recorded —{' '}
+                {noGroup.slice(0, 4).map((r, i) => (
+                  <Fragment key={r.student.studentId}>
+                    {i > 0 && ', '}
+                    <Link to={`/students/${r.student.studentId}`}>{r.student.fullName}</Link>
+                  </Fragment>
+                ))}
+                {noGroup.length > 4 && ` and ${noGroup.length - 4} more`}.
+                {' '}With no group they count as sitting <strong>every</strong> group paper,
+                so their group marks have no column on this sheet and their result cannot
+                be completed. Set the group on the student&rsquo;s page.
+              </p>
+            )}
           </div>
 
           {!busy && rows.length > 0 && view === 'tabulation' && (

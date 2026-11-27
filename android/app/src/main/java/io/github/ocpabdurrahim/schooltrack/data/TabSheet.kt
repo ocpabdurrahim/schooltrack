@@ -73,6 +73,28 @@ data class Layout(
  * as wide as the widest student needs and no wider, so a section that has not
  * been streamed yet simply has no group columns at all.
  */
+/**
+ * The stream this student's group papers agree on, or null if they agree on
+ * none.
+ *
+ * Not read from the student -- it is read from the papers they sit, because
+ * that is what the sheet has to lay out. A Science student's four papers are
+ * all Science; a Humanities student's four are all Humanities. A student
+ * with NO stream recorded is excluded by nothing (see excludedBy in
+ * Exams.kt, where a missing field means "not known yet" rather than "does
+ * not match"), so they sit every group paper there is and their papers agree
+ * on nothing at all.
+ */
+fun streamOf(group: List<GradedSubject>): String? {
+    if (group.isEmpty()) return null
+    var shared: List<String>? = null
+    for (c in group) {
+        val names = c.mark.groupNames
+        shared = shared?.filter { it in names } ?: names.toList()
+    }
+    return shared?.firstOrNull()
+}
+
 fun layout(results: List<Tabulation>): Layout {
     val common = mutableListOf<Pair<String, String>>()
     val seen = mutableSetOf<String>()
@@ -89,18 +111,43 @@ fun layout(results: List<Tabulation>): Layout {
     // slot, so the first one found places the column for all of them.
     var relCell: GradedSubject? = null
 
+    /*
+     * WHO DECIDES HOW MANY GROUP COLUMNS THERE ARE: the students who have a
+     * stream, and only them.
+     *
+     * One student with no stream recorded sits every group paper in the
+     * school -- eleven of them here, where a stream sits four. Left to set
+     * the width, that single student gave the sheet seven extra columns,
+     * each one holding a subject already paired into one of the four real
+     * ones, and pushed the whole thing off the page.
+     *
+     * The slots exist to line PARALLEL papers up across streams: Physics
+     * above History above Accounting, one column. A student with no stream
+     * has no parallel papers -- they have everybody's -- so they do not get
+     * a say in how many columns that takes.
+     *
+     * Unless nobody has a stream at all. A class that has not been streamed
+     * still sits its group papers and still needs somewhere to show them, so
+     * then every student counts, as before.
+     */
+    val streamed = results.filter { streamOf(slot(it).group) != null }
+    val setsTheWidth = if (streamed.isNotEmpty()) streamed else results
+
     for (t in results) {
         val s = slot(t)
         if (relCell == null) relCell = s.religion
         for (c in s.common) {
             if (seen.add(c.mark.subjectId)) common.add(c.mark.subjectId to c.mark.subjectName)
         }
-        s.group.forEachIndexed { i, c ->
+        note(religion, s.religion?.mark?.subjectName)
+        note(optional, s.optional?.mark?.subjectName)
+    }
+
+    for (t in setsTheWidth) {
+        slot(t).group.forEachIndexed { i, c ->
             while (groupSlots.size <= i) groupSlots.add(mutableListOf())
             note(groupSlots[i], c.mark.subjectName)
         }
-        note(religion, s.religion?.mark?.subjectName)
-        note(optional, s.optional?.mark?.subjectName)
     }
 
     // A common subject the order has never heard of counts as coming after the
