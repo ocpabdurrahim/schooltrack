@@ -76,18 +76,13 @@ function Mark({ cell }: { cell?: SubjectMark & SubjectGrade }) {
       {/* The parts. A blank line where a paper has none, so that the totals
           across a row stay on one line and the sheet reads as a grid. */}
       {/*
-        A SPACE between the parts, and it is load-bearing.
+        A space between the parts, so that the cell's TEXT is "71 59" and not
+        "7159" — to anything that reads it rather than looks at it, and to
+        anyone who copies a row out of the sheet.
 
-        The parts are separate elements with no whitespace between them, so
-        the line had no break opportunity at all: a column too narrow to hold
-        it could not wrap and spilled over the column beside it instead,
-        which is what a PORTRAIT print of this sheet did — sixty collisions
-        of text over text, measured in the PDF.
-
-        A space is suppressed by `nowrap` on screen and honoured by the print
-        rules that set `normal`, which is exactly the difference wanted.
-        A <wbr> is not: Chrome breaks at one even under nowrap, and putting
-        one here wrapped the parts on screen and squeezed the column with it.
+        It is not there to let the line wrap: the print rules size this line
+        to fit its column and forbid wrapping outright, because a cell that
+        wraps is a three-line row and a sheet half as dense again.
       */}
       <div className="tier-parts">
         {t.parts.length === 0 ? '\u00a0' : t.parts.map((p, i) => (

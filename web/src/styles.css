@@ -743,14 +743,6 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
     have more to lose than they used to.
   */
   .ruled.fit tr { break-inside: avoid; page-break-inside: avoid; }
-  /*
-    The last resort in a column too narrow for them: let the parts fall onto
-    a second line rather than spill over the column beside them. The markup
-    puts a SPACE between the parts to break at -- without one this rule does
-    NOTHING, because there would be no break opportunity on the line at all.
-    The total below them never wraps.
-  */
-  .ruled.fit .tier-parts { white-space: normal; }
 }
 
 @media print {
@@ -809,7 +801,34 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
 .tier-main .letter { color: var(--muted); }
 
 @media print {
-  .tier-parts { font-size: 8.5px; line-height: 10px; color: #333; }
+  /*
+    A CELL IS TWO LINES, NEVER THREE.
+
+    The widest line on the sheet is a Bangla cell: four marks and a paper
+    divider. At 8.5px it measured 57px against the 56px a column gives it —
+    over by ONE pixel, so every one of them wrapped and every row on the
+    sheet was three lines tall.
+
+    8px with the gaps tightened measures 47px against the same 56, which is
+    nine pixels of room: enough for a three-figure mark in each part, which
+    is as wide as this line can ever get. Measured in Chrome's own print
+    layout, because the pane and the printer do not agree about text metrics
+    and only one of them prints.
+
+    Wrapping stays ALLOWED, and costs nothing now that it fits: landscape
+    never reaches for it, and if somebody overrides the orientation in the
+    print dialog the line falls onto a second line instead of being drawn
+    over the column beside it. An ugly row beats an unreadable one.
+  */
+  .ruled.fit .tier-parts {
+    font-size: 8px; line-height: 9.5px;
+    letter-spacing: normal; word-spacing: -.5px;
+    white-space: normal;
+  }
+  .ruled.fit .tier-parts span + span { margin-left: 1px; }
+  .ruled.fit .tier-parts span + span.gap { margin-left: 1px; padding-left: 3px; }
+
+  .tier-parts { font-size: 8px; line-height: 9.5px; color: #333; }
   .tier-main { line-height: 14px; }
   .tier-main.split { border-top: 1px solid #b8bcc4; }
   /* The paper divider has to survive a mono laser as surely as the grid. */
