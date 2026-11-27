@@ -75,13 +75,27 @@ function Mark({ cell }: { cell?: SubjectMark & SubjectGrade }) {
     <td className="tier" style={{ padding: '3px 4px' }} title={partsTitle(cell)}>
       {/* The parts. A blank line where a paper has none, so that the totals
           across a row stay on one line and the sheet reads as a grid. */}
+      {/*
+        A SPACE between the parts, and it is load-bearing.
+
+        The parts are separate elements with no whitespace between them, so
+        the line had no break opportunity at all: a column too narrow to hold
+        it could not wrap and spilled over the column beside it instead,
+        which is what a PORTRAIT print of this sheet did — sixty collisions
+        of text over text, measured in the PDF.
+
+        A space is suppressed by `nowrap` on screen and honoured by the print
+        rules that set `normal`, which is exactly the difference wanted.
+        A <wbr> is not: Chrome breaks at one even under nowrap, and putting
+        one here wrapped the parts on screen and squeezed the column with it.
+      */}
       <div className="tier-parts">
         {t.parts.length === 0 ? '\u00a0' : t.parts.map((p, i) => (
           <span
             key={p.label + i}
             className={`${p.failed ? 'bad' : ''}${p.opensPaper ? ' gap' : ''}`}
           >
-            {p.text}
+            {i > 0 ? ' ' : ''}{p.text}
           </span>
         ))}
       </div>
@@ -243,20 +257,30 @@ export default function Results() {
   const merit = meritOrder(rows);
 
   /**
-   * A tabulation with eight subjects will not fit portrait. @page cannot be
-   * scoped to an element or switched by a class, so the rule is injected for
-   * the duration of the print and taken out again.
+   * A tabulation will not fit portrait, so while one is on screen the page
+   * ITSELF is landscape — not only when the Print landscape button is used.
+   *
+   * It used to be injected for the duration of that button's print and taken
+   * out again, which left Ctrl+P, the browser's own menu and "Save as PDF"
+   * printing portrait. Seventeen columns squeezed into the width of an A4
+   * portrait page leaves each mark column about 45px, the two tiers of
+   * numbers no longer fit, and they print ON TOP of each other — measured as
+   * sixty overlapping runs of text in the PDF, and none at all in landscape.
+   *
+   * @page cannot be scoped to an element or switched by a class, so a rule
+   * for the whole document is the only way to say it; the effect takes it
+   * away again when the sheet is not the thing being looked at.
    */
-  function print(landscape: boolean) {
-    if (!landscape) { window.print(); return; }
+  useEffect(() => {
+    if (view !== 'tabulation') return undefined;
     const style = document.createElement('style');
     style.textContent = '@page { size: A4 landscape; margin: 10mm; }';
     document.head.appendChild(style);
-    try {
-      window.print();
-    } finally {
-      document.head.removeChild(style);
-    }
+    return () => { document.head.removeChild(style); };
+  }, [view]);
+
+  function print(_landscape: boolean) {
+    window.print();
   }
 
   async function togglePublish() {
