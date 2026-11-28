@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { SubjectMark } from './grading';
 import { tabulate } from './grading';
-import { progressFor, signed } from './progress';
+import {
+  EVEN, overallPercent, pctText, progressFor, signed, subjectPercent,
+} from './progress';
 
 /** The SAME cases exist in android/.../data/ProgressTest.kt. */
 
@@ -146,5 +148,68 @@ describe('signed', () => {
 
   it('writes a dash where there is no figure', () => {
     expect(signed(null)).toBe('—');
+  });
+});
+
+describe('a percentage counted from both exams', () => {
+  const half = exam(60, 55, 70);   // 185 / 300  = 61.666…%
+  const annual = exam(72, 51, 70); // 193 / 300  = 64.333…%
+
+  it('weighs the two exams the way the split says', () => {
+    const p = progressFor(half, annual);
+    // 61.6667 x .3 + 64.3333 x .7 = 63.5333…
+    expect(overallPercent(p, { before: 30, after: 70 })).toBeCloseTo(63.5333, 3);
+    expect(overallPercent(p, { before: 70, after: 30 })).toBeCloseTo(62.4667, 3);
+    expect(overallPercent(p, EVEN)).toBeCloseTo(63.0, 3);
+  });
+
+  it('reads a split by its proportions, not its digits', () => {
+    const p = progressFor(half, annual);
+    expect(overallPercent(p, { before: 3, after: 7 }))
+      .toBeCloseTo(overallPercent(p, { before: 30, after: 70 })!, 9);
+  });
+
+  it('gives each subject its own combined percentage', () => {
+    const p = progressFor(half, annual);
+    const bangla = p.subjects[0];
+    // 60% x .3 + 72% x .7 = 68.4
+    expect(subjectPercent(bangla, { before: 30, after: 70 })).toBeCloseTo(68.4, 6);
+  });
+
+  it('HOLDS THE SPLIT when the papers are out of different totals', () => {
+    // Half-yearly out of 50, annual out of 100 -- the case that catches a
+    // percentage built by adding raw marks. 30 of 50 is 60%, 72 of 100 is
+    // 72%, so a 30/70 split must give 68.4, exactly as it does above.
+    const small = tabulate([sub('BANGLA', 30, { fullMarks: 50 })]);
+    const big = tabulate([sub('BANGLA', 72)]);
+    const p = progressFor(small, big);
+    expect(subjectPercent(p.subjects[0], { before: 30, after: 70 })).toBeCloseTo(68.4, 6);
+    expect(overallPercent(p, { before: 30, after: 70 })).toBeCloseTo(68.4, 6);
+    // Adding the marks would give 102/150 = 68%, which is NOT a 30/70 split.
+    expect(overallPercent(p, { before: 30, after: 70 })).not.toBeCloseTo(68.0, 3);
+  });
+
+  it('refuses a subject that only one exam marked', () => {
+    const p = progressFor(exam(60, 55, null), exam(72, 51, 70));
+    const maths = p.subjects.find((s) => s.subjectName === 'MATHEMATICS')!;
+    expect(subjectPercent(maths, EVEN)).toBeNull();
+  });
+
+  it('counts an absent paper as nought, because the child sat the exam', () => {
+    const p = progressFor(exam(60, 55, 70), tabulate([
+      sub('BANGLA', null, { absent: true }), sub('ENGLISH', 51), sub('MATHEMATICS', 70),
+    ]));
+    expect(subjectPercent(p.subjects[0], EVEN)).toBeCloseTo(30, 6);
+  });
+
+  it('says nothing at all when the split is empty', () => {
+    const p = progressFor(half, annual);
+    expect(overallPercent(p, { before: 0, after: 0 })).toBeNull();
+  });
+
+  it('prints a dash rather than NaN%', () => {
+    expect(pctText(null)).toBe('—');
+    expect(pctText(63.5333)).toBe('63.53%');
+    expect(pctText(63.5333, 0)).toBe('64%');
   });
 });

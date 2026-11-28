@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,7 +30,10 @@ import io.github.ocpabdurrahim.schooltrack.data.Progress
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentResult
 import io.github.ocpabdurrahim.schooltrack.data.Subject
+import io.github.ocpabdurrahim.schooltrack.data.Weights
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.overallPercent
+import io.github.ocpabdurrahim.schooltrack.data.pctText
 import io.github.ocpabdurrahim.schooltrack.data.progressFor
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.signed
@@ -97,6 +101,14 @@ fun ProgressScreen(
     val later = exams.firstOrNull { it.examId == afterId }
     val same = beforeId == afterId && beforeId.isNotBlank()
 
+    var combined by remember { mutableStateOf(false) }
+    var earlierShare by remember { mutableStateOf(30) }
+    val weights = if (combined) {
+        Weights(earlierShare.toDouble(), (100 - earlierShare).toDouble())
+    } else {
+        null
+    }
+
     AdminScaffold(
         "Progress report",
         listOfNotNull(
@@ -122,6 +134,38 @@ fun ProgressScreen(
                     classes.map { it.classId to it.displayName },
                     classId,
                 ) { classId = it }
+
+                // An OPTION, off until it is asked for, so a school that only
+                // wants the comparison sees exactly what it saw before. The
+                // split is the school's own: many count the half-yearly for 30
+                // and the annual for 70, which is not a decision to guess at.
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = combined, onCheckedChange = { combined = it })
+                    Text("Count a percentage from both exams")
+                }
+                if (combined) {
+                    Field(
+                        (earlier?.examName ?: "Earlier exam") + " counts (%)",
+                        earlierShare.toString(),
+                        numeric = true,
+                    ) { typed ->
+                        val n = typed.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0
+                        earlierShare = n.coerceIn(0, 100)
+                    }
+                    Text(
+                        (later?.examName ?: "Later exam") + " counts " +
+                            (100 - earlierShare) + "%. Each exam becomes a percentage " +
+                            "first and the two are then weighed, so the split means " +
+                            "what it says even when the papers are out of different " +
+                            "totals.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
 
                 if (same) {
                     Text(
@@ -154,7 +198,7 @@ fun ProgressScreen(
                             }?.position,
                             positionAfter = r.position,
                         )
-                        ProgressRow(r, p) { onOpenStudent(r.student.studentId) }
+                        ProgressRow(r, p, weights) { onOpenStudent(r.student.studentId) }
                         HorizontalDivider()
                     }
                     if (!busy && after.isEmpty()) Text("No students in this section.")
@@ -165,7 +209,12 @@ fun ProgressScreen(
 }
 
 @Composable
-private fun ProgressRow(r: StudentResult, p: Progress, onOpen: () -> Unit) {
+private fun ProgressRow(
+    r: StudentResult,
+    p: Progress,
+    weights: Weights?,
+    onOpen: () -> Unit,
+) {
     val better = (p.gpaChange ?: 0.0) > 0
     val worse = (p.gpaChange ?: 0.0) < 0
     val tint = when {
@@ -199,6 +248,13 @@ private fun ProgressRow(r: StudentResult, p: Progress, onOpen: () -> Unit) {
             )
         }
         Column(horizontalAlignment = Alignment.End) {
+            if (weights != null) {
+                Text(
+                    pctText(overallPercent(p, weights)),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Text(signed(p.gpaChange, 2), fontWeight = FontWeight.Bold, color = tint)
             Text(
                 when (p.verdict) {

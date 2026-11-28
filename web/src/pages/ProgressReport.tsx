@@ -11,7 +11,10 @@ import {
   sheetFor,
 } from '../data/exams';
 import { gpaText } from '../data/grading';
-import { type Progress, progressFor, signed } from '../data/progress';
+import {
+  type Progress, type Weights,
+  overallPercent, pctText, progressFor, signed, subjectPercent,
+} from '../data/progress';
 import { findStudents } from '../data/people';
 
 /**
@@ -35,6 +38,14 @@ export default function ProgressReport() {
   const [afterId, setAfterId] = useState('');
   const [classId, setClassId] = useState('');
   const [only, setOnly] = useState('');            // a roll, to print one sheet
+
+  // The combined percentage is an OPTION, off until it is asked for, so a
+  // school that only wants the comparison prints exactly what it printed
+  // before. The split is the school's own: many count the half-yearly for 30
+  // and the annual for 70, but that is a decision no app should make for them.
+  const [combined, setCombined] = useState(false);
+  const [earlierShare, setEarlierShare] = useState(30);
+  const weights: Weights = { before: earlierShare, after: 100 - earlierShare };
 
   const [before, setBefore] = useState<StudentResult[]>([]);
   const [after, setAfter] = useState<StudentResult[]>([]);
@@ -135,6 +146,45 @@ export default function ProgressReport() {
           </div>
         </div>
 
+        <div style={{
+          marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line-soft)',
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+            marginBottom: combined ? 10 : 0,
+          }}>
+            <input type="checkbox" checked={combined} style={{ width: 'auto', margin: 0 }}
+                   onChange={(e) => setCombined(e.target.checked)} />
+            <span>Count a percentage from both exams</span>
+          </label>
+
+          {combined && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14 }}>{examLabel(earlier)} counts</span>
+              <input
+                inputMode="numeric"
+                value={String(earlierShare)}
+                onChange={(e) => {
+                  const n = Number(e.target.value.replace(/[^\d]/g, '') || 0);
+                  setEarlierShare(Math.max(0, Math.min(100, n)));
+                }}
+                style={{ width: 64, textAlign: 'right' }}
+              />
+              <span style={{ fontSize: 14 }}>
+                % &nbsp;·&nbsp; {examLabel(later)} counts {100 - earlierShare}%
+              </span>
+            </div>
+          )}
+
+          {combined && (
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: '8px 0 0' }}>
+              Each exam becomes a percentage first and the two are then weighed, so
+              the split means what it says even when the papers are out of different
+              totals. A subject only one exam marked gets a dash, not a nought.
+            </p>
+          )}
+        </div>
+
         <button onClick={() => window.print()}
                 disabled={busy || same || !wanted.length}
                 style={{ marginTop: 12 }}>
@@ -170,6 +220,7 @@ export default function ProgressReport() {
           earlier={earlier}
           later={later}
           school={school}
+          weights={combined ? weights : null}
         />
       ))}
     </div>
@@ -180,13 +231,15 @@ export default function ProgressReport() {
 const examLabel = (e?: Exam) => (e ? `${e.examName} ${e.examYear}` : '—');
 
 function Report({
-  result, progress, earlier, later, school,
+  result, progress, earlier, later, school, weights,
 }: {
   result: StudentResult;
   progress: Progress;
   earlier?: Exam;
   later?: Exam;
   school: SchoolSettings | null;
+  /** Null when the combined percentage is switched off. */
+  weights: Weights | null;
 }) {
   const { student } = result;
   const p = progress;
@@ -216,6 +269,12 @@ function Report({
           <div style={{ fontSize: 13 }}>
             {examLabel(earlier)} &nbsp;→&nbsp; {examLabel(later)}
           </div>
+          {weights && (
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Combined percentage counts {examLabel(earlier)} {weights.before}% and{' '}
+              {examLabel(later)} {weights.after}%
+            </div>
+          )}
         </div>
 
         <div style={{
@@ -236,6 +295,9 @@ function Report({
               <th style={{ padding: '5px 4px', textAlign: 'right' }}>{examLabel(earlier)}</th>
               <th style={{ padding: '5px 4px', textAlign: 'right' }}>{examLabel(later)}</th>
               <th style={{ padding: '5px 4px', textAlign: 'right' }}>Change</th>
+              {weights && (
+                <th style={{ padding: '5px 4px', textAlign: 'right' }}>Combined</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -260,6 +322,11 @@ function Report({
                 <td style={{ padding: '5px 4px', textAlign: 'right', ...moved(s.change) }}>
                   {signed(s.change)}
                 </td>
+                {weights && (
+                  <td style={{ padding: '5px 4px', textAlign: 'right' }}>
+                    {pctText(subjectPercent(s, weights))}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -271,6 +338,11 @@ function Report({
               <td style={{ padding: '6px 4px', textAlign: 'right', ...moved(p.totalChange) }}>
                 {signed(p.totalChange)}
               </td>
+              {weights && (
+                <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                  {pctText(overallPercent(p, weights))}
+                </td>
+              )}
             </tr>
             <tr style={{ fontWeight: 600 }}>
               <td style={{ padding: '6px 4px' }}>GPA</td>
@@ -279,6 +351,7 @@ function Report({
               <td style={{ padding: '6px 4px', textAlign: 'right', ...moved(p.gpaChange) }}>
                 {signed(p.gpaChange, 2)}
               </td>
+              {weights && <td />}
             </tr>
             <tr>
               <td style={{ padding: '6px 4px' }}>Position in the section</td>
@@ -295,6 +368,7 @@ function Report({
                   : p.positionChange === 0 ? 'same'
                     : `${signed(p.positionChange)} place${Math.abs(p.positionChange) === 1 ? '' : 's'}`}
               </td>
+              {weights && <td />}
             </tr>
           </tfoot>
         </table>

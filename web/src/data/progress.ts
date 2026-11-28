@@ -27,6 +27,14 @@ export type SubjectProgress = {
   subjectId: string;
   subjectName: string;
   fullMarks: number;
+  /**
+   * What each exam marked this subject OUT OF, kept apart because they can
+   * differ: a half-yearly paper out of 50 and an annual out of 100 is
+   * ordinary, and a percentage worked out against the wrong denominator is
+   * worse than no percentage at all. Null when that exam did not sit it.
+   */
+  fullBefore: number | null;
+  fullAfter: number | null;
   /** The earlier exam, then the later one. Null: not sat, or not marked. */
   before: number | null;
   after: number | null;
@@ -41,6 +49,13 @@ export type Progress = {
   totalBefore: number | null;
   totalAfter: number | null;
   totalChange: number | null;
+  /**
+   * What those totals were out of, one per exam. Added up over the SAME
+   * subjects the totals are, so a percentage made from them compares like
+   * with like.
+   */
+  fullBefore: number | null;
+  fullAfter: number | null;
   gpaBefore: number | null;
   gpaAfter: number | null;
   gpaChange: number | null;
@@ -108,6 +123,8 @@ export function progressFor(
         subjectId: id,
         subjectName: any.subjectName,
         fullMarks: any.fullMarks,
+        fullBefore: a ? a.fullMarks : null,
+        fullAfter: b ? b.fullMarks : null,
         before: beforeMark,
         after: afterMark,
         beforeLetter: letterOf(a),
@@ -122,10 +139,14 @@ export function progressFor(
   // one total bigger for a reason that has nothing to do with the child.
   let totalBefore: number | null = null;
   let totalAfter: number | null = null;
+  let fullBefore: number | null = null;
+  let fullAfter: number | null = null;
   for (const s of subjects) {
     if (!real(s.before) || !real(s.after)) continue;
     totalBefore = (totalBefore ?? 0) + s.before;
     totalAfter = (totalAfter ?? 0) + s.after;
+    fullBefore = (fullBefore ?? 0) + (s.fullBefore ?? 0);
+    fullAfter = (fullAfter ?? 0) + (s.fullAfter ?? 0);
   }
 
   const gpaBefore = before && !before.incomplete ? before.gpa : null;
@@ -140,6 +161,8 @@ export function progressFor(
     totalBefore,
     totalAfter,
     totalChange: diff(totalBefore, totalAfter),
+    fullBefore,
+    fullAfter,
     gpaBefore,
     gpaAfter,
     gpaChange,
@@ -162,4 +185,78 @@ export function signed(n: number | null, places = 0): string {
   const fixed = Math.abs(n).toFixed(places);
   if (Number(fixed) === 0) return places ? `0.${'0'.repeat(places)}` : '0';
   return `${n > 0 ? '+' : '−'}${fixed}`;
+}
+
+/**
+ * How much of the combined figure each exam carries.
+ *
+ * Shares, not necessarily percentages: {before: 30, after: 70} and
+ * {before: 3, after: 7} mean the same thing, because they are divided by
+ * their own sum before use. A school that counts the half-yearly for 30 and
+ * the annual for 70 writes it the way it says it out loud.
+ */
+export type Weights = { before: number; after: number };
+
+/** Both exams counting the same — the obvious starting point. */
+export const EVEN: Weights = { before: 50, after: 50 };
+
+/**
+ * The two shares as fractions of one, or null when there is nothing to
+ * divide by. Negatives are floored at nought rather than allowed to pull a
+ * percentage below zero or above a hundred.
+ */
+function share(w: Weights): { b: number; a: number } | null {
+  const b = Math.max(0, real(w.before) ? w.before : 0);
+  const a = Math.max(0, real(w.after) ? w.after : 0);
+  const sum = b + a;
+  return sum > 0 ? { b: b / sum, a: a / sum } : null;
+}
+
+/** Marks as a percentage of what they were out of. */
+export function percentOf(mark: number | null, full: number | null): number | null {
+  if (!real(mark) || !real(full) || full <= 0) return null;
+  return (mark / full) * 100;
+}
+
+/**
+ * One subject's mark across both exams, weighted.
+ *
+ * Each exam is turned into a percentage FIRST and the two percentages are
+ * then weighed, rather than adding the raw marks: that is the only way the
+ * split means what it says when the papers are out of different totals. A
+ * 30/70 split on a 50-mark paper and a 100-mark one is still 30/70 here,
+ * where adding the marks would quietly make it 18/82.
+ *
+ * Null unless BOTH exams marked it — the rule the whole file keeps. A
+ * percentage that silently counts an unsat paper as nought is the figure
+ * that gets a child shouted at.
+ */
+export function subjectPercent(s: SubjectProgress, w: Weights): number | null {
+  const sh = share(w);
+  if (!sh) return null;
+  const b = percentOf(s.before, s.fullBefore);
+  const a = percentOf(s.after, s.fullAfter);
+  if (b === null || a === null) return null;
+  return b * sh.b + a * sh.a;
+}
+
+/**
+ * The whole report's combined percentage.
+ *
+ * Worked from the TOTALS, not by averaging the subject percentages, so a
+ * subject out of 50 does not weigh as heavily as one out of 100. Same
+ * subjects, same rule, same answer a teacher would get on paper.
+ */
+export function overallPercent(p: Progress, w: Weights): number | null {
+  const sh = share(w);
+  if (!sh) return null;
+  const b = percentOf(p.totalBefore, p.fullBefore);
+  const a = percentOf(p.totalAfter, p.fullAfter);
+  if (b === null || a === null) return null;
+  return b * sh.b + a * sh.a;
+}
+
+/** "73.25%", or a dash when there is no honest figure to print. */
+export function pctText(n: number | null, places = 2): string {
+  return real(n) ? `${n.toFixed(places)}%` : '—';
 }

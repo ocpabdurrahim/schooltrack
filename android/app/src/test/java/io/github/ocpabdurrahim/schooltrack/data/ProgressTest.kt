@@ -189,4 +189,83 @@ class ProgressTest {
     fun writesADashWhereThereIsNoFigure() {
         assertEquals("—", signed(null))
     }
+
+    // ---- a percentage counted from both exams ----------------------------
+    // Half: 185/300 = 61.666...%   Annual: 193/300 = 64.333...%
+
+    private fun half() = exam(60.0, 55.0, 70.0)
+    private fun annual() = exam(72.0, 51.0, 70.0)
+
+    @Test
+    fun weighsTheTwoExamsTheWayTheSplitSays() {
+        val p = progressFor(half(), annual())
+        assertEquals(63.5333, overallPercent(p, Weights(30.0, 70.0))!!, 0.001)
+        assertEquals(62.4667, overallPercent(p, Weights(70.0, 30.0))!!, 0.001)
+        assertEquals(63.0, overallPercent(p, EVEN)!!, 0.001)
+    }
+
+    @Test
+    fun readsASplitByItsProportionsNotItsDigits() {
+        val p = progressFor(half(), annual())
+        assertEquals(
+            overallPercent(p, Weights(30.0, 70.0))!!,
+            overallPercent(p, Weights(3.0, 7.0))!!,
+            1e-9,
+        )
+    }
+
+    @Test
+    fun givesEachSubjectItsOwnCombinedPercentage() {
+        val p = progressFor(half(), annual())
+        // 60% x .3 + 72% x .7 = 68.4
+        assertEquals(68.4, subjectPercent(p.subjects[0], Weights(30.0, 70.0))!!, 1e-6)
+    }
+
+    @Test
+    fun holdsTheSplitWhenThePapersAreOutOfDifferentTotals() {
+        // Half-yearly out of 50, annual out of 100 -- the case that catches a
+        // percentage built by adding raw marks. 30 of 50 is 60%, 72 of 100 is
+        // 72%, so a 30/70 split must give 68.4, exactly as above.
+        val small = tabulate(listOf(sub("BANGLA", 30.0, full = 50.0)))
+        val big = tabulate(listOf(sub("BANGLA", 72.0)))
+        val p = progressFor(small, big)
+        assertEquals(68.4, subjectPercent(p.subjects[0], Weights(30.0, 70.0))!!, 1e-6)
+        assertEquals(68.4, overallPercent(p, Weights(30.0, 70.0))!!, 1e-6)
+        // Adding the marks would give 102/150 = 68%, which is NOT a 30/70 split.
+        assertTrue(Math.abs(overallPercent(p, Weights(30.0, 70.0))!! - 68.0) > 0.3)
+    }
+
+    @Test
+    fun refusesASubjectThatOnlyOneExamMarked() {
+        val p = progressFor(exam(60.0, 55.0, null), exam(72.0, 51.0, 70.0))
+        val maths = p.subjects.first { it.subjectName == "MATHEMATICS" }
+        assertNull(subjectPercent(maths, EVEN))
+    }
+
+    @Test
+    fun countsAnAbsentPaperAsNoughtBecauseTheChildSatTheExam() {
+        val p = progressFor(
+            exam(60.0, 55.0, 70.0),
+            tabulate(
+                listOf(
+                    sub("BANGLA", null, absent = true),
+                    sub("ENGLISH", 51.0),
+                    sub("MATHEMATICS", 70.0),
+                ),
+            ),
+        )
+        assertEquals(30.0, subjectPercent(p.subjects[0], EVEN)!!, 1e-6)
+    }
+
+    @Test
+    fun saysNothingAtAllWhenTheSplitIsEmpty() {
+        assertNull(overallPercent(progressFor(half(), annual()), Weights(0.0, 0.0)))
+    }
+
+    @Test
+    fun printsADashRatherThanNaNPercent() {
+        assertEquals("—", pctText(null))
+        assertEquals("63.53%", pctText(63.5333))
+        assertEquals("64%", pctText(63.5333, 0))
+    }
 }

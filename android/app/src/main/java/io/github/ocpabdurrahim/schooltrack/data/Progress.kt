@@ -24,6 +24,14 @@ data class SubjectProgress(
     val subjectId: String,
     val subjectName: String,
     val fullMarks: Double,
+    /**
+     * What each exam marked this subject OUT OF, kept apart because they can
+     * differ: a half-yearly paper out of 50 and an annual out of 100 is
+     * ordinary, and a percentage worked out against the wrong denominator is
+     * worse than no percentage at all. Null when that exam did not sit it.
+     */
+    val fullBefore: Double?,
+    val fullAfter: Double?,
     /** The earlier exam, then the later one. Null: not sat, or not marked. */
     val before: Double?,
     val after: Double?,
@@ -38,6 +46,13 @@ data class Progress(
     val totalBefore: Double?,
     val totalAfter: Double?,
     val totalChange: Double?,
+    /**
+     * What those totals were out of, one per exam. Added up over the SAME
+     * subjects the totals are, so a percentage made from them compares like
+     * with like.
+     */
+    val fullBefore: Double?,
+    val fullAfter: Double?,
     val gpaBefore: Double?,
     val gpaAfter: Double?,
     val gpaChange: Double?,
@@ -102,6 +117,8 @@ fun progressFor(
             subjectId = id,
             subjectName = any.mark.subjectName,
             fullMarks = any.mark.fullMarks,
+            fullBefore = a?.mark?.fullMarks,
+            fullAfter = b?.mark?.fullMarks,
             before = beforeMark,
             after = afterMark,
             beforeLetter = letterOf(a),
@@ -120,10 +137,14 @@ fun progressFor(
     // one total bigger for a reason that has nothing to do with the child.
     var totalBefore: Double? = null
     var totalAfter: Double? = null
+    var fullBefore: Double? = null
+    var fullAfter: Double? = null
     for (s in subjects) {
         if (!real(s.before) || !real(s.after)) continue
         totalBefore = (totalBefore ?: 0.0) + s.before!!
         totalAfter = (totalAfter ?: 0.0) + s.after!!
+        fullBefore = (fullBefore ?: 0.0) + (s.fullBefore ?: 0.0)
+        fullAfter = (fullAfter ?: 0.0) + (s.fullAfter ?: 0.0)
     }
 
     val gpaBefore = if (before != null && !before.incomplete) before.gpa else null
@@ -135,6 +156,8 @@ fun progressFor(
         totalBefore = totalBefore,
         totalAfter = totalAfter,
         totalChange = diff(totalBefore, totalAfter),
+        fullBefore = fullBefore,
+        fullAfter = fullAfter,
         gpaBefore = gpaBefore,
         gpaAfter = gpaAfter,
         gpaChange = gpaChange,
@@ -164,3 +187,72 @@ fun signed(n: Double?, places: Int = 0): String {
     if (fixed.toDouble() == 0.0) return if (places > 0) "0." + "0".repeat(places) else "0"
     return (if (n > 0) "+" else "−") + fixed
 }
+
+/**
+ * How much of the combined figure each exam carries.
+ *
+ * Shares, not necessarily percentages: Weights(30, 70) and Weights(3, 7)
+ * mean the same thing, because they are divided by their own sum before
+ * use. A school that counts the half-yearly for 30 and the annual for 70
+ * writes it the way it says it out loud.
+ */
+data class Weights(val before: Double, val after: Double)
+
+/** Both exams counting the same -- the obvious starting point. */
+val EVEN = Weights(50.0, 50.0)
+
+/**
+ * The two shares as fractions of one, or null when there is nothing to
+ * divide by. Negatives are floored at nought rather than allowed to pull a
+ * percentage below zero or above a hundred.
+ */
+private fun share(w: Weights): Pair<Double, Double>? {
+    val b = maxOf(0.0, if (real(w.before)) w.before else 0.0)
+    val a = maxOf(0.0, if (real(w.after)) w.after else 0.0)
+    val sum = b + a
+    return if (sum > 0) Pair(b / sum, a / sum) else null
+}
+
+/** Marks as a percentage of what they were out of. */
+fun percentOf(mark: Double?, full: Double?): Double? {
+    if (!real(mark) || !real(full) || full!! <= 0) return null
+    return (mark!! / full) * 100
+}
+
+/**
+ * One subject's mark across both exams, weighted.
+ *
+ * Each exam is turned into a percentage FIRST and the two percentages are
+ * then weighed, rather than adding the raw marks: that is the only way the
+ * split means what it says when the papers are out of different totals. A
+ * 30/70 split on a 50-mark paper and a 100-mark one is still 30/70 here,
+ * where adding the marks would quietly make it 18/82.
+ *
+ * Null unless BOTH exams marked it -- the rule the whole file keeps. A
+ * percentage that silently counts an unsat paper as nought is the figure
+ * that gets a child shouted at.
+ */
+fun subjectPercent(s: SubjectProgress, w: Weights): Double? {
+    val sh = share(w) ?: return null
+    val b = percentOf(s.before, s.fullBefore) ?: return null
+    val a = percentOf(s.after, s.fullAfter) ?: return null
+    return b * sh.first + a * sh.second
+}
+
+/**
+ * The whole report's combined percentage.
+ *
+ * Worked from the TOTALS, not by averaging the subject percentages, so a
+ * subject out of 50 does not weigh as heavily as one out of 100. Same
+ * subjects, same rule, same answer a teacher would get on paper.
+ */
+fun overallPercent(p: Progress, w: Weights): Double? {
+    val sh = share(w) ?: return null
+    val b = percentOf(p.totalBefore, p.fullBefore) ?: return null
+    val a = percentOf(p.totalAfter, p.fullAfter) ?: return null
+    return b * sh.first + a * sh.second
+}
+
+/** "73.25%", or a dash when there is no honest figure to print. */
+fun pctText(n: Double?, places: Int = 2): String =
+    if (real(n)) String.format("%.${places}f%%", n) else "—"
