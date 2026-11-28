@@ -18,6 +18,7 @@
  */
 
 import type { SubjectGrade, SubjectMark, Tabulation } from './grading';
+import { partLabel } from './cellparts';
 import { subjectRank } from './subjectorder';
 
 type Cell = SubjectMark & SubjectGrade;
@@ -42,7 +43,19 @@ export type SubjectProgress = {
   afterLetter: string;
   /** after − before, and null unless BOTH are real figures. */
   change: number | null;
+  /**
+   * The component marks of each exam, added up per label — MCQ, CQ,
+   * PRACTICAL, WRITTEN. Papers merged into one graded unit (Bangla 1st and
+   * 2nd) have their like parts SUMMED, so a combined Bangla out of 200 shows
+   * one MCQ figure rather than two, which is what a column headed MCQ can
+   * honestly hold. A label the subject is not marked in is simply absent.
+   */
+  partsBefore: PartMarks;
+  partsAfter: PartMarks;
 };
+
+/** Component marks keyed by label, already summed across merged papers. */
+export type PartMarks = Record<string, number>;
 
 export type Progress = {
   subjects: SubjectProgress[];
@@ -56,6 +69,14 @@ export type Progress = {
    */
   fullBefore: number | null;
   fullAfter: number | null;
+  /**
+   * Which component columns this student's sheet needs, in the order a
+   * marksheet prints them. Only the ones they ACTUALLY have marks in: a
+   * humanities student gets MCQ and CQ, a science student also Practical,
+   * and printing all four always would leave empty columns and push the
+   * table past the page for no gain.
+   */
+  partLabels: string[];
   gpaBefore: number | null;
   gpaAfter: number | null;
   gpaChange: number | null;
@@ -94,6 +115,45 @@ const letterOf = (c: Cell | undefined): string => {
 };
 
 /**
+ * The order a marksheet prints the parts in. Anything the school invents
+ * later still appears — after these, alphabetically — rather than vanishing
+ * because this list had not heard of it.
+ */
+const PART_ORDER = ['MCQ', 'CQ', 'PRACTICAL', 'WRITTEN'];
+
+const partRank = (label: string): number => {
+  const i = PART_ORDER.indexOf(label);
+  return i === -1 ? PART_ORDER.length : i;
+};
+
+/**
+ * One exam's component marks for one subject, added up per label.
+ *
+ * An absent student has no parts to show: the row says so with its grade,
+ * and a line of noughts across the components would be a different claim —
+ * that they sat it and scored nothing in each.
+ */
+function partsByLabel(c: Cell | undefined): PartMarks {
+  const out: PartMarks = {};
+  if (!c || c.absent || !c.components?.length) return out;
+  for (const comp of c.components) {
+    const v = c.parts?.[comp.name];
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    const label = partLabel(comp.name, comp.paper).toUpperCase();
+    out[label] = (out[label] ?? 0) + v;
+  }
+  return out;
+}
+
+/** "Pract", "Writ" — the headings p43 prints, short enough for a column. */
+export function shortPart(label: string): string {
+  if (label === 'PRACTICAL') return 'Pract';
+  if (label === 'WRITTEN') return 'Writ';
+  if (label === 'MCQ' || label === 'CQ') return label;
+  return label.charAt(0) + label.slice(1).toLowerCase();
+}
+
+/**
  * The two tabulations as one list of subjects.
  *
  * The union of both, in the school's order, because a student may have
@@ -130,6 +190,8 @@ export function progressFor(
         beforeLetter: letterOf(a),
         afterLetter: letterOf(b),
         change: diff(beforeMark, afterMark),
+        partsBefore: partsByLabel(a),
+        partsAfter: partsByLabel(b),
       };
     })
     .sort((x, y) => subjectRank(x) - subjectRank(y) || x.subjectName.localeCompare(y.subjectName));
@@ -149,6 +211,15 @@ export function progressFor(
     fullAfter = (fullAfter ?? 0) + (s.fullAfter ?? 0);
   }
 
+  const seen = new Set<string>();
+  for (const sp of subjects) {
+    for (const k of Object.keys(sp.partsBefore)) seen.add(k);
+    for (const k of Object.keys(sp.partsAfter)) seen.add(k);
+  }
+  const partLabels = [...seen].sort(
+    (x, y) => partRank(x) - partRank(y) || x.localeCompare(y),
+  );
+
   const gpaBefore = before && !before.incomplete ? before.gpa : null;
   const gpaAfter = after && !after.incomplete ? after.gpa : null;
   const gpaChange = diff(gpaBefore, gpaAfter);
@@ -163,6 +234,7 @@ export function progressFor(
     totalChange: diff(totalBefore, totalAfter),
     fullBefore,
     fullAfter,
+    partLabels,
     gpaBefore,
     gpaAfter,
     gpaChange,
@@ -259,4 +331,37 @@ export function overallPercent(p: Progress, w: Weights): number | null {
 /** "73.25%", or a dash when there is no honest figure to print. */
 export function pctText(n: number | null, places = 2): string {
   return real(n) ? `${n.toFixed(places)}%` : '—';
+}
+
+/**
+ * One exam's own bottom line, for the summary table under the subjects.
+ *
+ * Every figure comes straight from that exam's result, never recomputed
+ * here, so the progress report can never contradict the result sheet the
+ * same exam already printed. That is p43's rule and it is worth keeping.
+ */
+export type ExamSummary = {
+  total: number | null;
+  gpa: number | null;
+  letter: string;
+  position: number | null;
+  /** 'Passed' | 'Failed' | '—' while the marks are not all in. */
+  result: string;
+};
+
+export function examSummary(
+  t: Tabulation | null,
+  total: number | null,
+  position: number | null,
+): ExamSummary {
+  if (!t) return { total: null, gpa: null, letter: '—', position: null, result: '—' };
+  return {
+    total: real(total) ? total : null,
+    gpa: t.incomplete ? null : t.gpa,
+    letter: t.incomplete ? '—' : t.letter,
+    position,
+    // An unfinished exam has not been passed OR failed yet, and saying
+    // either would be a claim about a mark nobody has entered.
+    result: t.incomplete ? '—' : t.failed.length ? 'Failed' : 'Passed',
+  };
 }

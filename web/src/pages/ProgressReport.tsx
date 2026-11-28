@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { type SchoolClass, listClasses } from '../data/attendance';
 import { type SchoolSettings, getSettings } from '../data/admin';
 import {
@@ -13,7 +13,8 @@ import {
 import { gpaText } from '../data/grading';
 import {
   type Progress, type Weights,
-  overallPercent, pctText, progressFor, signed, subjectPercent,
+  examSummary, overallPercent, pctText, progressFor, shortPart, signed,
+  subjectPercent,
 } from '../data/progress';
 import { findStudents } from '../data/people';
 
@@ -91,6 +92,17 @@ export default function ProgressReport() {
     })();
     return () => { live = false; };
   }, [beforeId, afterId, classId, subjects]);
+
+  // LANDSCAPE, for the same reason p43 is: the subject table now carries the
+  // component marks of two exams, and portrait clips them. Added while the
+  // page is open and taken away after, so it cannot leak into another page's
+  // printing the way a stylesheet rule would.
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = '@page { size: A4 landscape; margin: 8mm; }';
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
 
   const earlier = exams.find((e) => e.examId === beforeId);
   const later = exams.find((e) => e.examId === afterId);
@@ -209,6 +221,7 @@ export default function ProgressReport() {
         <Report
           key={r.student.studentId}
           result={r}
+          was={before.find((b) => b.student.studentId === r.student.studentId) ?? null}
           progress={progressFor(
             before.find((b) => b.student.studentId === r.student.studentId)?.tabulation ?? null,
             r.tabulation,
@@ -230,10 +243,33 @@ export default function ProgressReport() {
 /** "Half Yearly 2026" — short enough for a column heading. */
 const examLabel = (e?: Exam) => (e ? `${e.examName} ${e.examYear}` : '—');
 
+
+/**
+ * One student's sheet, laid out like the APEX app's page 43.
+ *
+ * Three blocks, in this order, because that is the document a school here
+ * already knows how to read:
+ *
+ *   1. who it is - name, roll, class, registration, group, father
+ *   2. the subjects, with each exam's COMPONENT marks (MCQ, CQ, Practical,
+ *      Written) as well as its total and grade, and the move in the total
+ *   3. each exam's own bottom line - total, GPA, grade, position, result
+ *
+ * The component columns are worked out per student: only the parts they are
+ * actually marked in are printed, so a humanities sheet is not padded with
+ * empty Practical cells. That is why this prints LANDSCAPE - with the parts
+ * of two exams side by side, portrait clips it, which is the same thing that
+ * drove p43 to landscape.
+ *
+ * Nothing in block 3 is recomputed here: every figure is the one that exam's
+ * own result sheet printed, so the two documents cannot disagree.
+ */
 function Report({
-  result, progress, earlier, later, school, weights,
+  result, was, progress, earlier, later, school, weights,
 }: {
   result: StudentResult;
+  /** The same student in the earlier exam, or null if they did not sit it. */
+  was: StudentResult | null;
   progress: Progress;
   earlier?: Exam;
   later?: Exam;
@@ -243,164 +279,209 @@ function Report({
 }) {
   const { student } = result;
   const p = progress;
+  const labels = p.partLabels;
 
-  /** A mark as the sheet prints it. A dash is "not sat", never a nought. */
-  const mark = (n: number | null) => (n === null ? '—' : String(n));
+  // the components, plus Total and Grade, under each exam's heading
+  const span = labels.length + 2;
 
-  /** Green up, red down, and nothing at all for a figure that cannot move. */
-  const moved = (n: number | null) => ({
-    color: n === null || n === 0 ? 'var(--muted)'
-      : n > 0 ? 'var(--accent)' : 'var(--bad)',
-    fontWeight: n !== null && n !== 0 ? 600 : 400,
-  } as const);
+  const sumWas = examSummary(
+    was?.tabulation ?? null, was?.merit.total ?? null, p.positionBefore,
+  );
+  const sumNow = examSummary(result.tabulation, result.merit.total, p.positionAfter);
 
-  const verdict = p.verdict === 'better' ? 'Improved'
-    : p.verdict === 'worse' ? 'Slipped'
-      : p.verdict === 'same' ? 'Held steady'
-        : 'Not complete';
+  const bd = { border: '1px solid #000', padding: '3px 4px' } as const;
+  const bdC = { ...bd, textAlign: 'center' } as const;
+
+  /** A figure as the sheet prints it. A dash is "not sat", never a nought. */
+  const num = (n: number | null | undefined) =>
+    (n === null || n === undefined || !Number.isFinite(n) ? '—' : String(n));
+
+  /** p43's arrows: the direction reads before the number does. */
+  const changeCell = (n: number | null) => {
+    if (n === null) return <span style={{ color: 'var(--muted)' }}>&#8212;</span>;
+    if (n > 0) return <span style={{ color: '#0a730a', fontWeight: 700 }}>&#9650; +{n}</span>;
+    if (n < 0) return <span style={{ color: '#c00000', fontWeight: 700 }}>&#9660; {n}</span>;
+    return <span style={{ color: '#666' }}>0</span>;
+  };
+
+  const bio = (label: string, value: string | number | null | undefined) => (
+    <td style={{ padding: '2px 4px' }}>
+      <strong>{label}:</strong>{' '}
+      {value === null || value === undefined || value === '' ? '—' : value}
+    </td>
+  );
+
+  const rows = [
+    { name: examLabel(earlier), s: sumWas },
+    { name: examLabel(later), s: sumNow },
+  ];
 
   return (
     <div className="card print-page">
-      <div className="print-sheet">
-        <div style={{ textAlign: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 19, fontWeight: 700 }}>{school?.instituteName ?? 'School'}</div>
-          {school?.address && <div style={{ fontSize: 12.5 }}>{school.address}</div>}
-          <div style={{ marginTop: 6, fontWeight: 600 }}>PROGRESS REPORT</div>
-          <div style={{ fontSize: 13 }}>
-            {examLabel(earlier)} &nbsp;→&nbsp; {examLabel(later)}
+      <div className="print-sheet prog-box">
+        <div className="pr-head" style={{
+          textAlign: 'center', borderBottom: '1px solid #000', paddingBottom: 8,
+        }}>
+          <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.25 }}>
+            {school?.instituteName ?? 'School'}
+          </div>
+          {school?.sessionLabel && (
+            <div style={{ fontSize: 12.5, marginTop: 2 }}>
+              Session: {school.sessionLabel}
+            </div>
+          )}
+          <div style={{
+            fontSize: 16, fontWeight: 700, letterSpacing: 1, marginTop: 6,
+          }}>
+            PROGRESS REPORT
+          </div>
+          <div style={{ fontSize: 12.5, marginTop: 2 }}>
+            {examLabel(earlier)} &nbsp;vs&nbsp; {examLabel(later)}
           </div>
           {weights && (
-            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
               Combined percentage counts {examLabel(earlier)} {weights.before}% and{' '}
               {examLabel(later)} {weights.after}%
             </div>
           )}
         </div>
 
-        <div style={{
-          display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 14,
-          borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)',
-          padding: '8px 0', marginBottom: 10,
-        }}>
-          <span><strong>{student.fullName}</strong></span>
-          <span>Roll {student.rollNo}</span>
-          <span>{student.className} - {student.section}</span>
-          {student.groupName && <span>{student.groupName}</span>}
-        </div>
+        <table className="pr-bio" style={{ width: '100%', marginTop: 8, fontSize: 13 }}>
+          <tbody>
+            <tr>{bio('Name', student.fullName)}{bio('Roll', student.rollNo)}</tr>
+            <tr>
+              {bio('Class', student.className + ' - ' + student.section)}
+              {bio('Reg No', student.regNo)}
+            </tr>
+            <tr>{bio('Group', student.groupName)}{bio('Father', student.fatherName)}</tr>
+          </tbody>
+        </table>
 
-        <table className="ruled" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+        <table className="pr-subj" style={{
+          width: '100%', marginTop: 10, borderCollapse: 'collapse', fontSize: 11.5,
+        }}>
           <thead>
-            <tr style={{ borderBottom: '1.5px solid var(--line)', textAlign: 'left' }}>
-              <th style={{ padding: '5px 4px' }}>Subject</th>
-              <th style={{ padding: '5px 4px', textAlign: 'right' }}>{examLabel(earlier)}</th>
-              <th style={{ padding: '5px 4px', textAlign: 'right' }}>{examLabel(later)}</th>
-              <th style={{ padding: '5px 4px', textAlign: 'right' }}>Change</th>
-              {weights && (
-                <th style={{ padding: '5px 4px', textAlign: 'right' }}>Combined</th>
-              )}
+            <tr style={{ background: '#eee' }}>
+              <th rowSpan={2} style={bd}>Subject</th>
+              <th rowSpan={2} style={bdC}>Full</th>
+              <th colSpan={span} style={bdC}>{examLabel(earlier)}</th>
+              <th colSpan={span} style={bdC}>{examLabel(later)}</th>
+              <th rowSpan={2} style={bdC}>Change</th>
+              {weights && <th rowSpan={2} style={bdC}>Combined</th>}
+            </tr>
+            <tr style={{ background: '#eee' }}>
+              {[0, 1].map((side) => (
+                <Fragment key={side}>
+                  {labels.map((l) => (
+                    <th key={side + '-' + l} style={bdC}>{shortPart(l)}</th>
+                  ))}
+                  <th style={bdC}>Total</th>
+                  <th style={bdC}>Grade</th>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
             {p.subjects.map((s) => (
-              <tr key={s.subjectId} style={{ borderBottom: '1px solid var(--line-soft)' }}>
-                <td style={{ padding: '5px 4px' }}>
-                  {s.subjectName}
-                  <span style={{ color: 'var(--muted)' }}> /{s.fullMarks}</span>
-                </td>
-                <td style={{ padding: '5px 4px', textAlign: 'right' }}>
-                  {mark(s.before)}
-                  {s.beforeLetter && (
-                    <span style={{ color: 'var(--muted)' }}> {s.beforeLetter}</span>
-                  )}
-                </td>
-                <td style={{ padding: '5px 4px', textAlign: 'right' }}>
-                  {mark(s.after)}
-                  {s.afterLetter && (
-                    <span style={{ color: 'var(--muted)' }}> {s.afterLetter}</span>
-                  )}
-                </td>
-                <td style={{ padding: '5px 4px', textAlign: 'right', ...moved(s.change) }}>
-                  {signed(s.change)}
-                </td>
+              <tr key={s.subjectId}>
+                <td style={bd}>{s.subjectName}</td>
+                <td style={bdC}>{s.fullMarks}</td>
+
+                {labels.map((l) => (
+                  <td key={'b-' + l} style={bdC}>{num(s.partsBefore[l])}</td>
+                ))}
+                <td style={bdC}>{num(s.before)}</td>
+                <td style={bdC}>{s.beforeLetter || '—'}</td>
+
+                {labels.map((l) => (
+                  <td key={'a-' + l} style={bdC}>{num(s.partsAfter[l])}</td>
+                ))}
+                <td style={bdC}>{num(s.after)}</td>
+                <td style={bdC}>{s.afterLetter || '—'}</td>
+
+                <td style={bdC}>{changeCell(s.change)}</td>
                 {weights && (
-                  <td style={{ padding: '5px 4px', textAlign: 'right' }}>
-                    {pctText(subjectPercent(s, weights))}
-                  </td>
+                  <td style={bdC}>{pctText(subjectPercent(s, weights))}</td>
                 )}
               </tr>
             ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ borderTop: '1.5px solid var(--line)', fontWeight: 600 }}>
-              <td style={{ padding: '6px 4px' }}>Total</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>{mark(p.totalBefore)}</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>{mark(p.totalAfter)}</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right', ...moved(p.totalChange) }}>
-                {signed(p.totalChange)}
-              </td>
-              {weights && (
-                <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                  {pctText(overallPercent(p, weights))}
+            {p.subjects.length === 0 && (
+              <tr>
+                <td
+                  colSpan={span * 2 + 3 + (weights ? 1 : 0)}
+                  style={{ ...bdC, color: 'var(--bad)', padding: 8 }}
+                >
+                  No results for this student in either exam.
                 </td>
-              )}
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <table className="pr-sum" style={{
+          width: '100%', marginTop: 12, borderCollapse: 'collapse', fontSize: 12.5,
+        }}>
+          <thead>
+            <tr style={{ background: '#eee' }}>
+              <th style={bd}>Exam</th>
+              <th style={bdC}>Total Marks</th>
+              <th style={bdC}>GPA</th>
+              <th style={bdC}>Grade</th>
+              <th style={bdC}>Position</th>
+              <th style={bdC}>Result</th>
             </tr>
-            <tr style={{ fontWeight: 600 }}>
-              <td style={{ padding: '6px 4px' }}>GPA</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>{gpaText(p.gpaBefore)}</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>{gpaText(p.gpaAfter)}</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right', ...moved(p.gpaChange) }}>
-                {signed(p.gpaChange, 2)}
-              </td>
-              {weights && <td />}
-            </tr>
-            <tr>
-              <td style={{ padding: '6px 4px' }}>Position in the section</td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                {p.positionBefore ?? '—'}
-              </td>
-              <td style={{ padding: '6px 4px', textAlign: 'right' }}>
-                {p.positionAfter ?? '—'}
-              </td>
-              {/* Up the list is a smaller number, so progress.ts turns the
-                  sign over before it gets here: +5 means five places better. */}
-              <td style={{ padding: '6px 4px', textAlign: 'right', ...moved(p.positionChange) }}>
-                {p.positionChange === null ? '—'
-                  : p.positionChange === 0 ? 'same'
-                    : `${signed(p.positionChange)} place${Math.abs(p.positionChange) === 1 ? '' : 's'}`}
-              </td>
-              {weights && <td />}
-            </tr>
-          </tfoot>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.name}>
+                <td style={bd}>{row.name}</td>
+                <td style={bdC}>{num(row.s.total)}</td>
+                <td style={bdC}>{gpaText(row.s.gpa)}</td>
+                <td style={bdC}>{row.s.letter}</td>
+                <td style={bdC}>{num(row.s.position)}</td>
+                <td style={bdC}>{row.s.result}</td>
+              </tr>
+            ))}
+          </tbody>
         </table>
 
         <div style={{
           display: 'flex', justifyContent: 'space-between', gap: 12,
-          marginTop: 12, fontSize: 14,
+          marginTop: 8, fontSize: 12.5, flexWrap: 'wrap',
         }}>
           <span>
-            <strong style={moved(p.gpaChange)}>{verdict}</strong>
-            {p.verdict === 'unknown' && (
-              <span style={{ color: 'var(--muted)' }}>
-                {' '}— one of the two exams has marks still to come
-              </span>
+            GPA {gpaText(p.gpaBefore)} &rarr; {gpaText(p.gpaAfter)}
+            {p.gpaChange !== null && (
+              <strong style={{
+                marginLeft: 6,
+                color: p.gpaChange > 0 ? '#0a730a'
+                  : p.gpaChange < 0 ? '#c00000' : '#666',
+              }}>
+                {signed(p.gpaChange, 2)}
+              </strong>
+            )}
+            {weights && (
+              <strong style={{ marginLeft: 14 }}>
+                Combined: {pctText(overallPercent(p, weights))}
+              </strong>
             )}
           </span>
           <span style={{ color: 'var(--muted)' }}>
-            A dash means the subject was not sat in both exams, so there is nothing
-            to compare.
+            A dash means the subject was not sat in both exams, so there is
+            nothing to compare.
           </span>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 44 }}>
-          <div style={{ borderTop: '1px solid #000', paddingTop: 4, fontSize: 13 }}>
-            Class teacher
-          </div>
-          <div style={{ borderTop: '1px solid #000', paddingTop: 4, fontSize: 13 }}>
-            Guardian
-          </div>
-          <div style={{ borderTop: '1px solid #000', paddingTop: 4, fontSize: 13 }}>
-            {school?.headTeacher ?? 'Head teacher'}
-          </div>
+        <div className="pr-sign" style={{
+          display: 'flex', justifyContent: 'space-between', marginTop: 30, fontSize: 12.5,
+        }}>
+          {['Guardian', 'Class Teacher', school?.headTeacher ?? 'Head Teacher'].map((who) => (
+            <div key={who} style={{
+              borderTop: '1px solid #000', paddingTop: 4, width: 180, textAlign: 'center',
+            }}>
+              {who}
+            </div>
+          ))}
         </div>
       </div>
     </div>

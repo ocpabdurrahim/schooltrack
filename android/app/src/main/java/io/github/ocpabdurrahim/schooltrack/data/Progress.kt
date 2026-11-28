@@ -39,6 +39,15 @@ data class SubjectProgress(
     val afterLetter: String,
     /** after minus before, and null unless BOTH are real figures. */
     val change: Double?,
+    /**
+     * The component marks of each exam, added up per label -- MCQ, CQ,
+     * PRACTICAL, WRITTEN. Papers merged into one graded unit (Bangla 1st and
+     * 2nd) have their like parts SUMMED, so a combined Bangla out of 200
+     * shows one MCQ figure rather than two, which is what a column headed
+     * MCQ can honestly hold. A label the subject is not marked in is absent.
+     */
+    val partsBefore: Map<String, Double> = emptyMap(),
+    val partsAfter: Map<String, Double> = emptyMap(),
 )
 
 data class Progress(
@@ -53,6 +62,13 @@ data class Progress(
      */
     val fullBefore: Double?,
     val fullAfter: Double?,
+    /**
+     * Which component columns this student's sheet needs, in the order a
+     * marksheet prints them. Only the ones they ACTUALLY have marks in: a
+     * humanities student gets MCQ and CQ, a science student also Practical,
+     * and printing all four always would leave empty columns.
+     */
+    val partLabels: List<String> = emptyList(),
     val gpaBefore: Double?,
     val gpaAfter: Double?,
     val gpaChange: Double?,
@@ -124,6 +140,8 @@ fun progressFor(
             beforeLetter = letterOf(a),
             afterLetter = letterOf(b),
             change = diff(beforeMark, afterMark),
+            partsBefore = partsByLabel(a),
+            partsAfter = partsByLabel(b),
         )
     }.sortedWith(
         compareBy(
@@ -147,6 +165,13 @@ fun progressFor(
         fullAfter = (fullAfter ?: 0.0) + (s.fullAfter ?: 0.0)
     }
 
+    val seen = LinkedHashSet<String>()
+    for (sp in subjects) {
+        seen.addAll(sp.partsBefore.keys)
+        seen.addAll(sp.partsAfter.keys)
+    }
+    val partLabels = seen.sortedWith(compareBy({ partRank(it) }, { it }))
+
     val gpaBefore = if (before != null && !before.incomplete) before.gpa else null
     val gpaAfter = if (after != null && !after.incomplete) after.gpa else null
     val gpaChange = diff(gpaBefore, gpaAfter)
@@ -158,6 +183,7 @@ fun progressFor(
         totalChange = diff(totalBefore, totalAfter),
         fullBefore = fullBefore,
         fullAfter = fullAfter,
+        partLabels = partLabels,
         gpaBefore = gpaBefore,
         gpaAfter = gpaAfter,
         gpaChange = gpaChange,
@@ -256,3 +282,75 @@ fun overallPercent(p: Progress, w: Weights): Double? {
 /** "73.25%", or a dash when there is no honest figure to print. */
 fun pctText(n: Double?, places: Int = 2): String =
     if (real(n)) String.format("%.${places}f%%", n) else "—"
+
+/**
+ * The order a marksheet prints the parts in. Anything the school invents
+ * later still appears -- after these, alphabetically -- rather than
+ * vanishing because this list had not heard of it.
+ */
+private val PART_ORDER = listOf("MCQ", "CQ", "PRACTICAL", "WRITTEN")
+
+private fun partRank(label: String): Int {
+    val i = PART_ORDER.indexOf(label)
+    return if (i == -1) PART_ORDER.size else i
+}
+
+/**
+ * One exam's component marks for one subject, added up per label.
+ *
+ * An absent student has no parts to show: the row says so with its grade,
+ * and a line of noughts across the components would be a different claim --
+ * that they sat it and scored nothing in each.
+ */
+private fun partsByLabel(c: GradedSubject?): Map<String, Double> {
+    val out = LinkedHashMap<String, Double>()
+    val mark = c?.mark ?: return out
+    if (mark.absent) return out
+    val comps = mark.components ?: return out
+    for (comp in comps) {
+        val v = mark.parts?.get(comp.name) ?: continue
+        if (!real(v)) continue
+        val label = partLabel(comp.name, comp.paper).uppercase()
+        out[label] = (out[label] ?: 0.0) + v
+    }
+    return out
+}
+
+/** "Pract", "Writ" -- the headings p43 prints, short enough for a column. */
+fun shortPart(label: String): String = when (label) {
+    "PRACTICAL" -> "Pract"
+    "WRITTEN" -> "Writ"
+    "MCQ", "CQ" -> label
+    else -> label.take(1) + label.drop(1).lowercase()
+}
+
+/**
+ * One exam's own bottom line, for the summary table under the subjects.
+ *
+ * Every figure comes straight from that exam's result, never recomputed
+ * here, so the progress report can never contradict the result sheet the
+ * same exam already printed. That is p43's rule and it is worth keeping.
+ */
+data class ExamSummary(
+    val total: Double?,
+    val gpa: Double?,
+    val letter: String,
+    val position: Int?,
+    /** "Passed", "Failed", or a dash while the marks are not all in. */
+    val result: String,
+)
+
+fun examSummary(t: Tabulation?, total: Double?, position: Int?): ExamSummary {
+    if (t == null) {
+        return ExamSummary(null, null, "—", null, "—")
+    }
+    return ExamSummary(
+        total = if (real(total)) total else null,
+        gpa = if (t.incomplete) null else t.gpa,
+        letter = if (t.incomplete) "—" else t.letter,
+        position = position,
+        // An unfinished exam has not been passed OR failed yet, and saying
+        // either would be a claim about a mark nobody has entered.
+        result = if (t.incomplete) "—" else if (t.failed.isNotEmpty()) "Failed" else "Passed",
+    )
+}

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { SubjectMark } from './grading';
-import { tabulate } from './grading';
+import type { Component, Parts, SubjectMark } from './grading';
+import { combineUnits, tabulate } from './grading';
 import {
-  EVEN, overallPercent, pctText, progressFor, signed, subjectPercent,
+  EVEN, examSummary, overallPercent, pctText, progressFor, shortPart, signed,
+  subjectPercent,
 } from './progress';
 
 /** The SAME cases exist in android/.../data/ProgressTest.kt. */
@@ -211,5 +212,116 @@ describe('a percentage counted from both exams', () => {
     expect(pctText(null)).toBe('—');
     expect(pctText(63.5333)).toBe('63.53%');
     expect(pctText(63.5333, 0)).toBe('64%');
+  });
+});
+
+describe('the component columns, as page 43 prints them', () => {
+  const CQ_MCQ: Component[] = [
+    { name: 'CQ', max: 70, pass: 23 },
+    { name: 'MCQ', max: 30, pass: 10 },
+  ];
+  const SCIENCE: Component[] = [
+    { name: 'CQ', max: 50, pass: 17 },
+    { name: 'MCQ', max: 25, pass: 8 },
+    { name: 'PRACTICAL', max: 25, pass: 8 },
+  ];
+
+  const parted = (
+    name: string,
+    components: Component[],
+    parts: Parts,
+    extra: Partial<SubjectMark> = {},
+  ): SubjectMark => ({
+    subjectId: name,
+    subjectName: name,
+    fullMarks: components.reduce((t, c) => t + c.max, 0),
+    marks: null,
+    components,
+    parts,
+    ...extra,
+  });
+
+  it('prints only the components the student is actually marked in', () => {
+    // Humanities: CQ and MCQ, and NO Practical column at all.
+    const e1 = tabulate([parted('BANGLA', CQ_MCQ, { CQ: 45, MCQ: 20 })]);
+    const e2 = tabulate([parted('BANGLA', CQ_MCQ, { CQ: 50, MCQ: 22 })]);
+    expect(progressFor(e1, e2).partLabels).toEqual(['MCQ', 'CQ']);
+  });
+
+  it('adds Practical for a science student, in marksheet order', () => {
+    const e1 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 40, MCQ: 20, PRACTICAL: 20 })]);
+    const e2 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 42, MCQ: 21, PRACTICAL: 22 })]);
+    expect(progressFor(e1, e2).partLabels).toEqual(['MCQ', 'CQ', 'PRACTICAL']);
+  });
+
+  it('carries each exam’s component marks onto the row', () => {
+    const e1 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 40, MCQ: 20, PRACTICAL: 20 })]);
+    const e2 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 42, MCQ: 21, PRACTICAL: 22 })]);
+    const row = progressFor(e1, e2).subjects[0];
+    expect(row.partsBefore).toEqual({ CQ: 40, MCQ: 20, PRACTICAL: 20 });
+    expect(row.partsAfter).toEqual({ CQ: 42, MCQ: 21, PRACTICAL: 22 });
+  });
+
+  it('SUMS like parts across papers merged into one graded unit', () => {
+    // Bangla 1st + 2nd are one unit out of 200. A column headed MCQ can hold
+    // one figure, so the two papers' MCQ marks are added, not listed twice.
+    const unit = () => combineUnits([
+      parted('B1', CQ_MCQ, { CQ: 45, MCQ: 20 }, { combineGroup: 'BANGLA' }),
+      parted('B2', CQ_MCQ, { CQ: 40, MCQ: 18 }, { combineGroup: 'BANGLA' }),
+    ]);
+    const got = progressFor(tabulate(unit()), tabulate(unit()));
+    expect(got.partLabels).toEqual(['MCQ', 'CQ']);
+    expect(got.subjects[0].partsBefore).toEqual({ CQ: 85, MCQ: 38 });
+  });
+
+  it('shows no parts for an absent paper, rather than a row of noughts', () => {
+    const sat = tabulate([parted('PHYSICS', SCIENCE, { CQ: 40, MCQ: 20, PRACTICAL: 20 })]);
+    const missed = tabulate([
+      parted('PHYSICS', SCIENCE, {}, { absent: true }),
+    ]);
+    const row = progressFor(sat, missed).subjects[0];
+    expect(row.partsBefore).toEqual({ CQ: 40, MCQ: 20, PRACTICAL: 20 });
+    expect(row.partsAfter).toEqual({});
+  });
+
+  it('leaves out a component with nothing entered in it yet', () => {
+    const e1 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 40, MCQ: 20, PRACTICAL: null })]);
+    const e2 = tabulate([parted('PHYSICS', SCIENCE, { CQ: 42, MCQ: 21, PRACTICAL: null })]);
+    expect(progressFor(e1, e2).partLabels).toEqual(['MCQ', 'CQ']);
+  });
+
+  it('shortens the headings the way the sheet prints them', () => {
+    expect(shortPart('MCQ')).toBe('MCQ');
+    expect(shortPart('CQ')).toBe('CQ');
+    expect(shortPart('PRACTICAL')).toBe('Pract');
+    expect(shortPart('WRITTEN')).toBe('Writ');
+  });
+});
+
+describe('each exam’s own bottom line', () => {
+  it('reports a pass, with that exam’s own figures', () => {
+    const t = tabulate([sub('BANGLA', 80), sub('ENGLISH', 75), sub('MATHEMATICS', 70)]);
+    const got = examSummary(t, 225, 3);
+    expect([got.total, got.position, got.result]).toEqual([225, 3, 'Passed']);
+    expect(got.letter).not.toBe('—');
+  });
+
+  it('reports a fail when a compulsory subject was failed', () => {
+    const t = tabulate([sub('BANGLA', 20), sub('ENGLISH', 75), sub('MATHEMATICS', 70)]);
+    expect(examSummary(t, 165, 9).result).toBe('Failed');
+  });
+
+  it('says neither passed nor failed while a mark is missing', () => {
+    const t = tabulate([sub('BANGLA', null), sub('ENGLISH', 75), sub('MATHEMATICS', 70)]);
+    const got = examSummary(t, null, null);
+    expect(got.result).toBe('—');
+    expect(got.gpa).toBeNull();
+    expect(got.letter).toBe('—');
+  });
+
+  it('has nothing to say about an exam the student did not sit', () => {
+    const got = examSummary(null, null, null);
+    expect([got.total, got.gpa, got.position]).toEqual([null, null, null]);
+    expect(got.result).toBe('—');
   });
 });

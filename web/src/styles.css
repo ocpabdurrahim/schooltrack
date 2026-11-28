@@ -967,3 +967,45 @@ a.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-co
   outline: none;
 }
 .grid.sheet tr:nth-child(even) td { background: var(--line-soft); }
+
+/* ---------------------------------------------------------------------------
+   The progress report, printed
+
+   A4 landscape leaves about 194mm of height, and the subject table now
+   carries the component marks of TWO exams. A student with no group is
+   given every subject in the school, which at ordinary spacing runs a few
+   millimetres over onto a second sheet — the summary table alone, orphaned,
+   with no heading on it. These rules compress the PRINTED copy only; the
+   screen view is untouched.
+
+   !important is needed throughout: the sheet sets its sizes as inline
+   styles, and an inline style beats a plain stylesheet rule.
+
+   The same fix, for the same reason, as the APEX app's page 43.
+   --------------------------------------------------------------------------- */
+
+@media print {
+  .prog-box { page-break-inside: avoid; break-inside: avoid; }
+
+  .prog-box .pr-head { padding-bottom: 4px !important; }
+  .prog-box .pr-head > div:first-child { font-size: 17px !important; }
+
+  .prog-box .pr-bio { margin-top: 4px !important; font-size: 10.5px !important; }
+  .prog-box .pr-bio td { padding: 1px 3px !important; }
+
+  .prog-box .pr-subj { margin-top: 5px !important; font-size: 9px !important; }
+  .prog-box .pr-subj td,
+  .prog-box .pr-subj th { padding: 1px 3px !important; }
+
+  .prog-box .pr-sum { margin-top: 6px !important; font-size: 9.5px !important; }
+  .prog-box .pr-sum td,
+  .prog-box .pr-sum th { padding: 1px 3px !important; }
+
+  .prog-box .pr-sign { margin-top: 12px !important; font-size: 10.5px !important; }
+
+  /* the green and red Change arrows print as colour, not as grey */
+  .prog-box, .prog-box * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -268,4 +268,139 @@ class ProgressTest {
         assertEquals("63.53%", pctText(63.5333))
         assertEquals("64%", pctText(63.5333, 0))
     }
+
+    // ---- the component columns, as page 43 prints them --------------------
+
+    private val cqMcq = listOf(
+        Component("CQ", 70.0, 23.0),
+        Component("MCQ", 30.0, 10.0),
+    )
+    private val science = listOf(
+        Component("CQ", 50.0, 17.0),
+        Component("MCQ", 25.0, 8.0),
+        Component("PRACTICAL", 25.0, 8.0),
+    )
+
+    private fun parted(
+        name: String,
+        components: List<Component>,
+        parts: Map<String, Double?>,
+        absent: Boolean = false,
+        combineGroup: String? = null,
+    ) = SubjectMark(
+        subjectId = name,
+        subjectName = name,
+        fullMarks = components.sumOf { it.max },
+        marks = null,
+        absent = absent,
+        components = components,
+        parts = parts,
+        combineGroup = combineGroup,
+    )
+
+    @Test
+    fun printsOnlyTheComponentsTheStudentIsActuallyMarkedIn() {
+        val e1 = tabulate(listOf(parted("BANGLA", cqMcq, mapOf("CQ" to 45.0, "MCQ" to 20.0))))
+        val e2 = tabulate(listOf(parted("BANGLA", cqMcq, mapOf("CQ" to 50.0, "MCQ" to 22.0))))
+        assertEquals(listOf("MCQ", "CQ"), progressFor(e1, e2).partLabels)
+    }
+
+    @Test
+    fun addsPracticalForAScienceStudentInMarksheetOrder() {
+        val m = mapOf("CQ" to 40.0, "MCQ" to 20.0, "PRACTICAL" to 20.0)
+        val got = progressFor(
+            tabulate(listOf(parted("PHYSICS", science, m))),
+            tabulate(listOf(parted("PHYSICS", science, m))),
+        )
+        assertEquals(listOf("MCQ", "CQ", "PRACTICAL"), got.partLabels)
+    }
+
+    @Test
+    fun carriesEachExamsComponentMarksOntoTheRow() {
+        val a = mapOf("CQ" to 40.0, "MCQ" to 20.0, "PRACTICAL" to 20.0)
+        val b = mapOf("CQ" to 42.0, "MCQ" to 21.0, "PRACTICAL" to 22.0)
+        val row = progressFor(
+            tabulate(listOf(parted("PHYSICS", science, a))),
+            tabulate(listOf(parted("PHYSICS", science, b))),
+        ).subjects[0]
+        assertEquals(mapOf("CQ" to 40.0, "MCQ" to 20.0, "PRACTICAL" to 20.0), row.partsBefore)
+        assertEquals(mapOf("CQ" to 42.0, "MCQ" to 21.0, "PRACTICAL" to 22.0), row.partsAfter)
+    }
+
+    @Test
+    fun sumsLikePartsAcrossPapersMergedIntoOneGradedUnit() {
+        // Bangla 1st + 2nd are one unit out of 200. A column headed MCQ can
+        // hold one figure, so the two papers' MCQ marks are added.
+        fun unit() = combineUnits(
+            listOf(
+                parted("B1", cqMcq, mapOf("CQ" to 45.0, "MCQ" to 20.0), combineGroup = "BANGLA"),
+                parted("B2", cqMcq, mapOf("CQ" to 40.0, "MCQ" to 18.0), combineGroup = "BANGLA"),
+            ),
+        )
+        val got = progressFor(tabulate(unit()), tabulate(unit()))
+        assertEquals(listOf("MCQ", "CQ"), got.partLabels)
+        assertEquals(mapOf("CQ" to 85.0, "MCQ" to 38.0), got.subjects[0].partsBefore)
+    }
+
+    @Test
+    fun showsNoPartsForAnAbsentPaperRatherThanARowOfNoughts() {
+        val sat = tabulate(
+            listOf(parted("PHYSICS", science, mapOf("CQ" to 40.0, "MCQ" to 20.0, "PRACTICAL" to 20.0))),
+        )
+        val missed = tabulate(listOf(parted("PHYSICS", science, emptyMap(), absent = true)))
+        val row = progressFor(sat, missed).subjects[0]
+        assertEquals(3, row.partsBefore.size)
+        assertTrue(row.partsAfter.isEmpty())
+    }
+
+    @Test
+    fun leavesOutAComponentWithNothingEnteredInItYet() {
+        val m = mapOf("CQ" to 40.0, "MCQ" to 20.0, "PRACTICAL" to null)
+        val got = progressFor(
+            tabulate(listOf(parted("PHYSICS", science, m))),
+            tabulate(listOf(parted("PHYSICS", science, m))),
+        )
+        assertEquals(listOf("MCQ", "CQ"), got.partLabels)
+    }
+
+    @Test
+    fun shortensTheHeadingsTheWayTheSheetPrintsThem() {
+        assertEquals("MCQ", shortPart("MCQ"))
+        assertEquals("CQ", shortPart("CQ"))
+        assertEquals("Pract", shortPart("PRACTICAL"))
+        assertEquals("Writ", shortPart("WRITTEN"))
+    }
+
+    // ---- each exam's own bottom line --------------------------------------
+
+    @Test
+    fun reportsAPassWithThatExamsOwnFigures() {
+        val t = exam(80.0, 75.0, 70.0)
+        val got = examSummary(t, 225.0, 3)
+        assertEquals(225.0, got.total!!, 1e-9)
+        assertEquals(3, got.position)
+        assertEquals("Passed", got.result)
+    }
+
+    @Test
+    fun reportsAFailWhenACompulsorySubjectWasFailed() {
+        assertEquals("Failed", examSummary(exam(20.0, 75.0, 70.0), 165.0, 9).result)
+    }
+
+    @Test
+    fun saysNeitherPassedNorFailedWhileAMarkIsMissing() {
+        val got = examSummary(exam(null, 75.0, 70.0), null, null)
+        assertEquals("—", got.result)
+        assertNull(got.gpa)
+        assertEquals("—", got.letter)
+    }
+
+    @Test
+    fun hasNothingToSayAboutAnExamTheStudentDidNotSit() {
+        val got = examSummary(null, null, null)
+        assertNull(got.total)
+        assertNull(got.gpa)
+        assertNull(got.position)
+        assertEquals("—", got.result)
+    }
 }
