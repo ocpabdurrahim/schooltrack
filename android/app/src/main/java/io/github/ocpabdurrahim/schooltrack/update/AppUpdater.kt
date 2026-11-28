@@ -65,11 +65,41 @@ class AppUpdater(
 
     /** Android showed its own confirmation; don't start another install. */
     @Volatile private var awaitingUser = false
+
+    /** Android's "shall I?" screen, kept until there is somewhere to show it. */
+    @Volatile private var pendingConfirm: Intent? = null
     private var backgroundJob: Job? = null
 
     /** Whether Android lets this app install APKs ("Install unknown apps"). */
     fun canInstall(): Boolean =
         Build.VERSION.SDK_INT < 26 || context.packageManager.canRequestPackageInstalls()
+
+    /**
+     * Whether this app may put an update on WITHOUT asking.
+     *
+     * Only for an app updating a package IT installed: Android checks the
+     * installer of record, and a copy that arrived over a cable has none, so
+     * the answer there is no. Asking anyway does not fall back to a polite
+     * confirmation — the install is REFUSED outright, with
+     * INSTALL_FAILED_VERIFICATION_FAILURE, which is how this was found.
+     *
+     * So the first update after a hand-installed copy asks for one tap. That
+     * tap makes SchoolTrack the installer of record, and every update after
+     * it can be silent.
+     */
+    @Suppress("DEPRECATION")
+    fun mayInstallSilently(): Boolean {
+        if (Build.VERSION.SDK_INT < 31) return false
+        val pm = context.packageManager
+        val installer = runCatching {
+            if (Build.VERSION.SDK_INT >= 30) {
+                pm.getInstallSourceInfo(context.packageName).installingPackageName
+            } else {
+                pm.getInstallerPackageName(context.packageName)
+            }
+        }.getOrNull()
+        return installer == context.packageName
+    }
 
     /**
      * Looks for a newer release and downloads it.
@@ -130,6 +160,12 @@ class AppUpdater(
     fun onAppForeground() {
         awaitingUser = false
         backgroundJob?.cancel()
+        // Android asked something while nobody was looking. Ask it now, or
+        // the update would wait for ever with nothing on screen to say so.
+        pendingConfirm?.let { confirm ->
+            pendingConfirm = null
+            if (runCatching { context.startActivity(confirm) }.isSuccess) awaitingUser = true
+        }
     }
 
     /**
@@ -141,6 +177,9 @@ class AppUpdater(
     fun onAppBackground() {
         val ready = _state.value as? UpdateState.Ready ?: return
         if (installing || awaitingUser || !autoUpdate) return
+        // An install that will ask a question cannot ask it from here: there
+        // is no screen to put it on. It waits for the app to be opened.
+        if (!mayInstallSilently()) return
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
             delay(BACKGROUND_DELAY)
@@ -298,8 +337,10 @@ class AppUpdater(
             ).apply {
                 setAppPackageName(context.packageName)
                 setSize(file.length())
-                // Android 12+: an app updating ITSELF may do so without asking.
-                if (Build.VERSION.SDK_INT >= 31) {
+                // Only when Android would honour it. Asking for a silent
+                // install we are not entitled to is refused outright rather
+                // than softened into a question -- see mayInstallSilently.
+                if (mayInstallSilently()) {
                     setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
                 }
             }
@@ -335,11 +376,15 @@ class AppUpdater(
                 if (confirm == null) return
                 confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 // Only while the app is in front: throwing an install screen
-                // at somebody using another app is what a bad app does.
+                // at somebody using another app is what a bad app does. If it
+                // is not, the question is KEPT and asked when they come back,
+                // rather than thrown away with the update left waiting.
                 val foreground = ProcessLifecycleOwner.get().lifecycle.currentState
                     .isAtLeast(Lifecycle.State.STARTED)
                 if (foreground && runCatching { context.startActivity(confirm) }.isSuccess) {
                     awaitingUser = true
+                } else {
+                    pendingConfirm = confirm
                 }
             }
             // The process is about to be replaced; there is nothing to say.
