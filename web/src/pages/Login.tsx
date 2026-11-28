@@ -5,6 +5,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { auth } from '../firebase';
 
 export default function Login() {
@@ -89,6 +90,11 @@ export default function Login() {
             <div style={{ color: 'var(--accent)', fontSize: 14, marginTop: 10 }}>{note}</div>
           )}
         </form>
+
+        <p style={{ fontSize: 14, marginTop: 18, color: 'var(--muted)' }}>
+          On a phone? <Link to="/app">Get the Android app</Link> — same account,
+          same records.
+        </p>
 
         <p style={{ fontSize: 14, marginTop: 18 }}>
           {mode === 'in' ? 'First time here? ' : 'Already have an account? '}

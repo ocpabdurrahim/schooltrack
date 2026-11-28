@@ -13,6 +13,7 @@ import Dues from './pages/Dues';
 import Exams from './pages/Exams';
 import Expenses from './pages/Expenses';
 import FeeSetup from './pages/FeeSetup';
+import GetApp from './pages/GetApp';
 import Holidays from './pages/Holidays';
 import Home from './pages/Home';
 import IdCards from './pages/IdCards';
@@ -58,6 +59,9 @@ export default function App() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* Reachable signed OUT on purpose: whoever is being told to install
+            the app has no account yet. */}
+        <Route path="/app" element={<GetApp />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -92,6 +96,7 @@ export default function App() {
       <UpdateBar />
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/app" element={<GetApp />} />
         <Route path="/students" element={staffOnly(<Students />)} />
         <Route path="/students/new" element={recordsOnly(<StudentEdit />)} />
         <Route path="/students/batch" element={recordsOnly(<StudentsBatch />)} />
