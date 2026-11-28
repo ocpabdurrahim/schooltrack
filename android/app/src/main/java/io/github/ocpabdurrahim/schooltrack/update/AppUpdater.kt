@@ -391,8 +391,37 @@ class AppUpdater(
             PackageInstaller.STATUS_SUCCESS -> Unit
             else -> {
                 installing = false
-                _state.value = UpdateState.Failed(message ?: "The update was not installed")
+                _state.value = UpdateState.Failed(readable(message))
             }
+        }
+    }
+
+    /**
+     * PackageInstaller's complaint, in words a teacher can act on.
+     *
+     * What it says by itself is
+     *
+     *     INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed for
+     *     file:///data/app/vmdl1628871151.tmp
+     *
+     * which names a temporary file nobody has heard of and no action at all.
+     * Behind it is almost always Play Protect, which holds a dialog over the
+     * install the first time it sees a version -- so the thing worth saying
+     * is "open the app and answer it", not the error.
+     */
+    private fun readable(message: String?): String {
+        val raw = message.orEmpty()
+        return when {
+            raw.contains("VERIFICATION_FAILURE") || raw.contains("ABORTED") ->
+                "Android would not install the update yet. Play Protect usually asks " +
+                    "to scan a new version first — open SchoolTrack and answer it, " +
+                    "then press Install now."
+            raw.contains("INSUFFICIENT_STORAGE") ->
+                "There is not enough room on the phone for the update."
+            raw.contains("INVALID_APK") || raw.contains("NO_CERTIFICATES") ->
+                "That download was damaged. It will be fetched again."
+            raw.isBlank() -> "The update was not installed."
+            else -> raw
         }
     }
 
