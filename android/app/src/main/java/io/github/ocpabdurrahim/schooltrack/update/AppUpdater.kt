@@ -436,6 +436,21 @@ class AppUpdater(
         private const val KEY_LAST_CHECK = "lastCheck"
         private const val KEY_AUTO = "autoUpdate"
         private const val MIN_CHECK_INTERVAL = 6 * 60 * 60 * 1000L
-        private const val BACKGROUND_DELAY = 20_000L
+
+        /**
+         * How long a waiting update sits before it goes on, once the app is
+         * put down.
+         *
+         * Five seconds, not the twenty it started as. This phone does not
+         * kill a backgrounded app -- the process is still there, with the
+         * same pid, a minute later -- it FREEZES it, and a coroutine waiting
+         * twenty seconds in a frozen process never wakes up to do anything.
+         * The install simply never happened and nothing said why.
+         *
+         * Five is long enough that stepping out to the camera and straight
+         * back is usually safe, and short enough to get the work done before
+         * the phone stops letting us work.
+         */
+        private const val BACKGROUND_DELAY = 5_000L
     }
 }
