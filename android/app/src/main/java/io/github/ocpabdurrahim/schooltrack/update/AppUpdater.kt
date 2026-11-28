@@ -106,7 +106,16 @@ class AppUpdater(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Update check failed", e)
-            _state.value = UpdateState.Failed(e.message ?: e.javaClass.simpleName)
+            // A school on a thin line loses the CHECK long before it loses the
+            // app, and a phone with no signal would otherwise show a red fault
+            // about updates every time it was opened. An automatic run that
+            // cannot reach GitHub says nothing at all; only a check somebody
+            // asked for reports that it failed. The same rule the web keeps
+            // (freshness.ts): a nag raised by a dropped request teaches people
+            // to ignore the one that matters.
+            if (userAsked) {
+                _state.value = UpdateState.Failed(e.message ?: e.javaClass.simpleName)
+            }
         } finally {
             lock.unlock()
         }
