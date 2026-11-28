@@ -141,6 +141,19 @@ describe('reading a pasted list of students', () => {
     expect(rows[1]).toMatchObject({ rollNo: 2, fullName: 'Ayesha', fatherName: 'Science' });
   });
 
+  it('reads a privilege column and writes it the way the picker spells it', () => {
+    const rows = parseStudentRows('Name,Privilege\nAyesha,half\nRakib,FREE\nMita,');
+    expect(rows.map((r) => r.privilege)).toEqual(['Half fee', 'Donor family', 'Regular']);
+    expect(rows.every((r) => r.problem === '')).toBe(true);
+  });
+
+  it('keeps a privilege it does not know, and warns rather than waiving a fee', () => {
+    const rows = parseStudentRows('Name,Concession\nAyesha,Orphan fund');
+    expect(rows[0].privilege).toBe('Orphan fund');
+    expect(rows[0].problem).toBe('');
+    expect(rows[0].note).toContain('full rate');
+  });
+
   it('writes the group the way the picker spells it', () => {
     const rows = parseStudentRows(
       'Roll,Name,Group\n1,Ayesha,commerce\n2,Bashir,SCI\n3,Chaity,Vocational',

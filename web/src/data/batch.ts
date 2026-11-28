@@ -23,6 +23,7 @@
 import type { Grid } from './sheet';
 import { normalGroup } from './groups';
 import { normalReligion } from './religions';
+import { PRIVILEGES, normalPrivilege } from './privileges';
 
 // ---------------------------------------------------------------------------
 // students
@@ -36,6 +37,7 @@ export type StudentRow = {
   regNo: string;
   groupName: string;
   religion: string;
+  privilege: string;
   gender: string;
   dob: string;
   fatherName: string;
@@ -68,6 +70,9 @@ const HEADERS: Record<string, Field> = {
   group: 'groupName', groupname: 'groupName',
   religion: 'religion', religionname: 'religion', relegion: 'religion',
   faith: 'religion',
+  privilege: 'privilege', priviledge: 'privilege', feeprivilege: 'privilege',
+  waiver: 'privilege', concession: 'privilege', feestatus: 'privilege',
+  scholarship: 'privilege',
 };
 
 /**
@@ -167,6 +172,7 @@ function blankRow(line: number): StudentRow {
     regNo: '',
     groupName: '',
     religion: '',
+    privilege: 'Regular',
     gender: '',
     dob: '',
     fatherName: '',
@@ -213,6 +219,19 @@ function assign(row: StudentRow, field: Field | undefined, cell: string) {
       // "muslim" becomes Islam, and Christian becomes Other, which is the only
       // place the school's own table has for it.
       row.religion = normalReligion(v);
+      break;
+    case 'privilege':
+      // "half", "50%" and "free" become the school's own four. Anything else
+      // is kept as typed and noted, rather than quietly waiving a fee or
+      // quietly refusing to.
+      row.privilege = normalPrivilege(v);
+      if (!PRIVILEGES.includes(row.privilege)) {
+        row.note = also(
+          row.note,
+          `"${v}" is not a privilege this app knows, so the student will be `
+          + 'charged the full rate until somebody sets it',
+        );
+      }
       break;
     default:
       row[field] = v;

@@ -26,6 +26,12 @@ export type StudentDetail = {
    * religion paper the student sits, so it is a marks field, not a detail.
    */
   religion?: string;
+  /**
+   * The standing fee arrangement: Regular, Scholarship, Donor family or Half
+   * fee. It changes the tuition this student is charged every month, so it is
+   * a money field, not a detail. Missing means Regular — see privileges.ts.
+   */
+  privilege?: string;
   gender?: string;
   dob?: string;
   fatherName?: string;

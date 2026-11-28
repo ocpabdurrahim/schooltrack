@@ -34,7 +34,9 @@ import io.github.ocpabdurrahim.schooltrack.data.DocumentsRepository
 import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
 import io.github.ocpabdurrahim.schooltrack.data.IssuedDocument
 import io.github.ocpabdurrahim.schooltrack.data.Tabulation
+import io.github.ocpabdurrahim.schooltrack.data.explainPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.gpaText
+import io.github.ocpabdurrahim.schooltrack.data.normalPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.sheetFor
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.Status
@@ -159,6 +161,14 @@ fun StudentScreen(
                     Field("Date of birth", s.dob)
                     Field("Gender", s.gender)
                     Field("Religion", s.religion)
+                    // Always shown, never blank: an office that cannot see the
+                    // fee arrangement cannot be expected to keep it right.
+                    Field(
+                        "Privilege",
+                        normalPrivilege(s.privilege).let {
+                            if (it == "Regular") it else it + " — " + explainPrivilege(it)
+                        },
+                    )
                     Field("Blood group", s.bloodGroup)
                     Field("Mobile", s.mobileNo)
 

@@ -14,6 +14,7 @@ import {
   outstanding,
 } from '../data/fees';
 import { type StudentDetail, findStudents } from '../data/people';
+import { explainPrivilege, normalPrivilege } from '../data/privileges';
 
 type Picked = { on: boolean; discount: string; amount: string };
 
@@ -270,6 +271,12 @@ export default function Collect() {
         <>
           <div className="card">
             <h2>Due this session ({year})</h2>
+            {normalPrivilege(student.privilege) !== 'Regular' && (
+              <p className="pill" style={{ display: 'inline-block', marginTop: 0 }}>
+                {normalPrivilege(student.privilege)} —{' '}
+                {explainPrivilege(student.privilege)}
+              </p>
+            )}
             {busy && <p>Working…</p>}
             {!busy && rows.length === 0 && (
               <p style={{ color: 'var(--muted)', margin: 0 }}>
@@ -297,6 +304,11 @@ export default function Collect() {
                   </span>
                   <span style={{ flex: '0 1 90px', color: 'var(--muted)' }}>
                     {money(c.grossAmount)}
+                    {c.waived > 0 && (
+                      <span style={{ display: 'block', fontSize: 12 }}>
+                        {money(c.waived)} waived
+                      </span>
+                    )}
                   </span>
                   <input style={{ flex: '0 1 90px' }} type="number" inputMode="decimal"
                          aria-label={`discount ${c.periodLabel}`}

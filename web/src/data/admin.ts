@@ -25,6 +25,7 @@ import {
 } from 'firebase/firestore';
 import { SCHOOL_ID, auth, db } from '../firebase';
 import type { StudentDetail } from './people';
+import { normalPrivilege } from './privileges';
 import type { ClassUse } from './classuse';
 import type { Move } from './promotion';
 
@@ -300,6 +301,7 @@ export async function saveStudent(input: StudentInput, classes: ClassRow[]): Pro
       section: cls?.section ?? input.section,
       groupName: input.groupName,
       religion: input.religion,
+      privilege: normalPrivilege(input.privilege),
       gender: input.gender,
       dob: input.dob,
       fatherName: input.fatherName,

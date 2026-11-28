@@ -52,6 +52,21 @@ class BatchTest {
     }
 
     @Test
+    fun `reads a privilege column and writes it the way the picker spells it`() {
+        val rows = parseStudentRows("Name,Privilege\nAyesha,half\nRakib,FREE\nMita,")
+        assertEquals(listOf("Half fee", "Donor family", "Regular"), rows.map { it.privilege })
+        assertTrue(rows.all { it.problem.isEmpty() })
+    }
+
+    @Test
+    fun `keeps a privilege it does not know, and warns rather than waiving a fee`() {
+        val rows = parseStudentRows("Name,Concession\nAyesha,Orphan fund")
+        assertEquals("Orphan fund", rows[0].privilege)
+        assertEquals("", rows[0].problem)
+        assertTrue(rows[0].note.contains("full rate"))
+    }
+
+    @Test
     fun `takes the column order from a header line when there is one`() {
         val rows = parseStudentRows("Name,Father,Mobile,Roll\nAyesha,Karim,01711,7")
         assertEquals(1, rows.size)

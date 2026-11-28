@@ -10,6 +10,7 @@ import {
   money,
 } from '../data/fees';
 import { type StudentDetail, getStudent } from '../data/people';
+import { explainPrivilege, normalPrivilege } from '../data/privileges';
 
 /**
  * What a child owes and has paid — the fees report a parent opens.
@@ -93,6 +94,11 @@ export default function StudentFees() {
 
   const years = [String(Number(currentYear()) - 1), currentYear()];
 
+  /** Only shown when this student actually has a waiver: a column of dashes on
+   *  every regular student's statement is noise, not information. */
+  const privilege = normalPrivilege(student?.privilege);
+  const waived = (statement?.waived ?? 0) > 0;
+
   return (
     <div className="wrap">
       <div className="card no-print">
@@ -142,11 +148,20 @@ export default function StudentFees() {
           </div>
         </div>
 
+        {waived && (
+          <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 8px' }}>
+            {privilege} — {explainPrivilege(privilege)}. The rate below is the one
+            this student is charged; the school's own card rate is higher by the figure
+            in Waived.
+          </p>
+        )}
+
         <table className="sheet">
           <thead>
             <tr>
               <th style={{ textAlign: 'left' }}>Fee</th>
               <th>Rate</th>
+              {waived && <th>Waived</th>}
               <th>Charged</th>
               <th>Paid</th>
               <th>Balance</th>
@@ -165,6 +180,11 @@ export default function StudentFees() {
                   )}
                 </td>
                 <td>{l.rate === null ? '—' : money(l.rate)}</td>
+                {waived && (
+                  <td style={{ color: l.waived > 0 ? 'var(--good)' : 'var(--muted)' }}>
+                    {l.waived > 0 ? money(l.waived) : '—'}
+                  </td>
+                )}
                 <td>{money(l.charged)}</td>
                 <td>
                   {money(l.paid)}
@@ -176,7 +196,11 @@ export default function StudentFees() {
               </tr>
             ))}
             {statement.lines.length === 0 && (
-              <tr><td colSpan={5} style={{ color: 'var(--muted)' }}>Nothing charged for this session yet.</td></tr>
+              <tr>
+                <td colSpan={waived ? 6 : 5} style={{ color: 'var(--muted)' }}>
+                  Nothing charged for this session yet.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

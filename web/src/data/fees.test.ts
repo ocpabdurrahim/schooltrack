@@ -46,8 +46,8 @@ const receipt = (receiptNo: string, lines: PaymentLine[]): Payment => ({
   method: 'Cash', lines, createdBy: 'accounts@test.local',
 });
 
-const statement = (receipts: Payment[], months = 8) =>
-  feeStatement(HEADS, STRUCTURE, receipts, 'Class 6', '2026', months);
+const statement = (receipts: Payment[], months = 8, privilege = 'Regular') =>
+  feeStatement(HEADS, STRUCTURE, receipts, 'Class 6', '2026', months, privilege);
 
 describe('feeStatement', () => {
   it('counts a monthly fee up to the month reached, never to the year end', () => {
@@ -115,7 +115,7 @@ describe('feeStatement', () => {
     const s = feeStatement(
       HEADS, STRUCTURE,
       [receipt('RCPT-1', [{ ...line('LIBRARY', 150), headName: 'Library fee' }])],
-      'Class 6', '2026', 8,
+      'Class 6', '2026', 8, 'Regular',
     );
     const library = s.lines.find((l) => l.feeHeadId === 'LIBRARY')!;
     expect(library.headName).toBe('Library fee');
@@ -125,7 +125,7 @@ describe('feeStatement', () => {
   });
 
   it('leaves out a head this class is not charged for', () => {
-    const s = feeStatement(HEADS, [rate('TUITION', 300)], [], 'Class 6', '2026', 8);
+    const s = feeStatement(HEADS, [rate('TUITION', 300)], [], 'Class 6', '2026', 8, 'Regular');
     expect(s.lines.map((l) => l.feeHeadId)).toEqual(['TUITION']);
     expect(s.charged).toBe(2400);
   });
@@ -138,5 +138,42 @@ describe('feeStatement', () => {
     expect(s.paid).toBe(2200);
     expect(s.discount).toBe(100);
     expect(s.outstanding).toBe(1200);        // tuition only; admission is settled
+  });
+
+  it('charges a half-fee student half the tuition, and the rest in full', () => {
+    const s = statement([], 8, 'Half fee');
+    const tuition = s.lines.find((l) => l.feeHeadId === 'TUITION')!;
+    expect(tuition.rate).toBe(150);          // the card says 300
+    expect(tuition.charged).toBe(1200);      // 150 x 8, not 2400
+    expect(tuition.waived).toBe(1200);
+    const admission = s.lines.find((l) => l.feeHeadId === 'ADMISSION')!;
+    expect(admission.waived).toBe(0);        // only tuition is ever waived
+    expect(admission.charged).toBe(1000);
+  });
+
+  it('charges a donor family and a scholarship no tuition at all', () => {
+    for (const p of ['Donor family', 'Scholarship']) {
+      const s = statement([], 8, p);
+      const tuition = s.lines.find((l) => l.feeHeadId === 'TUITION')!;
+      expect(tuition.charged).toBe(0);
+      expect(tuition.waived).toBe(2400);
+      expect(s.charged).toBe(1000);          // the admission fee, in full
+      expect(s.outstanding).toBe(1000);
+    }
+  });
+
+  it('reads a blank privilege as the full rate, never as a free place', () => {
+    for (const p of ['', null, undefined]) {
+      expect(statement([], 8, p as unknown as string).charged).toBe(3400);
+    }
+  });
+
+  it('settles a privileged month with the smaller payment, leaving nothing owing', () => {
+    // A half-fee student hands over 150 for January: that month is done.
+    const s = statement([receipt('RCPT-1', [line('TUITION', 150)])], 1, 'Half fee');
+    const tuition = s.lines.find((l) => l.feeHeadId === 'TUITION')!;
+    expect(tuition.charged).toBe(150);
+    expect(tuition.paid).toBe(150);
+    expect(tuition.balance).toBe(0);
   });
 });

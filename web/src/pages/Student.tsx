@@ -7,6 +7,7 @@ import {
   attendanceFor, getStudent, startOfMonth, startOfYear,
 } from '../data/people';
 import { type StudentFees, currentYear, money, studentFees } from '../data/fees';
+import { explainPrivilege, normalPrivilege } from '../data/privileges';
 import { type Exam, listExams, listSubjects, resultsForStudent } from '../data/exams';
 import { type IssuedDocument, documentsFor, typeLabel } from '../data/documents';
 import { type Tabulation, gpaText } from '../data/grading';
@@ -92,12 +93,19 @@ export default function Student() {
     <div className="wrap"><div className="card"><div className="err">Could not load this student.</div></div></div>
   );
 
+  const privilege = normalPrivilege(student.privilege);
+
   const bio: [string, string | undefined][] = [
     ['Roll', String(student.rollNo)],
     ['Class', `${student.className} - ${student.section}`],
     ['Registration', student.regNo],
     ['Group', student.groupName],
     ['Religion', student.religion],
+    // Always shown, never filtered out as blank: an office that cannot see
+    // the fee arrangement on the record cannot be expected to keep it right.
+    ['Privilege', privilege === 'Regular'
+      ? 'Regular'
+      : `${privilege} — ${explainPrivilege(privilege)}`],
     ['Father', student.fatherName],
     ['Mother', student.motherName],
     ['Date of birth', student.dob],

@@ -76,6 +76,7 @@ private val COLUMNS = listOf(
     SheetColumn("reg no", "Reg no", 110.dp),
     SheetColumn("group", "Group", 120.dp),
     SheetColumn("religion", "Religion", 100.dp),
+    SheetColumn("privilege", "Privilege", 120.dp),
     SheetColumn("sex", "Sex", 70.dp),
     SheetColumn("blood", "Blood", 80.dp),
 )
@@ -240,6 +241,7 @@ fun StudentsBatchScreen(
                                     section = "",
                                     groupName = r.groupName.ifBlank { null },
                                     religion = r.religion.ifBlank { null },
+                                    privilege = r.privilege,
                                     gender = r.gender.ifBlank { null },
                                     dob = r.dob.ifBlank { null },
                                     fatherName = r.fatherName.ifBlank { null },

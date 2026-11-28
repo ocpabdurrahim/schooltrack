@@ -150,6 +150,7 @@ export default function StudentsBatch() {
           section: '',
           regNo: r.regNo,
           groupName: r.groupName,
+          privilege: r.privilege,
           religion: r.religion,
           gender: r.gender,
           dob: r.dob,

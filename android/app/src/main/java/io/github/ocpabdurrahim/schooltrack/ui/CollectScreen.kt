@@ -28,6 +28,8 @@ import io.github.ocpabdurrahim.schooltrack.data.Collectable
 import io.github.ocpabdurrahim.schooltrack.data.FeeHead
 import io.github.ocpabdurrahim.schooltrack.data.FeesRepository
 import io.github.ocpabdurrahim.schooltrack.data.PaymentLine
+import io.github.ocpabdurrahim.schooltrack.data.explainPrivilege
+import io.github.ocpabdurrahim.schooltrack.data.normalPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
@@ -264,6 +266,14 @@ fun CollectScreen(
             Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Due this session ($year)", style = MaterialTheme.typography.titleMedium)
+                    val privilege = normalPrivilege(student!!.privilege)
+                    if (privilege != "Regular") {
+                        Text(
+                            privilege + " — " + explainPrivilege(privilege),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     if (busy) Text("Working…", modifier = Modifier.padding(top = 8.dp))
                     if (!busy && rows.isEmpty()) {
                         Text(
@@ -290,6 +300,11 @@ fun CollectScreen(
                                 Text(c.head.headName, style = MaterialTheme.typography.bodyMedium)
                                 Text(
                                     c.periodLabel + "  ·  " + money(c.grossAmount) +
+                                        (if (c.waived > 0.0) {
+                                            "  ·  " + money(c.waived) + " waived"
+                                        } else {
+                                            ""
+                                        }) +
                                         if (c.settled) "  ·  paid" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,

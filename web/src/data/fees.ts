@@ -27,6 +27,7 @@ import {
 import { SCHOOL_ID, db } from '../firebase';
 import { todayInDhaka } from './attendance';
 import type { StudentDetail } from './people';
+import { netRate, waiverOn } from './privileges';
 
 const school = () => doc(db, 'schools', SCHOOL_ID);
 const stamp = <T extends object>(d: T) => ({ ...d, updatedAt: serverTimestamp() });
@@ -150,7 +151,18 @@ export async function saveStructure(r: Omit<StructureRow, 'id'>) {
 export type Collectable = {
   head: FeeHead;
   periodLabel: string;
+  /**
+   * What THIS student is charged for this period: the card rate, less
+   * whatever their privilege waives. The receipt line snapshots this figure,
+   * so a rate change later never rewrites what was billed.
+   */
   grossAmount: number;
+  /**
+   * Taken off the card rate by the student's privilege, for the screen to
+   * show. It is NOT a discount: it never reaches a receipt as one, because a
+   * waiver counted twice is a waiver that leaves nothing owing.
+   */
+  waived: number;
   paid: number;          // money already taken for this head + period
   discount: number;      // discount already allowed on it
 };
@@ -190,6 +202,22 @@ export async function collectablesFor(
   const already = (feeHeadId: string, periodLabel: string) =>
     settled.get(`${feeHeadId}|${periodLabel}`) ?? { paid: 0, discount: 0 };
 
+  /**
+   * One period of one head, charged at this student's own rate.
+   *
+   * A period their privilege wipes out entirely is NOT offered: there is
+   * nothing to take, and a row of noughts only invites somebody to type into
+   * it. It does still appear when money was taken against it before the
+   * privilege was granted, so nothing already paid can vanish from the page.
+   */
+  const add = (head: FeeHead, periodLabel: string, cardRate: number) => {
+    const waived = waiverOn(head.feeHeadId, cardRate, student.privilege);
+    const charge = Math.max(0, cardRate - waived);
+    const taken = already(head.feeHeadId, periodLabel);
+    if (charge <= 0 && !taken.paid && !taken.discount) return;
+    out.push({ head, periodLabel, grossAmount: charge, waived, ...taken });
+  };
+
   for (const head of heads.filter((h) => h.active !== false)) {
     const row = structure.find(
       (r) => r.feeHeadId === head.feeHeadId &&
@@ -199,13 +227,9 @@ export async function collectablesFor(
     if (!row || !row.amount) continue;
 
     if (head.frequency === 'MONTHLY') {
-      for (let m = 0; m <= lastMonth; m++) {
-        const periodLabel = monthPeriod(m, sessionYear);
-        out.push({ head, periodLabel, grossAmount: row.amount, ...already(head.feeHeadId, periodLabel) });
-      }
+      for (let m = 0; m <= lastMonth; m++) add(head, monthPeriod(m, sessionYear), row.amount);
     } else if (head.frequency === 'ONE_TIME') {
-      const periodLabel = sessionPeriod(sessionYear);
-      out.push({ head, periodLabel, grossAmount: row.amount, ...already(head.feeHeadId, periodLabel) });
+      add(head, sessionPeriod(sessionYear), row.amount);
     }
   }
 
@@ -380,8 +404,11 @@ export async function duesFor(
                r.sessionYear === sessionYear,
       );
       if (!row?.amount) continue;
-      if (head.frequency === 'MONTHLY') expected += row.amount * months;
-      else if (head.frequency === 'ONE_TIME') expected += row.amount;
+      // The student's OWN rate: a privilege is a standing change to what they
+      // are charged, so it belongs in the expectation, not in the allowances.
+      const rate = netRate(head.feeHeadId, row.amount, student.privilege);
+      if (head.frequency === 'MONTHLY') expected += rate * months;
+      else if (head.frequency === 'ONE_TIME') expected += rate;
     }
 
     // A discount is not a debt: it reduces what is owed, exactly as it does
@@ -441,9 +468,13 @@ export type FeeLine = {
   feeHeadId: string;
   headName: string;
   frequency: Frequency | null;   // null = the head is gone from the rate card
-  rate: number | null;           // per period for this class; null = not set
+  /** Per period for THIS student: the class rate less any privilege waiver.
+   *  null = no rate is set for the class. */
+  rate: number | null;
   periods: number;               // how many periods are counted so far
   charged: number;
+  /** Taken off the class rate across those periods by the privilege. */
+  waived: number;
   paid: number;
   discount: number;
   balance: number;
@@ -453,6 +484,8 @@ export type FeeStatement = {
   sessionYear: string;
   lines: FeeLine[];
   charged: number;
+  /** What the privilege took off the bill this session, over every line. */
+  waived: number;
   paid: number;
   discount: number;
   outstanding: number;
@@ -486,6 +519,9 @@ export function feeStatement(
   className: string,
   sessionYear: string,
   monthsCounted: number,
+  /** The student's standing arrangement. Required, not defaulted: a caller
+   *  that forgets it would bill a free place the full rate. */
+  privilege: string | null | undefined,
 ): FeeStatement {
   const paidByHead = new Map<string, { headName: string; paid: number; discount: number }>();
   for (const p of receipts) {
@@ -510,12 +546,14 @@ export function feeStatement(
     paidByHead.delete(head.feeHeadId);
     if (!row?.amount && !money) continue;   // not charged to this class, nothing paid
 
-    const rate = row?.amount ?? null;
+    const cardRate = row?.amount ?? null;
+    const rate = cardRate === null ? null : netRate(head.feeHeadId, cardRate, privilege);
     const periods = rate === null ? 0
       : head.frequency === 'MONTHLY' ? monthsCounted
       : head.frequency === 'ONE_TIME' ? 1
       : 0;                                   // EXAM: never predicted
     const charged = rate === null ? 0 : rate * periods;
+    const waived = cardRate === null ? 0 : (cardRate - (rate ?? 0)) * periods;
     const paid = money?.paid ?? 0;
     const discount = money?.discount ?? 0;
 
@@ -526,6 +564,7 @@ export function feeStatement(
       rate,
       periods,
       charged,
+      waived,
       paid,
       discount,
       balance: Math.max(0, charged - paid - discount),
@@ -541,6 +580,7 @@ export function feeStatement(
       rate: null,
       periods: 0,
       charged: 0,
+      waived: 0,
       paid: money.paid,
       discount: money.discount,
       balance: 0,
@@ -551,6 +591,7 @@ export function feeStatement(
     sessionYear,
     lines,
     charged: lines.reduce((t, l) => t + l.charged, 0),
+    waived: lines.reduce((t, l) => t + l.waived, 0),
     paid: lines.reduce((t, l) => t + l.paid, 0),
     discount: lines.reduce((t, l) => t + l.discount, 0),
     outstanding: lines.reduce((t, l) => t + l.balance, 0),
@@ -575,7 +616,7 @@ export async function feeReport(
     return {
       statement: feeStatement(
         heads, structure, receipts, student.className, sessionYear,
-        monthsCountedFor(sessionYear),
+        monthsCountedFor(sessionYear), student.privilege,
       ),
       receipts,
     };
@@ -597,7 +638,7 @@ export async function studentFees(
     const [heads, structure] = await Promise.all([listFeeHeads(), listStructure()]);
     expected = feeStatement(
       heads, structure, receipts ?? [], student.className, sessionYear,
-      monthsCountedFor(sessionYear),
+      monthsCountedFor(sessionYear), student.privilege,
     ).charged;
   } catch {
     expected = null;

@@ -32,6 +32,7 @@ data class StudentRow(
     val regNo: String = "",
     val groupName: String = "",
     val religion: String = "",
+    val privilege: String = "Regular",
     val gender: String = "",
     val dob: String = "",
     val fatherName: String = "",
@@ -46,6 +47,7 @@ data class StudentRow(
 
 private enum class Field {
     ROLL, NAME, FATHER, MOTHER, MOBILE, DOB, GENDER, BLOOD, REG, GROUP, RELIGION,
+    PRIVILEGE,
 }
 
 /** Header spellings, normalised to letters only. */
@@ -67,6 +69,10 @@ private val HEADERS: Map<String, Field> = mapOf(
     "group" to Field.GROUP, "groupname" to Field.GROUP,
     "religion" to Field.RELIGION, "religionname" to Field.RELIGION,
     "relegion" to Field.RELIGION, "faith" to Field.RELIGION,
+    "privilege" to Field.PRIVILEGE, "priviledge" to Field.PRIVILEGE,
+    "feeprivilege" to Field.PRIVILEGE, "waiver" to Field.PRIVILEGE,
+    "concession" to Field.PRIVILEGE, "feestatus" to Field.PRIVILEGE,
+    "scholarship" to Field.PRIVILEGE,
 )
 
 /** What a list without a header line is taken to be. */
@@ -219,6 +225,24 @@ private fun assign(row: StudentRow, field: Field?, cell: String): StudentRow {
         // "muslim" becomes Islam, and Christian becomes Other, which is the
         // only place the school's own table has for it.
         Field.RELIGION -> row.copy(religion = normalReligion(v))
+        // "half", "50%" and "free" become the school's own four. Anything else
+        // is kept as typed and noted, rather than quietly waiving a fee or
+        // quietly refusing to.
+        Field.PRIVILEGE -> {
+            val p = normalPrivilege(v)
+            val row2 = row.copy(privilege = p)
+            if (p in PRIVILEGES) {
+                row2
+            } else {
+                row2.copy(
+                    note = also(
+                        row.note,
+                        "\"$v\" is not a privilege this app knows, so the student will " +
+                            "be charged the full rate until somebody sets it",
+                    ),
+                )
+            }
+        }
     }
 }
 

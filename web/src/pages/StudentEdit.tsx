@@ -4,6 +4,7 @@ import { useAuth } from '../auth';
 import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { groupOptions, normalGroup } from '../data/groups';
 import { normalReligion, religionOptions } from '../data/religions';
+import { explainPrivilege, normalPrivilege, privilegeOptions } from '../data/privileges';
 import { getStudent } from '../data/people';
 import { fileToCardPhoto } from '../data/photoFile';
 import { deleteStudentPhoto, getStudentPhoto, saveStudentPhoto } from '../data/photos';
@@ -15,6 +16,7 @@ type Form = {
   regNo: string;
   groupName: string;
   religion: string;
+  privilege: string;
   gender: string;
   dob: string;
   fatherName: string;
@@ -25,7 +27,8 @@ type Form = {
 };
 
 const blank: Form = {
-  fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', religion: '', gender: '',
+  fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', religion: '',
+  privilege: 'Regular', gender: '',
   dob: '', fatherName: '', motherName: '', bloodGroup: '', mobileNo: '', status: 'A',
 };
 
@@ -75,6 +78,9 @@ export default function StudentEdit() {
             // and the next save would quietly wipe the group.
             groupName: normalGroup(s.groupName),
             religion: normalReligion(s.religion),
+            // Blank reads as Regular, which is what every record written
+            // before this field existed means: the full rate.
+            privilege: normalPrivilege(s.privilege),
             gender: s.gender ?? '',
             dob: s.dob ?? '',
             fatherName: s.fatherName ?? '',
@@ -245,7 +251,23 @@ export default function StudentEdit() {
               ))}
             </select>
           </div>
+          <div style={{ flex: '1 1 160px' }}>
+            <label htmlFor="priv">Privilege</label>
+            <select id="priv" value={form.privilege}
+                    onChange={(e) => setForm({ ...form, privilege: e.target.value })}>
+              {privilegeOptions(form.privilege).map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
         </div>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
+          <strong>{form.privilege || 'Regular'}</strong>: {explainPrivilege(form.privilege)}.
+          A privilege changes the tuition this student is charged from now on, every
+          month — it is not a discount on one receipt, and it never touches the
+          session, exam or other fees. Receipts already written are left exactly as
+          they were.
+        </p>
         <p style={{ color: 'var(--muted)', fontSize: 13, margin: '6px 0 0' }}>
           The religion decides which religion paper this student sits. “Other” is a real
           answer — it means neither paper. Left blank, the student is expected to sit

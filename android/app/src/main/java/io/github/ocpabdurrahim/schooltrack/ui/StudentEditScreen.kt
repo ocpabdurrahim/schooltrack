@@ -40,7 +40,10 @@ import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.decodePhoto
 import io.github.ocpabdurrahim.schooltrack.data.groupOptions
 import io.github.ocpabdurrahim.schooltrack.data.normalGroup
+import io.github.ocpabdurrahim.schooltrack.data.explainPrivilege
+import io.github.ocpabdurrahim.schooltrack.data.normalPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.normalReligion
+import io.github.ocpabdurrahim.schooltrack.data.privilegeOptions
 import io.github.ocpabdurrahim.schooltrack.data.religionOptions
 import io.github.ocpabdurrahim.schooltrack.data.uriToCardPhoto
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +52,8 @@ import kotlinx.coroutines.withContext
 
 private fun blank() = StudentDetail(
     studentId = "", fullName = "", rollNo = 0, regNo = null, classId = "",
-    className = "", section = "", groupName = null, religion = null, gender = null,
+    className = "", section = "", groupName = null, religion = null,
+    privilege = "Regular", gender = null,
     dob = null,
     fatherName = null, motherName = null, bloodGroup = null, mobileNo = null,
     status = "A",
@@ -122,6 +126,9 @@ fun StudentEditScreen(
                     form = s.copy(
                         groupName = normalGroup(s.groupName).ifEmpty { null },
                         religion = normalReligion(s.religion).ifEmpty { null },
+                        // Blank reads as Regular: what every record written
+                        // before this field existed means -- the full rate.
+                        privilege = normalPrivilege(s.privilege),
                     )
                 }
             } else {
@@ -236,6 +243,22 @@ fun StudentEditScreen(
                     "The religion decides which religion paper this student sits. " +
                         "“Other” means neither. Left blank, the student is expected to " +
                         "sit both and their result stays unfinished.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Picker(
+                    "Privilege",
+                    privilegeOptions(form.privilege).map { it to it },
+                    normalPrivilege(form.privilege),
+                ) { form = form.copy(privilege = it) }
+                Text(
+                    normalPrivilege(form.privilege) + ": " +
+                        explainPrivilege(form.privilege) + ". A privilege changes the " +
+                        "tuition this student is charged from now on, every month -- it " +
+                        "is not a discount on one receipt, and it never touches the " +
+                        "session, exam or other fees. Receipts already written are left " +
+                        "exactly as they were.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

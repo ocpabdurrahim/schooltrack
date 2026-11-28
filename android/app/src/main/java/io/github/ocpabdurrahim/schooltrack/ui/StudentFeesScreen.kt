@@ -36,6 +36,8 @@ import io.github.ocpabdurrahim.schooltrack.data.Frequency
 import io.github.ocpabdurrahim.schooltrack.data.Payment
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
+import io.github.ocpabdurrahim.schooltrack.data.explainPrivilege
+import io.github.ocpabdurrahim.schooltrack.data.normalPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.money
 
 /**
@@ -129,6 +131,17 @@ fun StudentFeesScreen(
                     Modifier.weight(1f),
                 )
             }
+            if (report.waived > 0) {
+                val privilege = normalPrivilege(student?.privilege)
+                Text(
+                    privilege + " — " + explainPrivilege(privilege) + ". " +
+                        money(report.waived) + " off this session's bill. The rates below " +
+                        "are the ones this student is charged.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Green,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
             if (report.discount > 0) {
                 Text(
                     "Discount allowed: ${money(report.discount)}",
@@ -167,6 +180,7 @@ fun StudentFeesScreen(
                                     l.frequency == Frequency.EXAM -> append(" per exam")
                                     else -> Unit
                                 }
+                                if (l.waived > 0) append("  ·  ${money(l.waived)} waived")
                                 append("  ·  paid ${money(l.paid)}")
                                 if (l.discount > 0) append(" + ${money(l.discount)} disc.")
                             },
@@ -183,6 +197,10 @@ fun StudentFeesScreen(
                         Text(
                             when {
                                 l.balance > 0 -> "owing ${money(l.balance)}"
+                                // A free place is not "not charged yet": the
+                                // school has decided, and the line should say so
+                                l.waived > 0 && l.charged == 0.0 && l.paid == 0.0 ->
+                                    "waived in full"
                                 // "settled" would be a strange thing to say
                                 // about a fee nobody has been charged yet
                                 l.charged == 0.0 && l.paid == 0.0 -> "not charged yet"
@@ -191,6 +209,7 @@ fun StudentFeesScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = when {
                                 l.balance > 0 -> Bad
+                                l.waived > 0 && l.charged == 0.0 && l.paid == 0.0 -> Green
                                 l.charged == 0.0 && l.paid == 0.0 -> Muted
                                 else -> Green
                             },

@@ -26,6 +26,14 @@ data class StudentDetail(
     val bloodGroup: String?,
     val mobileNo: String?,
     val status: String,
+    /**
+     * The standing fee arrangement: Regular, Scholarship, Donor family or
+     * Half fee. It changes the tuition this student is charged every month,
+     * so it is a money field, not a detail. Missing means Regular -- see
+     * Privileges.kt. Last, with a default, so the older positional
+     * constructions in the tests still read.
+     */
+    val privilege: String? = null,
 )
 
 data class DayMark(val date: String, val status: Status, val markedVia: String?)
@@ -69,6 +77,7 @@ class PeopleRepository(
         bloodGroup = d["bloodGroup"] as? String,
         mobileNo = d["mobileNo"] as? String,
         status = d["status"] as? String ?: "A",
+        privilege = d["privilege"] as? String,
     )
 
     suspend fun getStudent(studentId: String): StudentDetail? {

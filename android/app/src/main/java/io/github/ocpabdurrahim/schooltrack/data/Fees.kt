@@ -70,7 +70,17 @@ data class Payment(
 data class Collectable(
     val head: FeeHead,
     val periodLabel: String,
+    /**
+     * What THIS student is charged for this period: the card rate, less
+     * whatever their privilege waives. The receipt line snapshots this.
+     */
     val grossAmount: Double,
+    /**
+     * Taken off the card rate by the student's privilege, for the screen to
+     * show. It is NOT a discount: it never reaches a receipt as one, because
+     * a waiver counted twice is a waiver that leaves nothing owing.
+     */
+    val waived: Double,
     val paid: Double,        // money already taken
     val discount: Double,    // discount already allowed
 ) {
@@ -90,9 +100,13 @@ data class FeeLine(
     val feeHeadId: String,
     val headName: String,
     val frequency: Frequency?,   // null = the head is gone from the rate card
-    val rate: Double?,           // per period for this class; null = not set
+    /** Per period for THIS student: the class rate less any privilege waiver.
+     *  null = no rate is set for the class. */
+    val rate: Double?,
     val periods: Int,
     val charged: Double,
+    /** Taken off the class rate across those periods by the privilege. */
+    val waived: Double,
     val paid: Double,
     val discount: Double,
     val balance: Double,
@@ -103,6 +117,9 @@ data class FeeStatement(
     val lines: List<FeeLine>,
 ) {
     val charged: Double get() = lines.sumOf { it.charged }
+
+    /** What the privilege took off the bill this session, over every line. */
+    val waived: Double get() = lines.sumOf { it.waived }
     val paid: Double get() = lines.sumOf { it.paid }
     val discount: Double get() = lines.sumOf { it.discount }
     val outstanding: Double get() = lines.sumOf { it.balance }
@@ -135,6 +152,9 @@ fun feeStatement(
     className: String,
     sessionYear: String,
     monthsCounted: Int,
+    /** The student's standing arrangement. Required, not defaulted: a caller
+     *  that forgets it would bill a free place the full rate. */
+    privilege: String?,
 ): FeeStatement {
     data class Money(var headName: String, var paid: Double, var discount: Double)
 
@@ -159,7 +179,8 @@ fun feeStatement(
         val money = paidByHead.remove(head.feeHeadId)
         if (row?.amount == null && money == null) continue
 
-        val rate = row?.amount
+        val cardRate = row?.amount
+        val rate = if (cardRate == null) null else netRate(head.feeHeadId, cardRate, privilege)
         val periods = when {
             rate == null -> 0
             head.frequency == Frequency.MONTHLY -> monthsCounted
@@ -167,6 +188,7 @@ fun feeStatement(
             else -> 0                                  // EXAM: never predicted
         }
         val charged = (rate ?: 0.0) * periods
+        val waived = if (cardRate == null) 0.0 else (cardRate - (rate ?: 0.0)) * periods
         val paid = money?.paid ?: 0.0
         val discount = money?.discount ?: 0.0
 
@@ -177,6 +199,7 @@ fun feeStatement(
             rate = rate,
             periods = periods,
             charged = charged,
+            waived = waived,
             paid = paid,
             discount = discount,
             balance = (charged - paid - discount).coerceAtLeast(0.0),
@@ -192,6 +215,7 @@ fun feeStatement(
             rate = null,
             periods = 0,
             charged = 0.0,
+            waived = 0.0,
             paid = money.paid,
             discount = money.discount,
             balance = 0.0,
@@ -337,9 +361,20 @@ class FeesRepository(
         val lastMonth = if (sessionYear == currentYear()) currentMonthIndex() else 11
         val out = mutableListOf<Collectable>()
 
-        fun row(head: FeeHead, period: String, amount: Double): Collectable {
+        /**
+         * One period of one head, charged at this student's own rate.
+         *
+         * A period their privilege wipes out entirely is NOT offered: there
+         * is nothing to take, and a row of noughts only invites somebody to
+         * type into it. It does still appear when money was taken against it
+         * before the privilege was granted, so nothing already paid vanishes.
+         */
+        fun add(head: FeeHead, period: String, cardRate: Double) {
+            val waived = waiverOn(head.feeHeadId, cardRate, student.privilege)
+            val charge = (cardRate - waived).coerceAtLeast(0.0)
             val (paid, discount) = settled[head.feeHeadId + "|" + period] ?: (0.0 to 0.0)
-            return Collectable(head, period, amount, paid, discount)
+            if (charge <= 0.0 && paid == 0.0 && discount == 0.0) return
+            out += Collectable(head, period, charge, waived, paid, discount)
         }
 
         for (head in heads) {
@@ -352,9 +387,9 @@ class FeesRepository(
 
             when (head.frequency) {
                 Frequency.MONTHLY ->
-                    for (m in 0..lastMonth) out += row(head, monthPeriod(m, sessionYear), rate.amount)
+                    for (m in 0..lastMonth) add(head, monthPeriod(m, sessionYear), rate.amount)
                 Frequency.ONE_TIME ->
-                    out += row(head, sessionPeriod(sessionYear), rate.amount)
+                    add(head, sessionPeriod(sessionYear), rate.amount)
                 Frequency.EXAM -> Unit
             }
         }
@@ -477,7 +512,7 @@ class FeesRepository(
         val receipts = paymentsForStudent(student.studentId)
         feeStatement(
             heads, structure, receipts, student.className, sessionYear,
-            monthsCountedFor(sessionYear),
+            monthsCountedFor(sessionYear), student.privilege,
         ) to receipts
     } catch (_: Exception) {
         null
@@ -521,9 +556,12 @@ class FeesRepository(
                         it.className == student.className &&
                         it.sessionYear == sessionYear
                 } ?: continue
+                // The student's OWN rate: a privilege is a standing change to
+                // what they are charged, not an allowance on a receipt.
+                val rate = netRate(head.feeHeadId, row.amount, student.privilege)
                 when (head.frequency) {
-                    Frequency.MONTHLY -> expected += row.amount * months
-                    Frequency.ONE_TIME -> expected += row.amount
+                    Frequency.MONTHLY -> expected += rate * months
+                    Frequency.ONE_TIME -> expected += rate
                     Frequency.EXAM -> Unit
                 }
             }
