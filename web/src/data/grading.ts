@@ -137,13 +137,51 @@ export function enteredSoFar(m: SubjectMark): number | null {
 /** The components that fall below their own pass mark, by name. */
 export function failedComponents(m: SubjectMark): string[] {
   if (!partlyEntered(m)) return [];
-  const out: string[] = [];
+  return partGroups(m).filter((g) => g.mark !== null && g.mark < g.pass).map((g) => g.label);
+}
+
+/** "Bengali First Paper MCQ" -> "MCQ". The paper is already named elsewhere. */
+export function partLabel(componentName: string, paper?: string | null): string {
+  const p = (paper ?? '').trim();
+  if (p && componentName.startsWith(p + ' ')) return componentName.slice(p.length + 1).trim();
+  return componentName;
+}
+
+export type PartGroup = {
+  label: string;
+  mark: number | null;   // null = some paper's share is not entered yet
+  pass: number;
+  max: number;
+};
+
+/**
+ * The parts a subject is JUDGED on, which is not always the parts it is shown
+ * with.
+ *
+ * For an ordinary paper the two are the same. For papers graded as one unit —
+ * Bangla, English — the like parts are ADDED and so are their pass marks: the
+ * unit's CQ is both papers' CQ out of 140, passed at 23 + 23 = 46. A student
+ * with 46 and 18 has 64 and has passed it, though one paper alone is under
+ * 23. That is the school's rule, and it is the only one that can be stated
+ * sensibly: what fails is the unit's CQ, not one paper's.
+ *
+ * A group whose mark is null has a paper still unmarked. It cannot pass or
+ * fail on half the evidence, so it does neither.
+ */
+export function partGroups(m: SubjectMark): PartGroup[] {
+  const order: string[] = [];
+  const by = new Map<string, PartGroup>();
   for (const c of m.components ?? []) {
+    const label = partLabel(c.name, c.paper);
+    if (!by.has(label)) { by.set(label, { label, mark: 0, pass: 0, max: 0 }); order.push(label); }
+    const g = by.get(label)!;
+    g.pass += c.pass;
+    g.max += c.max;
     const v = m.parts?.[c.name];
-    if (v === null || v === undefined || !Number.isFinite(v)) continue;
-    if (v < c.pass) out.push(c.name);
+    const got = v !== null && v !== undefined && Number.isFinite(v);
+    g.mark = g.mark === null || !got ? null : g.mark + (v as number);
   }
-  return out;
+  return order.map((l) => by.get(l)!);
 }
 
 export type SubjectGrade = Grade & { total: number | null; failedParts: string[] };
@@ -192,8 +230,9 @@ export function unitName(names: string[], fallback: string): string {
  * pushed to the bottom.
  *
  * Each component keeps its paper's name in front of it ("Bengali First Paper
- * MCQ"), because "MCQ" alone would collide between the two papers and a
- * student told they failed "MCQ" would not know which one.
+ * MCQ"), so the sheet can still show each paper's own figures. The PASS MARKS
+ * are not applied there, though — see partGroups: like parts are added across
+ * the papers and judged together, because Bangla is one subject out of 200.
  */
 export function combineUnits(marks: SubjectMark[]): SubjectMark[] {
   const groups = new Map<string, SubjectMark[]>();
@@ -228,7 +267,6 @@ function mergeUnit(group: string, papers: SubjectMark[]): SubjectMark {
       parts[key] = p.parts?.[c.name] ?? null;
     }
   }
-
   const totals = papers.map((p) => subjectTotal(p));
   const marks = totals.some((t) => t === null)
     ? null

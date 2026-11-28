@@ -5,6 +5,7 @@ import {
   type SubjectMark,
   combineUnits,
   gradeFor,
+  partGroups,
   gradeForSubject,
   subjectTotal,
   tabulate,
@@ -214,11 +215,54 @@ describe('papers graded as one unit', () => {
     expect(names).toEqual(['Bengali', 'Maths']);
   });
 
-  it('keeps each paper name on its components so a failure can be told apart', () => {
-    const low = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 4, CQ: 56 },
+  it('keeps each paper on the sheet, but judges the parts together', () => {
+    const [unit] = combineUnits([ban1, ban2]);
+    // The sheet still shows four figures, one per paper per part...
+    expect(unit.components?.map((c) => c.name)).toEqual([
+      'Bengali First Paper MCQ', 'Bengali First Paper CQ',
+      'Bengali Second Paper MCQ', 'Bengali Second Paper CQ',
+    ]);
+    // ...and the pass marks are applied to the two of them added together.
+    expect(partGroups(unit)).toEqual([
+      { label: 'MCQ', mark: 49, pass: 20, max: 60 },
+      { label: 'CQ', mark: 101, pass: 46, max: 140 },
+    ]);
+  });
+
+  it('passes a student who clears the COMBINED part, not each paper', () => {
+    // The real case, 2026-11-28: 46 + 19 in the first paper, 18 + 13 in the
+    // second. The second paper's CQ alone is under 23, but 46 + 18 = 64 is
+    // over the combined 46, so the subject passes.
+    const first = parted('Bengali First Paper', MCQ30_CQ70, { MCQ: 19, CQ: 46 },
       { combineGroup: 'BAN' });
-    const [unit] = combineUnits([ban1, low]);
-    expect(gradeForSubject(unit).failedParts).toEqual(['Bengali Second Paper MCQ']);
+    const second = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 13, CQ: 18 },
+      { combineGroup: 'BAN' });
+    const [unit] = combineUnits([first, second]);
+    const grade = gradeForSubject(unit);
+    expect(grade.failedParts).toEqual([]);
+    expect(grade.total).toBe(96);          // 65 + 31, out of 200
+    expect(grade.letter).not.toBe('F');
+  });
+
+  it('still fails a student who is under the combined pass mark', () => {
+    const first = parted('Bengali First Paper', MCQ30_CQ70, { MCQ: 19, CQ: 20 },
+      { combineGroup: 'BAN' });
+    const second = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 13, CQ: 18 },
+      { combineGroup: 'BAN' });
+    const [unit] = combineUnits([first, second]);
+    // 20 + 18 = 38, under 46. The UNIT's CQ failed, so that is what is named:
+    // neither paper failed on its own terms.
+    expect(gradeForSubject(unit).failedParts).toEqual(['CQ']);
+    expect(gradeForSubject(unit).letter).toBe('F');
+  });
+
+  it('judges nothing while one paper of the pair is unmarked', () => {
+    const half = parted('Bengali Second Paper', MCQ30_CQ70, { MCQ: 13, CQ: null },
+      { combineGroup: 'BAN' });
+    const [unit] = combineUnits([ban1, half]);
+    // Half the evidence is not grounds for failing somebody.
+    expect(partGroups(unit).find((g) => g.label === 'CQ')?.mark).toBeNull();
+    expect(gradeForSubject(unit).failedParts).toEqual([]);
   });
 
   it('counts the unit once in the GPA, not twice', () => {

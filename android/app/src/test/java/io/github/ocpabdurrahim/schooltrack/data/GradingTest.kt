@@ -1,6 +1,7 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -263,12 +264,67 @@ class GradingTest {
     }
 
     @Test
-    fun keepsEachPaperNameOnItsComponents() {
-        val low = parted(
-            "Bengali Second Paper", mcqCq, mapOf("MCQ" to 4.0, "CQ" to 56.0), group = "BAN",
+    fun keepsEachPaperOnTheSheetButJudgesThePartsTogether() {
+        val unit = combineUnits(listOf(ban1, ban2))[0]
+        // The sheet still shows four figures, one per paper per part...
+        assertEquals(
+            listOf(
+                "Bengali First Paper MCQ", "Bengali First Paper CQ",
+                "Bengali Second Paper MCQ", "Bengali Second Paper CQ",
+            ),
+            unit.components.map { it.name },
         )
-        val unit = combineUnits(listOf(ban1, low))[0]
-        assertEquals(listOf("Bengali Second Paper MCQ"), gradeForSubject(unit).failedParts)
+        // ...and the pass marks are applied to the two of them added together.
+        assertEquals(
+            listOf(
+                PartGroup("MCQ", 49.0, 20.0, 60.0),
+                PartGroup("CQ", 101.0, 46.0, 140.0),
+            ),
+            partGroups(unit),
+        )
+    }
+
+    @Test
+    fun passesAStudentWhoClearsTheCombinedPartNotEachPaper() {
+        // The real case, 2026-11-28: 46 + 19 in the first paper, 18 + 13 in
+        // the second. The second paper's CQ alone is under 23, but 46 + 18 =
+        // 64 is over the combined 46, so the subject passes.
+        val first = parted(
+            "Bengali First Paper", mcqCq, mapOf("MCQ" to 19.0, "CQ" to 46.0), group = "BAN",
+        )
+        val second = parted(
+            "Bengali Second Paper", mcqCq, mapOf("MCQ" to 13.0, "CQ" to 18.0), group = "BAN",
+        )
+        val g = gradeForSubject(combineUnits(listOf(first, second))[0])
+        assertEquals(emptyList<String>(), g.failedParts)
+        assertEquals(96.0, g.total!!, 0.001)
+        assertNotEquals("F", g.letter)
+    }
+
+    @Test
+    fun stillFailsAStudentUnderTheCombinedPassMark() {
+        val first = parted(
+            "Bengali First Paper", mcqCq, mapOf("MCQ" to 19.0, "CQ" to 20.0), group = "BAN",
+        )
+        val second = parted(
+            "Bengali Second Paper", mcqCq, mapOf("MCQ" to 13.0, "CQ" to 18.0), group = "BAN",
+        )
+        // 20 + 18 = 38, under 46. The UNIT's CQ failed, so that is what is
+        // named: neither paper failed on its own terms.
+        val g = gradeForSubject(combineUnits(listOf(first, second))[0])
+        assertEquals(listOf("CQ"), g.failedParts)
+        assertEquals("F", g.letter)
+    }
+
+    @Test
+    fun judgesNothingWhileOnePaperOfThePairIsUnmarked() {
+        val half = parted(
+            "Bengali Second Paper", mcqCq, mapOf("MCQ" to 13.0), group = "BAN",
+        )
+        val unit = combineUnits(listOf(ban1, half))[0]
+        // Half the evidence is not grounds for failing somebody.
+        assertNull(partGroups(unit).first { it.label == "CQ" }.mark)
+        assertEquals(emptyList<String>(), gradeForSubject(unit).failedParts)
     }
 
     @Test

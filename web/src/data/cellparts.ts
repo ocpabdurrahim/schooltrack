@@ -24,7 +24,7 @@
  */
 
 import type { SubjectGrade, SubjectMark } from './grading';
-import { enteredSoFar } from './grading';
+import { enteredSoFar, partGroups, partLabel } from './grading';
 
 /** A mark as a sheet prints it: 50, not 50.0, and 50.5 kept. */
 export const fmtMark = (n: number): string =>
@@ -67,12 +67,7 @@ const NOT_ENTERED = '–';
 const NO_TOTAL = '—';
 
 /** The part's name with its paper stripped off: "Bangla 1st Paper MCQ" -> "MCQ". */
-export function partLabel(componentName: string, paper?: string | null): string {
-  if (paper && componentName.startsWith(`${paper} `)) {
-    return componentName.slice(paper.length + 1);
-  }
-  return componentName;
-}
+export { partLabel };
 
 /**
  * The parts, in the order the paper is marked in.
@@ -94,6 +89,9 @@ export function partBits(m: SubjectMark): PartBit[] {
   });
   if (!entered) return [];
   const out: PartBit[] = [];
+  const failedGroups = new Set(
+    partGroups(m).filter((g) => g.mark !== null && g.mark < g.pass).map((g) => g.label),
+  );
   let paper: string | null | undefined;
   m.components.forEach((c, i) => {
     const v = m.parts?.[c.name];
@@ -101,7 +99,9 @@ export function partBits(m: SubjectMark): PartBit[] {
     out.push({
       label: partLabel(c.name, c.paper),
       text: got ? fmtMark(v as number) : NOT_ENTERED,
-      failed: got && (v as number) < c.pass,
+      // Judged on the GROUP, not this component: one paper under its own
+      // half of the pass mark has not failed if the pair clears it together.
+      failed: got && (failedGroups.has(partLabel(c.name, c.paper))),
       opensPaper: i > 0 && !!c.paper && c.paper !== paper,
     });
     paper = c.paper;
@@ -139,13 +139,17 @@ export function cellText(cell: SubjectMark & SubjectGrade): CellText {
 export function partsTitle(m: SubjectMark): string {
   const bits = partBits(m);
   if (bits.length === 0) return '';
+  const groups = partGroups(m);
   const papers = new Set((m.components ?? []).map((c) => c.paper ?? ''));
   const many = papers.size > 1;
   return (m.components ?? [])
     .map((c, i) => {
       const where = many && c.paper ? `${c.paper} ` : '';
       const out = `${where}${bits[i].label} ${bits[i].text}`;
-      return bits[i].failed ? `${out} (below pass ${fmtMark(c.pass)})` : out;
+      // The pass mark named is the one actually applied: for a unit of two
+      // papers that is both halves together, not this paper's share.
+      const group = groups.find((g) => g.label === bits[i].label);
+      return bits[i].failed ? `${out} (below pass ${fmtMark(group?.pass ?? c.pass)})` : out;
     })
     .join(' · ');
 }

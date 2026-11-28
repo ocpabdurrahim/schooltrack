@@ -140,12 +140,50 @@ fun enteredSoFar(m: SubjectMark): Double? {
 /** The components that fall below their own pass mark, by name. */
 fun failedComponents(m: SubjectMark): List<String> {
     if (!m.partlyEntered()) return emptyList()
-    return m.components
-        .filter { c ->
-            val v = m.parts[c.name]
-            v != null && !v.isNaN() && v < c.pass
+    return partGroups(m).filter { it.mark != null && it.mark < it.pass }.map { it.label }
+}
+
+/** The part a subject is JUDGED on: label, the marks added, the pass marks added. */
+data class PartGroup(
+    val label: String,
+    val mark: Double?,   // null = some paper's share is not entered yet
+    val pass: Double,
+    val max: Double,
+)
+
+/**
+ * The parts a subject is JUDGED on, which is not always the parts it is shown
+ * with.
+ *
+ * For an ordinary paper the two are the same. For papers graded as one unit --
+ * Bangla, English -- the like parts are ADDED and so are their pass marks: the
+ * unit's CQ is both papers' CQ out of 140, passed at 23 + 23 = 46. A student
+ * with 46 and 18 has 64 and has passed it, though one paper alone is under 23.
+ * That is the school's rule, and it is the only one that can be stated
+ * sensibly: what fails is the unit's CQ, not one paper's.
+ *
+ * A group whose mark is null has a paper still unmarked. It cannot pass or
+ * fail on half the evidence, so it does neither.
+ */
+fun partGroups(m: SubjectMark): List<PartGroup> {
+    val order = mutableListOf<String>()
+    val by = LinkedHashMap<String, PartGroup>()
+    for (c in m.components) {
+        val label = partLabel(c.name, c.paper)
+        if (label !in by) {
+            by[label] = PartGroup(label, 0.0, 0.0, 0.0)
+            order += label
         }
-        .map { it.name }
+        val g = by.getValue(label)
+        val v = m.parts[c.name]
+        val got = v != null && !v.isNaN()
+        by[label] = g.copy(
+            pass = g.pass + c.pass,
+            max = g.max + c.max,
+            mark = if (g.mark == null || !got) null else g.mark + v!!,
+        )
+    }
+    return order.map { by.getValue(it) }
 }
 
 data class SubjectGrade(

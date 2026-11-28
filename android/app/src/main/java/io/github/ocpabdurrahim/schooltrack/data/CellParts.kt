@@ -92,6 +92,10 @@ fun partBits(m: SubjectMark): List<PartBit> {
     val entered = m.components.any { m.parts[it.name]?.isNaN() == false }
     if (!entered) return emptyList()
     val out = mutableListOf<PartBit>()
+    val failedGroups = partGroups(m)
+        .filter { it.mark != null && it.mark < it.pass }
+        .map { it.label }
+        .toSet()
     var paper: String? = null
     m.components.forEachIndexed { i, c ->
         val v = m.parts[c.name]
@@ -100,7 +104,10 @@ fun partBits(m: SubjectMark): List<PartBit> {
             PartBit(
                 label = partLabel(c.name, c.paper),
                 text = if (got) fmtMark(v!!) else NOT_ENTERED,
-                failed = got && v!! < c.pass,
+                // Judged on the GROUP, not this component: one paper under
+                // its own half of the pass mark has not failed if the pair
+                // clears it together.
+                failed = got && partLabel(c.name, c.paper) in failedGroups,
                 opensPaper = i > 0 && !c.paper.isNullOrEmpty() && c.paper != paper,
             ),
         )
@@ -137,9 +144,13 @@ fun partsTitle(m: SubjectMark): String {
     val bits = partBits(m)
     if (bits.isEmpty()) return ""
     val many = m.components.map { it.paper ?: "" }.toSet().size > 1
+    val groups = partGroups(m)
     return m.components.mapIndexed { i, c ->
         val where = if (many && !c.paper.isNullOrEmpty()) c.paper + " " else ""
         val out = where + bits[i].label + " " + bits[i].text
-        if (bits[i].failed) out + " (below pass " + fmtMark(c.pass) + ")" else out
+        // The pass mark named is the one actually applied: for a unit of two
+        // papers that is both halves together, not this paper's share.
+        val pass = groups.firstOrNull { it.label == bits[i].label }?.pass ?: c.pass
+        if (bits[i].failed) out + " (below pass " + fmtMark(pass) + ")" else out
     }.joinToString(" \u00b7 ")
 }
