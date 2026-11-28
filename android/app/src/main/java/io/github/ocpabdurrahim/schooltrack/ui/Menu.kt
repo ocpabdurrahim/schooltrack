@@ -57,6 +57,12 @@ private val ALL = listOf(
             MenuItem("Holidays", Screen.HolidayCalendar, Need.ADMIN, "the calendar every percentage counts from"),
         ),
     ),
+    /*
+      Two menus, not one. Setting an exam up and running it is one job, done
+      once a term by whoever is organising it; reading what came out of it is
+      another, done over and over by everybody. Nine items in a single Exams
+      menu made the second lot hunt past the first.
+    */
     MenuGroup(
         "Exams",
         listOf(
@@ -66,13 +72,22 @@ private val ALL = listOf(
                 "roll after roll, or one whole marksheet"),
             MenuItem("Scan a mark sheet", Screen.ScanMarks, Need.STAFF,
                 "photograph the filled-in paper form"),
-            MenuItem("Results", Screen.Results, Need.STAFF, "result sheet and tabulation"),
-            MenuItem("Move a class up", Screen.Promote, Need.ADMIN,
-                "merit list becomes next year's roll numbers"),
             MenuItem("Seat plan", Screen.SeatPlan, Need.STAFF),
             MenuItem("Admit cards", Screen.AdmitCards, Need.RECORDS),
             MenuItem("Exam routine", Screen.Routine, Need.ADMIN),
-            MenuItem("Exams and subjects", Screen.ExamSetup, Need.ADMIN),
+            MenuItem("Exams and subjects", Screen.ExamSetup, Need.ADMIN,
+                "the papers, their parts and pass marks"),
+        ),
+    ),
+    MenuGroup(
+        "Results",
+        listOf(
+            MenuItem("Result sheets", Screen.Results, Need.STAFF,
+                "tabulation, merit list, noticeboard"),
+            MenuItem("Progress report", Screen.ProgressReport, Need.STAFF,
+                "two exams side by side, one per student"),
+            MenuItem("Move a class up", Screen.Promote, Need.ADMIN,
+                "merit list becomes next year's roll numbers"),
         ),
     ),
     MenuGroup(

@@ -1,0 +1,150 @@
+import { describe, expect, it } from 'vitest';
+import type { SubjectMark } from './grading';
+import { tabulate } from './grading';
+import { progressFor, signed } from './progress';
+
+/** The SAME cases exist in android/.../data/ProgressTest.kt. */
+
+const sub = (
+  name: string,
+  marks: number | null,
+  over: Partial<SubjectMark> = {},
+): SubjectMark => ({
+  subjectId: name,
+  subjectName: name,
+  fullMarks: 100,
+  marks,
+  ...over,
+});
+
+/** Three compulsory subjects, as a section has. */
+const exam = (bangla: number | null, english: number | null, maths: number | null) =>
+  tabulate([sub('BANGLA', bangla), sub('ENGLISH', english), sub('MATHEMATICS', maths)]);
+
+describe('one student across two exams', () => {
+  it('puts each subject on one line, with the move between them', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70));
+    expect(got.subjects.map((s) => [s.subjectName, s.before, s.after, s.change])).toEqual([
+      ['BANGLA', 60, 72, 12],
+      ['ENGLISH', 55, 51, -4],
+      ['MATHEMATICS', 70, 70, 0],
+    ]);
+  });
+
+  it('carries the grade from each exam, not just the marks', () => {
+    const got = progressFor(exam(60, 55, 70), exam(82, 51, 70));
+    expect(got.subjects[0].beforeLetter).toBe('A-');
+    expect(got.subjects[0].afterLetter).toBe('A+');
+  });
+
+  it('puts the subjects in the school’s order, whichever exam they came from', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70));
+    expect(got.subjects.map((s) => s.subjectName))
+      .toEqual(['BANGLA', 'ENGLISH', 'MATHEMATICS']);
+  });
+
+  it('totals and the GPA move too', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70));
+    expect([got.totalBefore, got.totalAfter, got.totalChange]).toEqual([185, 193, 8]);
+    expect(got.gpaBefore).toBeCloseTo(3.5, 2);
+    expect(got.gpaAfter).toBeCloseTo(3.67, 2);
+    expect(got.verdict).toBe('better');
+  });
+
+  it('says worse when the GPA fell, and same when it did not move', () => {
+    expect(progressFor(exam(80, 80, 80), exam(50, 50, 50)).verdict).toBe('worse');
+    expect(progressFor(exam(80, 80, 80), exam(81, 82, 83)).verdict).toBe('same');
+  });
+});
+
+describe('what it refuses to compare', () => {
+  it('REFUSES to call a paper that was not sat a fall of seventy marks', () => {
+    // The figure that gets a child shouted at. A subject in one exam and not
+    // the other has no difference to report, and says so.
+    const before = tabulate([sub('BANGLA', 70), sub('ENGLISH', 60), sub('AGRICULTURE', 70)]);
+    const after = tabulate([sub('BANGLA', 72), sub('ENGLISH', 61)]);
+    const got = progressFor(before, after);
+    const agri = got.subjects.find((s) => s.subjectName === 'AGRICULTURE')!;
+    expect(agri.before).toBe(70);
+    expect(agri.after).toBeNull();
+    expect(agri.change).toBeNull();
+  });
+
+  it('leaves that subject out of BOTH totals, so the two are of one thing', () => {
+    const before = tabulate([sub('BANGLA', 70), sub('ENGLISH', 60), sub('AGRICULTURE', 70)]);
+    const after = tabulate([sub('BANGLA', 72), sub('ENGLISH', 61)]);
+    const got = progressFor(before, after);
+    expect([got.totalBefore, got.totalAfter, got.totalChange]).toEqual([130, 133, 3]);
+  });
+
+  it('shows a subject that is new in the later exam, with nothing before it', () => {
+    const got = progressFor(
+      tabulate([sub('BANGLA', 70)]),
+      tabulate([sub('BANGLA', 72), sub('ICT', 44, { fullMarks: 50 })]),
+    );
+    const ict = got.subjects.find((s) => s.subjectName === 'ICT')!;
+    expect([ict.before, ict.after, ict.change]).toEqual([null, 44, null]);
+  });
+
+  it('withholds the GPA move while either exam is unfinished', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, null, 70));
+    expect(got.gpaAfter).toBeNull();
+    expect(got.gpaChange).toBeNull();
+    expect(got.verdict).toBe('unknown');   // not 'same': not in yet is not level
+  });
+
+  it('counts an absence as nought, because the child did sit the exam', () => {
+    const after = tabulate([
+      sub('BANGLA', null, { absent: true }), sub('ENGLISH', 51), sub('MATHEMATICS', 70),
+    ]);
+    const got = progressFor(exam(60, 55, 70), after);
+    expect(got.subjects[0].after).toBe(0);
+    expect(got.subjects[0].change).toBe(-60);
+    expect(got.subjects[0].afterLetter).toBe('F');
+  });
+
+  it('copes with a student who has only one of the two exams at all', () => {
+    const only = progressFor(null, exam(72, 51, 70));
+    expect(only.subjects).toHaveLength(3);
+    expect(only.subjects.every((s) => s.before === null)).toBe(true);
+    expect(only.totalBefore).toBeNull();
+    expect(only.verdict).toBe('unknown');
+    expect(progressFor(null, null).subjects).toEqual([]);
+  });
+});
+
+describe('the merit position', () => {
+  it('turns the sign over: 12th to 7th is five places BETTER', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70), { before: 12, after: 7 });
+    expect(got.positionChange).toBe(5);
+  });
+
+  it('and 7th to 12th is five worse', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70), { before: 7, after: 12 });
+    expect(got.positionChange).toBe(-5);
+  });
+
+  it('says nothing when either exam left them unranked', () => {
+    const got = progressFor(exam(60, 55, 70), exam(72, 51, 70), { before: 12, after: null });
+    expect(got.positionChange).toBeNull();
+    expect(got.positionBefore).toBe(12);
+  });
+});
+
+describe('signed', () => {
+  it('always shows the sign, because the sign is the point', () => {
+    expect(signed(12)).toBe('+12');
+    expect(signed(-4)).toBe('−4');
+    expect(signed(0.33, 2)).toBe('+0.33');
+    expect(signed(-0.33, 2)).toBe('−0.33');
+  });
+
+  it('writes no sign on nothing at all', () => {
+    expect(signed(0)).toBe('0');
+    expect(signed(0, 2)).toBe('0.00');
+  });
+
+  it('writes a dash where there is no figure', () => {
+    expect(signed(null)).toBe('—');
+  });
+});

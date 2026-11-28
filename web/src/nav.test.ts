@@ -13,36 +13,40 @@ const items = (access: Access, group: string) =>
 describe('who sees which menus', () => {
   it('gives an administrator everything', () => {
     expect(labels(staffAs('ADMIN')))
-      .toEqual(['Students', 'Attendance', 'Exams', 'Fees', 'Finance', 'Setup']);
+      .toEqual(['Students', 'Attendance', 'Exams', 'Results', 'Fees', 'Finance', 'Setup']);
   });
 
   it('lets only an administrator move a class up', () => {
     // It rewrites every child's class and roll number. A teacher entering
     // marks has no business with it.
-    expect(items(staffAs('ADMIN'), 'Exams')).toContain('Move a class up');
-    expect(items(staffAs('TEACHER'), 'Exams')).not.toContain('Move a class up');
+    expect(items(staffAs('ADMIN'), 'Results')).toContain('Move a class up');
+    expect(items(staffAs('TEACHER'), 'Results')).not.toContain('Move a class up');
   });
 
   it('gives a teacher no money and no setup at all', () => {
     // Not an empty Fees menu — no Fees menu. A teacher cannot read a payment,
     // so every item in it would refuse.
-    expect(labels(staffAs('TEACHER'))).toEqual(['Students', 'Attendance', 'Exams']);
+    expect(labels(staffAs('TEACHER')))
+      .toEqual(['Students', 'Attendance', 'Exams', 'Results']);
     expect(items(staffAs('TEACHER'), 'Students')).toEqual(['All students']);
     expect(items(staffAs('TEACHER'), 'Attendance')).not.toContain('Holidays');
     expect(items(staffAs('TEACHER'), 'Exams'))
-      .toEqual(['Enter marks', 'Quick entry', 'Scan a mark sheet', 'Results',
-        'Mark sheets', 'Seat plan']);
+      .toEqual(['Enter marks', 'Quick entry', 'Scan a mark sheet', 'Seat plan']);
+    expect(items(staffAs('TEACHER'), 'Results'))
+      .toEqual(['Result sheets', 'Mark sheets', 'Progress report']);
   });
 
   it('gives the accounts user the money screens but not the records', () => {
-    expect(labels(staffAs('ACCOUNTS'))).toEqual(['Students', 'Attendance', 'Exams', 'Fees', 'Finance']);
+    expect(labels(staffAs('ACCOUNTS')))
+      .toEqual(['Students', 'Attendance', 'Exams', 'Results', 'Fees', 'Finance']);
     expect(items(staffAs('ACCOUNTS'), 'Fees')).toEqual(['Collect a fee', 'Receipts', 'Dues']);
     expect(items(staffAs('ACCOUNTS'), 'Finance')).toEqual(['Expenses', 'Income and expense']);
     expect(items(staffAs('ACCOUNTS'), 'Students')).toEqual(['All students']);
   });
 
   it('gives the office the student records but no money', () => {
-    expect(labels(staffAs('OFFICE'))).toEqual(['Students', 'Attendance', 'Exams']);
+    expect(labels(staffAs('OFFICE')))
+      .toEqual(['Students', 'Attendance', 'Exams', 'Results']);
     expect(items(staffAs('OFFICE'), 'Students'))
       .toEqual(['All students', 'Add a student', 'Add many students',
         'ID cards', 'Certificates']);
@@ -83,6 +87,13 @@ describe('activeItem', () => {
     expect(activeItem(menu, '/attendance')?.item.label).toBe("Today's register");
     expect(activeItem(menu, '/exams/routine')?.item.label).toBe('Exam routine');
     expect(activeItem(menu, '/exams')?.item.label).toBe('Exams and subjects');
+    // The two menus share prefixes, so the longest match has to decide:
+    // /marks/sheets is Results, not Enter marks; /results/progress is the
+    // progress report, not the result sheets it sits under.
+    expect(activeItem(menu, '/marks/sheets')?.group.label).toBe('Results');
+    expect(activeItem(menu, '/marks')?.group.label).toBe('Exams');
+    expect(activeItem(menu, '/results/progress')?.item.label).toBe('Progress report');
+    expect(activeItem(menu, '/results')?.item.label).toBe('Result sheets');
   });
 
   it('names the menu a page sits under, which is what the bar highlights', () => {

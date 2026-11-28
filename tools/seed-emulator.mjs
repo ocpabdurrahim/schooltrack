@@ -416,7 +416,52 @@ await user('admin@test.local', 'uid-admin');
 await user('teacher@test.local', 'uid-teacher');
 await user('parent@test.local', 'uid-parent');
 
+// --- a SECOND exam, so a progress report has two of them to compare -------
+//
+// The same papers marked again, shifted by a few marks either way: most
+// students a little better, some a little worse, one or two unmarked. A
+// progress report needs two exams and nothing else in the seed provided a
+// second one, which is why the report could not be looked at before.
+
+const ANNUAL = 'annual-exam-2026';
+await school.collection('exams').doc(ANNUAL).set({
+  examName: 'Annual Exam', examYear: '2026', periodLabel: 'ANNUAL_EXAM-2026',
+  published: false, sortOrder: 2, isFinal: true, updatedAt: now,
+});
+
+let second = 0;
+for (const [studentId, got] of Object.entries(MARKS)) {
+  const who = STUDENTS.find((s) => s.studentId === studentId);
+  // A deterministic nudge: roll 1 up a lot, roll 2 down, the rest about level.
+  const nudge = ((Number(studentId) % 5) - 2) * 3;
+  for (const [subjectId, v] of Object.entries(got)) {
+    const s = SUBJECTS.find((x) => x.subjectId === subjectId);
+    const absent = v === 'abs';
+    const parted = v !== null && typeof v === 'object';
+    const shift = (n, max) => Math.max(0, Math.min(max, Math.round(n + nudge)));
+    const parts = parted
+      ? Object.fromEntries(Object.entries(v).map(([k, n]) => {
+        if (n === null) return [k, null];
+        const comp = (s.components ?? []).find((c) => c.name === k);
+        return [k, shift(n, comp ? comp.max : 100)];
+      }))
+      : null;
+    await school.collection('results').doc(`${ANNUAL}_${studentId}_${subjectId}`).set({
+      examId: ANNUAL, studentId, subjectId, subjectName: s.subjectName,
+      marks: absent ? null : parts ? sumParts(parts) : shift(v, fullOf(s)),
+      parts,
+      absent: false,          // nobody absent the second time round
+      classId: who.classId, rollNo: who.rollNo,
+      fullMarks: fullOf(s),
+      isOptional: s.isOptional === true,
+      updatedAt: now,
+    });
+    second += 1;
+  }
+}
+
 console.log(`Seeded ${CLASSES.length} classes, ${STUDENTS.length} students, 3 accounts.`);
+console.log(`And a second exam for the progress report: ${second} marks.`);
 console.log(`And one exam: ${SUBJECTS.length} subjects, ${written} marks in Class 9 - A.`);
 console.log('Sign in as admin@test.local — password is in this file.');
 process.exit(0);

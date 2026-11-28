@@ -48,6 +48,12 @@ const ALL: NavGroup[] = [
       { label: 'Holidays', to: '/attendance/holidays', needs: 'admin', hint: 'the calendar every percentage counts from' },
     ],
   },
+  /*
+    Two menus, not one. Setting an exam up and running it is one job, done
+    once a term by whoever is organising it; reading what came out of it is
+    another, done over and over by everybody. Ten items in a single Exams
+    menu made the second lot hunt past the first.
+  */
   {
     label: 'Exams',
     items: [
@@ -56,15 +62,24 @@ const ALL: NavGroup[] = [
         hint: 'roll after roll, or one whole marksheet' },
       { label: 'Scan a mark sheet', to: '/marks/scan', needs: 'staff',
         hint: 'photograph the filled-in paper form' },
-      { label: 'Results', to: '/results', needs: 'staff', hint: 'result sheet and tabulation' },
-      { label: 'Move a class up', to: '/promote', needs: 'admin',
-        hint: "merit list becomes next year's roll numbers" },
-      { label: 'Mark sheets', to: '/marks/sheets', needs: 'staff',
-        hint: 'one per student, detailed or brief' },
       { label: 'Seat plan', to: '/exams/seat-plan', needs: 'staff' },
       { label: 'Admit cards', to: '/exams/admit-cards', needs: 'records' },
       { label: 'Exam routine', to: '/exams/routine', needs: 'admin' },
-      { label: 'Exams and subjects', to: '/exams', needs: 'admin' },
+      { label: 'Exams and subjects', to: '/exams', needs: 'admin',
+        hint: 'the papers, their parts and pass marks' },
+    ],
+  },
+  {
+    label: 'Results',
+    items: [
+      { label: 'Result sheets', to: '/results', needs: 'staff',
+        hint: 'tabulation, merit list, noticeboard' },
+      { label: 'Mark sheets', to: '/marks/sheets', needs: 'staff',
+        hint: 'one per student, detailed or brief' },
+      { label: 'Progress report', to: '/results/progress', needs: 'staff',
+        hint: 'two exams side by side, one per student' },
+      { label: 'Move a class up', to: '/promote', needs: 'admin',
+        hint: "merit list becomes next year's roll numbers" },
     ],
   },
   {
