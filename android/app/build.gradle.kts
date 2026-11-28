@@ -29,8 +29,8 @@ android {
         applicationId = "io.github.ocpabdurrahim.schooltrack"
         minSdk = 24
         targetSdk = 35
-        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 52
-        versionName = (project.findProperty("versionNameOverride") as String?) ?: "1.5.1"
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toInt() ?: 53
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "1.5.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // ./gradlew assembleDebug -PuseEmulators=true  points the app at the
@@ -49,6 +49,19 @@ android {
             "String",
             "EMULATOR_HOST",
             "\"" + (project.findProperty("emulatorHost") as String? ?: "10.0.2.2") + "\"",
+        )
+
+        // Where the app asks whether there is a newer version of itself.
+        // GitHub's own API, no key and no account: the releases of a public
+        // repository are public, which is the whole reason this works at a
+        // school with no Play Store listing and no device management.
+        buildConfigField(
+            "String",
+            "UPDATE_API_URL",
+            "\"" + (
+                project.findProperty("updateApiUrl") as String?
+                    ?: "https://api.github.com/repos/ocpabdurrahim/schooltrack/releases/latest"
+                ) + "\"",
         )
     }
 
@@ -94,6 +107,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // knowing whether the app is in front, so an update never lands mid-task
+    implementation(libs.androidx.lifecycle.process)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

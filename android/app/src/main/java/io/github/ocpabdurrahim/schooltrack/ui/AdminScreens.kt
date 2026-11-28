@@ -54,6 +54,10 @@ import io.github.ocpabdurrahim.schooltrack.data.listModels
 import io.github.ocpabdurrahim.schooltrack.data.maskKey
 import io.github.ocpabdurrahim.schooltrack.data.rankVisionModels
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import io.github.ocpabdurrahim.schooltrack.SchoolTrackApp
+import io.github.ocpabdurrahim.schooltrack.update.UpdateState
 
 /** The message every refused write gets. */
 const val REFUSED = "That save was refused. Your account may not change this."
@@ -359,6 +363,99 @@ fun SchoolSetupScreen(
                     onClick = onReset,
                     modifier = Modifier.padding(top = 10.dp),
                 ) { Text("Start a new school…") }
+            }
+        }
+
+        UpdateCard()
+    }
+}
+
+/**
+ * This version, and the newer one if there is one.
+ *
+ * The web says the same thing on its own Setup page, for the same reason: "I
+ * cannot see the change you made" has no answer without somewhere that says
+ * which version is on the screen.
+ */
+@Composable
+private fun UpdateCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as SchoolTrackApp
+    val updater = app.updater
+    val state by updater.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    var auto by remember { mutableStateOf(updater.autoUpdate) }
+
+    Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("This version", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "SchoolTrack " + updater.currentVersion,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+            Text(
+                when (val st = state) {
+                    is UpdateState.Checking -> "Looking for a newer version…"
+                    is UpdateState.Downloading ->
+                        "Downloading " + st.release.version + " — " +
+                            (st.progress * 100).toInt() + "%"
+                    is UpdateState.Ready ->
+                        "Version " + st.release.version + " is ready to install."
+                    is UpdateState.Installing -> "Installing " + st.release.version + "…"
+                    is UpdateState.UpToDate -> "Up to date."
+                    is UpdateState.Failed -> st.message
+                    UpdateState.Idle -> "Checks for a new version when the app opens."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state is UpdateState.Failed) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.padding(top = 6.dp),
+            )
+
+            if (state is UpdateState.Ready) {
+                // The app installs this by itself once it is put down. The
+                // button is for somebody who would rather not wait.
+                Button(
+                    onClick = { updater.installNow() },
+                    modifier = Modifier.padding(top = 10.dp),
+                ) { Text("Install now") }
+            } else {
+                OutlinedButton(
+                    onClick = { scope.launch { updater.checkAndDownload(userAsked = true) } },
+                    enabled = state !is UpdateState.Checking && state !is UpdateState.Downloading,
+                    modifier = Modifier.padding(top = 10.dp),
+                ) { Text("Check for an update") }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Checkbox(
+                    checked = auto,
+                    onCheckedChange = { auto = it; updater.autoUpdate = it },
+                )
+                Text(
+                    "Update by itself",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            if (!updater.canInstall()) {
+                // Android refuses an install from an app the user has not
+                // allowed to install things, and says nothing about why.
+                Text(
+                    "Android has not been allowed to install updates from SchoolTrack. " +
+                        "Settings → Apps → SchoolTrack → Install unknown apps.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         }
     }
