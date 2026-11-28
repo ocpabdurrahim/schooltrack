@@ -10,6 +10,23 @@ any other system. The modules it rebuilds come from an Oracle APEX application
 screen must do, nothing more. The build order is in
 [`docs/data-model.md`](docs/data-model.md) **§7**.
 
+**In use today** at Matkhola ML High School.
+
+| | |
+|---|---|
+| Website | <https://schooltrack-1941.web.app> |
+| Install the Android app | <https://schooltrack-1941.web.app/app> |
+| Releases | [latest](https://github.com/ocpabdurrahim/schooltrack/releases/latest) |
+
+Two documents carry everything a new person needs:
+
+- **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)** — for the office: roles, the
+  year's work in order, money, printing, and what to do when a screen looks
+  wrong.
+- **[docs/RUNNING-IT.md](docs/RUNNING-IT.md)** — for whoever keeps it alive:
+  deploying, releasing the app, the signing key, accounts, backups, putting it
+  on a custom domain, and an honest list of the gaps.
+
 ---
 
 ## This repository is public
