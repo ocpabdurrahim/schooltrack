@@ -32,6 +32,12 @@ export type StudentDetail = {
    * a money field, not a detail. Missing means Regular — see privileges.ts.
    */
   privilege?: string;
+  /**
+   * The optional (4th) paper this student takes — Higher Maths or Agriculture
+   * here. It decides which papers they sit, so it belongs beside the group and
+   * the religion rather than among the contact details.
+   */
+  optionalSubjectId?: string;
   gender?: string;
   dob?: string;
   fatherName?: string;

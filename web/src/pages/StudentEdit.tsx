@@ -5,6 +5,7 @@ import { type ClassRow, listAllClasses, saveStudent } from '../data/admin';
 import { groupOptions, normalGroup } from '../data/groups';
 import { normalReligion, religionOptions } from '../data/religions';
 import { explainPrivilege, normalPrivilege, privilegeOptions } from '../data/privileges';
+import { type Subject, listSubjects } from '../data/exams';
 import { getStudent } from '../data/people';
 import { fileToCardPhoto } from '../data/photoFile';
 import { deleteStudentPhoto, getStudentPhoto, saveStudentPhoto } from '../data/photos';
@@ -17,6 +18,7 @@ type Form = {
   groupName: string;
   religion: string;
   privilege: string;
+  optionalSubjectId: string;
   gender: string;
   dob: string;
   fatherName: string;
@@ -28,7 +30,7 @@ type Form = {
 
 const blank: Form = {
   fullName: '', rollNo: 0, classId: '', regNo: '', groupName: '', religion: '',
-  privilege: 'Regular', gender: '',
+  privilege: 'Regular', optionalSubjectId: '', gender: '',
   dob: '', fatherName: '', motherName: '', bloodGroup: '', mobileNo: '', status: 'A',
 };
 
@@ -40,6 +42,7 @@ export default function StudentEdit() {
   const { access } = useAuth();
   const [form, setForm] = useState<Form>(blank);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [busy, setBusy] = useState(true);
   const [problem, setProblem] = useState('');
 
@@ -61,6 +64,7 @@ export default function StudentEdit() {
         const cs = await listAllClasses();
         if (!live) return;
         setClasses(cs);
+        listSubjects().then((ss) => { if (live) setSubjects(ss); }).catch(() => {});
 
         if (studentId) {
           const s = await getStudent(studentId);
@@ -81,6 +85,7 @@ export default function StudentEdit() {
             // Blank reads as Regular, which is what every record written
             // before this field existed means: the full rate.
             privilege: normalPrivilege(s.privilege),
+            optionalSubjectId: s.optionalSubjectId ?? '',
             gender: s.gender ?? '',
             dob: s.dob ?? '',
             fatherName: s.fatherName ?? '',
@@ -149,6 +154,18 @@ export default function StudentEdit() {
       setBusy(false);
     }
   }
+
+  /**
+   * The optional papers this student's class offers.
+   *
+   * Left blank, the student sits EVERY optional their stream offers, which is
+   * how a Science student came to show both Higher Maths and Agriculture.
+   * Recording it is what keeps one 4th subject on the sheet.
+   */
+  const myClass = classes.find((c) => c.classId === form.classId);
+  const optionalSubjects = subjects.filter(
+    (s) => s.isOptional && (!myClass || (s.classNames ?? []).includes(myClass.className)),
+  );
 
   return (
     <div className="wrap">
@@ -248,6 +265,16 @@ export default function StudentEdit() {
               <option value="">— none —</option>
               {religionOptions(form.religion).map((r) => (
                 <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: '1 1 180px' }}>
+            <label htmlFor="opt">Optional (4th) subject</label>
+            <select id="opt" value={form.optionalSubjectId}
+                    onChange={(e) => setForm({ ...form, optionalSubjectId: e.target.value })}>
+              <option value="">— not recorded —</option>
+              {optionalSubjects.map((s) => (
+                <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>
               ))}
             </select>
           </div>

@@ -34,6 +34,12 @@ data class StudentDetail(
      * constructions in the tests still read.
      */
     val privilege: String? = null,
+    /**
+     * The optional (4th) paper this student takes — Higher Maths or
+     * Agriculture here. It decides which papers they sit, so it belongs
+     * beside the group and the religion rather than among the details.
+     */
+    val optionalSubjectId: String? = null,
 )
 
 data class DayMark(val date: String, val status: Status, val markedVia: String?)
@@ -78,6 +84,7 @@ class PeopleRepository(
         mobileNo = d["mobileNo"] as? String,
         status = d["status"] as? String ?: "A",
         privilege = d["privilege"] as? String,
+        optionalSubjectId = d["optionalSubjectId"] as? String,
     )
 
     suspend fun getStudent(studentId: String): StudentDetail? {

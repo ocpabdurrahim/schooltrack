@@ -43,6 +43,8 @@ import io.github.ocpabdurrahim.schooltrack.data.normalGroup
 import io.github.ocpabdurrahim.schooltrack.data.explainPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.normalPrivilege
 import io.github.ocpabdurrahim.schooltrack.data.normalReligion
+import io.github.ocpabdurrahim.schooltrack.data.ExamsRepository
+import io.github.ocpabdurrahim.schooltrack.data.Subject
 import io.github.ocpabdurrahim.schooltrack.data.privilegeOptions
 import io.github.ocpabdurrahim.schooltrack.data.religionOptions
 import io.github.ocpabdurrahim.schooltrack.data.uriToCardPhoto
@@ -53,7 +55,7 @@ import kotlinx.coroutines.withContext
 private fun blank() = StudentDetail(
     studentId = "", fullName = "", rollNo = 0, regNo = null, classId = "",
     className = "", section = "", groupName = null, religion = null,
-    privilege = "Regular", gender = null,
+    privilege = "Regular", optionalSubjectId = null, gender = null,
     dob = null,
     fatherName = null, motherName = null, bloodGroup = null, mobileNo = null,
     status = "A",
@@ -78,6 +80,8 @@ fun StudentEditScreen(
     val context = LocalContext.current
     var form by remember { mutableStateOf(blank()) }
     var classes by remember { mutableStateOf<List<ClassRow>>(emptyList()) }
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    val exams = remember { ExamsRepository() }
     var busy by remember { mutableStateOf(true) }
     var problem by remember { mutableStateOf("") }
 
@@ -113,6 +117,7 @@ fun StudentEditScreen(
             // that has since been retired, and dropping it here would silently
             // blank their section the next time anyone saved the record.
             classes = admin.listAllClasses()
+            subjects = runCatching { exams.listSubjects() }.getOrDefault(emptyList())
             if (studentId.isNotEmpty()) {
                 photo = runCatching { photos.get(studentId) }.getOrNull()
                 val s = people.getStudent(studentId)
@@ -129,6 +134,7 @@ fun StudentEditScreen(
                         // Blank reads as Regular: what every record written
                         // before this field existed means -- the full rate.
                         privilege = normalPrivilege(s.privilege),
+                        optionalSubjectId = s.optionalSubjectId,
                     )
                 }
             } else {
@@ -246,6 +252,21 @@ fun StudentEditScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                // The optional papers this class offers. Left blank, the
+                // student sits EVERY optional their stream offers, which is how
+                // a Science student came to show both Higher Maths and
+                // Agriculture.
+                val myClass = classes.firstOrNull { it.classId == form.classId }
+                val optionals = subjects.filter {
+                    it.isOptional && (myClass == null || myClass.className in it.classNames)
+                }
+                Picker(
+                    "Optional (4th) subject",
+                    listOf("" to "— not recorded —") +
+                        optionals.map { it.subjectId to it.subjectName },
+                    form.optionalSubjectId.orEmpty(),
+                ) { form = form.copy(optionalSubjectId = it.ifBlank { null }) }
 
                 Picker(
                     "Privilege",

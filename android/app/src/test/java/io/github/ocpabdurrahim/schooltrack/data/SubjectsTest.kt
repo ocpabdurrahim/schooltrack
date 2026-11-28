@@ -39,6 +39,59 @@ class SubjectsTest {
     )
     private val all = listOf(bangla, physics, history, islam, hindu)
 
+    // Both optionals are offered to a Science student; nobody sits both.
+    // Before this rule existed the only thing separating them was that they
+    // happened to belong to different streams, and the day Agriculture was
+    // opened to every stream a Science student grew a second 4th subject.
+    // (2026-11-28, on the live school.)
+    private val hmath = bangla.copy(
+        subjectId = "HMATH", subjectName = "Higher Maths",
+        groupNames = listOf("Science"), isOptional = true, sortOrder = 8,
+    )
+    private val agri = bangla.copy(
+        subjectId = "AGR", subjectName = "Agriculture",
+        isOptional = true, sortOrder = 9,
+    )
+    private val science = Sitter("Class 9", "Science", "Islam")
+
+    @Test
+    fun `gives a student the optional they actually take, and not the other one`() {
+        val who = science.copy(optionalSubjectId = "HMATH")
+        assertTrue(sitsSubject(hmath, who))
+        assertFalse(sitsSubject(agri, who))
+        assertEquals(Excluded.OPTIONAL, excludedBy(agri, who))
+    }
+
+    @Test
+    fun `works the other way round for the student who takes Agriculture`() {
+        val who = science.copy(optionalSubjectId = "AGR")
+        assertTrue(sitsSubject(agri, who))
+        assertFalse(sitsSubject(hmath, who))
+    }
+
+    @Test
+    fun `leaves compulsory papers alone, the rule only touches optional ones`() {
+        val who = science.copy(optionalSubjectId = "HMATH")
+        assertTrue(sitsSubject(bangla, who))
+        assertTrue(sitsSubject(physics, who))
+    }
+
+    @Test
+    fun `still narrows by stream first`() {
+        assertEquals(
+            Excluded.GROUP,
+            excludedBy(physics, Sitter("Class 9", "Humanities", "Islam", "AGR")),
+        )
+    }
+
+    @Test
+    fun `gives a student with nothing recorded every optional their stream offers`() {
+        // Openly wrong beats quietly short: the missing record gets filled in.
+        assertTrue(sitsSubject(hmath, science))
+        assertTrue(sitsSubject(agri, science))
+        assertTrue(sitsSubject(agri, science.copy(optionalSubjectId = null)))
+    }
+
     @Test
     fun givesAPaperThatNamesNeitherToTheWholeClass() {
         assertTrue(sitsSubject(bangla, Sitter("Class 9", groupName = "Science")))

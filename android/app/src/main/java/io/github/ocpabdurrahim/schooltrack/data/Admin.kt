@@ -386,6 +386,7 @@ class AdminRepository(
                     "groupName" to s.groupName,
                     "religion" to s.religion,
                     "privilege" to normalPrivilege(s.privilege),
+                    "optionalSubjectId" to s.optionalSubjectId,
                     "gender" to s.gender,
                     "dob" to s.dob,
                     "fatherName" to s.fatherName,

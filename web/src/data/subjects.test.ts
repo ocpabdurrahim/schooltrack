@@ -117,6 +117,53 @@ describe('excludedBy', () => {
   });
 });
 
+describe('the optional 4th paper, which belongs to the student not the stream', () => {
+  // Both are offered to a Science student; nobody sits both. Before this rule
+  // existed the only thing separating them was that they happened to belong to
+  // different streams, and the day Agriculture was opened to every stream a
+  // Science student grew a second 4th subject. (2026-11-28, on the live school.)
+  const hmath = subject({
+    subjectId: 'HMATH', subjectName: 'Higher Maths',
+    groupNames: ['Science'], isOptional: true, sortOrder: 8,
+  });
+  const agri = subject({
+    subjectId: 'AGR', subjectName: 'Agriculture', isOptional: true, sortOrder: 9,
+  });
+  const science = { className: 'Class 9', groupName: 'Science', religion: 'Islam' };
+
+  it('gives a student the optional they actually take, and not the other one', () => {
+    const who = { ...science, optionalSubjectId: 'HMATH' };
+    expect(sitsSubject(hmath, who)).toBe(true);
+    expect(sitsSubject(agri, who)).toBe(false);
+    expect(excludedBy(agri, who)).toBe('optional');
+  });
+
+  it('works the other way round for the student who takes Agriculture', () => {
+    const who = { ...science, optionalSubjectId: 'AGR' };
+    expect(sitsSubject(agri, who)).toBe(true);
+    expect(sitsSubject(hmath, who)).toBe(false);
+  });
+
+  it('leaves compulsory papers alone — the rule only touches optional ones', () => {
+    const who = { ...science, optionalSubjectId: 'HMATH' };
+    expect(sitsSubject(bangla, who)).toBe(true);
+    expect(sitsSubject(physics, who)).toBe(true);
+  });
+
+  it('still narrows by stream first: Agriculture alone is not a Humanities pass into Physics', () => {
+    expect(excludedBy(physics, {
+      className: 'Class 9', groupName: 'Humanities', religion: 'Islam', optionalSubjectId: 'AGR',
+    })).toBe('group');
+  });
+
+  it('gives a student with NOTHING recorded every optional their stream offers', () => {
+    // Openly wrong beats quietly short: the missing record gets filled in.
+    expect(sitsSubject(hmath, science)).toBe(true);
+    expect(sitsSubject(agri, science)).toBe(true);
+    expect(sitsSubject(agri, { ...science, optionalSubjectId: null })).toBe(true);
+  });
+});
+
 describe('subjectsForStudent', () => {
   it('is the class list narrowed to this student’s own papers', () => {
     expect(subjectsForStudent(all, {

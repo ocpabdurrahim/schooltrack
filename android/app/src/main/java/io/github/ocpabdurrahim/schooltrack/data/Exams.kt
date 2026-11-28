@@ -162,10 +162,15 @@ data class Sitter(
     val className: String,
     val groupName: String? = null,
     val religion: String? = null,
+    /**
+     * Which optional (4th) paper this student actually takes. Null means
+     * nobody has recorded it — see excludedBy.
+     */
+    val optionalSubjectId: String? = null,
 )
 
 /** A student, as the subject rule wants them. */
-fun StudentDetail.asSitter() = Sitter(className, groupName, religion)
+fun StudentDetail.asSitter() = Sitter(className, groupName, religion, optionalSubjectId)
 
 /**
  * Does this student sit this paper?
@@ -188,11 +193,25 @@ fun StudentDetail.asSitter() = Sitter(className, groupName, religion)
  * cannot reach this case — religion is NOT NULL there — so nothing is being
  * contradicted.) A student recorded as "Other" is a different matter: that is
  * an answer, and it sits neither religion paper.
+ *
+ * THE OPTIONAL PAPER IS THE STUDENT'S, NOT THE STREAM'S. A 4th subject is
+ * chosen one student at a time: of two Science students, one takes Higher
+ * Maths and the other Agriculture. Nothing about their class, group or
+ * religion separates them, so without `optionalSubjectId` recorded the only
+ * thing keeping a student off the wrong optional paper is the accident of the
+ * two papers belonging to different streams — and the day one of them is
+ * offered to both streams, every Science student sprouts a second 4th
+ * subject. That is exactly what happened on 2026-11-28.
+ *
+ * A student whose optional is NOT recorded still sits every optional their
+ * stream offers, for the same reason a student with no religion recorded sits
+ * both religion papers: an openly incomplete result gets the record filled in,
+ * while a quietly shortened one does not.
  */
 fun sitsSubject(s: Subject, who: Sitter): Boolean = excludedBy(s, who) == null
 
 /** What shut a student out of a paper. */
-enum class Excluded { CLASS, GROUP, RELIGION }
+enum class Excluded { CLASS, GROUP, RELIGION, OPTIONAL }
 
 /**
  * WHICH part of the rule shut this student out, or null if nothing did.
@@ -213,6 +232,14 @@ fun excludedBy(s: Subject, who: Sitter): Excluded? {
     val myReligion = normalReligion(who.religion)
     if (s.religions.isNotEmpty() && myReligion.isNotEmpty() && myReligion !in s.religions) {
         return Excluded.RELIGION
+    }
+
+    // Last, because it is the narrowest: the paper is offered to this
+    // student's stream, but it is somebody else's 4th subject.
+    if (s.isOptional && !who.optionalSubjectId.isNullOrBlank() &&
+        s.subjectId != who.optionalSubjectId
+    ) {
+        return Excluded.OPTIONAL
     }
 
     return null

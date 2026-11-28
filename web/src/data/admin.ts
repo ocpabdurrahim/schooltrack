@@ -302,6 +302,7 @@ export async function saveStudent(input: StudentInput, classes: ClassRow[]): Pro
       groupName: input.groupName,
       religion: input.religion,
       privilege: normalPrivilege(input.privilege),
+      optionalSubjectId: input.optionalSubjectId,
       gender: input.gender,
       dob: input.dob,
       fatherName: input.fatherName,
