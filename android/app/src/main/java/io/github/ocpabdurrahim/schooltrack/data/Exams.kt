@@ -40,6 +40,13 @@ data class Exam(
     val isFinal: Boolean = false,
 )
 
+/** How one class marks a paper, where it differs from the others. */
+data class ClassMarking(
+    val fullMarks: Double? = null,
+    /** null = the same parts as everywhere else; empty = no parts in this class. */
+    val components: List<Component>? = null,
+)
+
 data class Subject(
     override val subjectId: String,
     override val subjectName: String,
@@ -54,6 +61,15 @@ data class Subject(
      * school that does not split its papers still wants.
      */
     val components: List<Component> = emptyList(),
+    /**
+     * What this paper looks like in a PARTICULAR class, where it differs.
+     *
+     * Bangla 2nd Paper is 100 in classes 9 and 10 and 50 in 6, 7 and 8, and
+     * the junior classes have no part minimums at all -- one total per paper,
+     * and the subject's own pass mark decides it. Only the classes that
+     * differ are stored.
+     */
+    val byClass: Map<String, ClassMarking> = emptyMap(),
     /**
      * Papers sharing a group are graded as ONE subject: Bangla first and
      * second paper make a single grade out of 200. Null for a lone paper.
@@ -148,8 +164,24 @@ fun subjectMarkFor(s: Subject, got: ResultRow?): SubjectMark = SubjectMark(
     religions = s.religions,
 )
 
+/**
+ * The paper AS THIS CLASS MARKS IT.
+ *
+ * Every list of subjects goes through here, so nothing downstream has to know
+ * that a class can mark a paper differently: by the time a screen or the
+ * grading engine sees a subject, its fullMarks and its parts are already the
+ * ones that class uses.
+ */
+fun subjectForClass(s: Subject, className: String): Subject {
+    val over = s.byClass[className] ?: return s
+    return s.copy(
+        fullMarks = over.fullMarks ?: s.fullMarks,
+        components = over.components ?: s.components,
+    )
+}
+
 fun subjectsForClass(subjects: List<Subject>, className: String) =
-    subjects.filter { className in it.classNames }
+    subjects.filter { className in it.classNames }.map { subjectForClass(it, className) }
 
 /**
  * Everything about a student that decides which papers they sit.
@@ -247,7 +279,7 @@ fun excludedBy(s: Subject, who: Sitter): Excluded? {
 
 /** The papers one student sits — the list every grade and GPA is built from. */
 fun subjectsForStudent(subjects: List<Subject>, who: Sitter) =
-    subjects.filter { sitsSubject(it, who) }
+    subjects.filter { sitsSubject(it, who) }.map { subjectForClass(it, who.className) }
 
 class ExamsRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -329,12 +361,31 @@ class ExamsRepository(
                 isOptional = it.getBoolean("isOptional") ?: false,
                 sortOrder = it.getLong("sortOrder") ?: 0,
                 components = readComponents(it.get("components")),
+                byClass = readByClass(it.get("byClass")),
                 combineGroup = it.getString("combineGroup"),
                 groupNames = (it.get("groupNames") as? List<String>).orEmpty(),
                 religions = (it.get("religions") as? List<String>).orEmpty(),
             )
         },
     )
+
+    /**
+     * The per-class overrides. A missing `components` key means "the same
+     * parts as everywhere else"; an empty list means "no parts in this
+     * class", and the two must not be confused -- hence the null.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun readByClass(raw: Any?): Map<String, ClassMarking> =
+        (raw as? Map<String, Map<String, Any?>>).orEmpty().mapValues { (_, m) ->
+            ClassMarking(
+                fullMarks = (m["fullMarks"] as? Number)?.toDouble(),
+                components = if (m.containsKey("components")) {
+                    readComponents(m["components"])
+                } else {
+                    null
+                },
+            )
+        }
 
     /** The components as Firestore hands them back: a list of plain maps. */
     @Suppress("UNCHECKED_CAST")

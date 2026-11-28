@@ -6,7 +6,9 @@ import {
   sheetColumns,
   sheetFor,
   sitsSubject,
+  subjectForClass,
   subjectStats,
+  subjectsForClass,
   subjectsForStudent,
 } from './exams';
 import type { StudentDetail } from './people';
@@ -161,6 +163,42 @@ describe('the optional 4th paper, which belongs to the student not the stream', 
     expect(sitsSubject(hmath, science)).toBe(true);
     expect(sitsSubject(agri, science)).toBe(true);
     expect(sitsSubject(agri, { ...science, optionalSubjectId: null })).toBe(true);
+  });
+});
+
+describe('a paper the junior classes mark differently', () => {
+  // Bangla 2nd is 100 in classes 9 and 10 and 50 in 6, 7 and 8, and the
+  // junior classes have no part minimums: one total, and the subject's own
+  // pass mark decides it. (The school's rule, 2026-11-28.)
+  const ban2 = subject({
+    subjectId: 'BAN2',
+    subjectName: 'Bangla 2nd Paper',
+    classNames: ['Class 6', 'Class 9'],
+    fullMarks: 100,
+    components: [{ name: 'CQ', max: 70, pass: 23 }, { name: 'MCQ', max: 30, pass: 10 }],
+    byClass: { 'Class 6': { fullMarks: 50, components: [] } },
+  });
+
+  it('marks it the senior way where nothing is overridden', () => {
+    const got = subjectForClass(ban2, 'Class 9');
+    expect(got.fullMarks).toBe(100);
+    expect(got.components?.length).toBe(2);
+  });
+
+  it('marks it the junior way where it is', () => {
+    const got = subjectForClass(ban2, 'Class 6');
+    expect(got.fullMarks).toBe(50);
+    expect(got.components).toEqual([]);     // one total, no part minimums
+  });
+
+  it('hands every screen the version its class uses', () => {
+    expect(subjectsForClass([ban2], 'Class 6')[0].fullMarks).toBe(50);
+    expect(subjectsForStudent([ban2], { className: 'Class 6' })[0].fullMarks).toBe(50);
+    expect(subjectsForStudent([ban2], { className: 'Class 9' })[0].fullMarks).toBe(100);
+  });
+
+  it('leaves a subject with no overrides completely alone', () => {
+    expect(subjectForClass(bangla, 'Class 6')).toBe(bangla);
   });
 });
 

@@ -80,6 +80,20 @@ export type Subject = {
    */
   components?: Component[];
   /**
+   * What this paper looks like in a PARTICULAR class, where it differs.
+   *
+   * A subject is set up once, but the junior classes do not mark it the same
+   * way: Bangla 2nd Paper is 100 in classes 9 and 10 and 50 in 6, 7 and 8,
+   * and the junior classes have no part minimums at all — one total per
+   * paper, and the subject's own pass mark decides it.
+   *
+   * Keyed by class name, and only the keys that differ are stored, so a
+   * subject marked the same everywhere carries nothing here. `components: []`
+   * means "no parts in this class" and is NOT the same as leaving it out,
+   * which means "the same parts as everywhere else".
+   */
+  byClass?: Record<string, { fullMarks?: number; components?: Component[] }>;
+  /**
    * Papers sharing a group are graded as ONE subject: Bangla first and second
    * paper make a single grade out of 200. Null for a paper that stands alone.
    */
@@ -223,8 +237,28 @@ export async function saveSubject(s: Omit<Subject, 'subjectId'> & { subjectId?: 
   return subjectId;
 }
 
+/**
+ * The paper AS THIS CLASS MARKS IT.
+ *
+ * Every list of subjects goes through here, so nothing downstream has to know
+ * that a class can mark a paper differently: by the time a screen or the
+ * grading engine sees a subject, its fullMarks and its parts are already the
+ * ones that class uses.
+ */
+export function subjectForClass(s: Subject, className: string): Subject {
+  const over = s.byClass?.[className];
+  if (!over) return s;
+  return {
+    ...s,
+    fullMarks: over.fullMarks ?? s.fullMarks,
+    components: 'components' in over ? over.components : s.components,
+  };
+}
+
 export const subjectsForClass = (subjects: Subject[], className: string) =>
-  subjects.filter((s) => (s.classNames ?? []).includes(className));
+  subjects
+    .filter((s) => (s.classNames ?? []).includes(className))
+    .map((s) => subjectForClass(s, className));
 
 /**
  * Everything about a student that decides which papers they sit.
@@ -320,7 +354,7 @@ export function excludedBy(
 
 /** The papers one student sits — the list every grade and GPA is built from. */
 export const subjectsForStudent = (subjects: Subject[], who: Sitter) =>
-  subjects.filter((s) => sitsSubject(s, who));
+  subjects.filter((s) => sitsSubject(s, who)).map((s) => subjectForClass(s, who.className));
 
 // ---------------------------------------------------------------------------
 // marks

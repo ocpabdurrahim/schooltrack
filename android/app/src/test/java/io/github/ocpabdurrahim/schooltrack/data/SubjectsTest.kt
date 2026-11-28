@@ -1,6 +1,7 @@
 package io.github.ocpabdurrahim.schooltrack.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -53,6 +54,44 @@ class SubjectsTest {
         isOptional = true, sortOrder = 9,
     )
     private val science = Sitter("Class 9", "Science", "Islam")
+
+    // Bangla 2nd is 100 in classes 9 and 10 and 50 in 6, 7 and 8, and the
+    // junior classes have no part minimums: one total, and the subject's own
+    // pass mark decides it. (The school's rule, 2026-11-28.)
+    private val ban2Junior = bangla.copy(
+        subjectId = "BAN2",
+        subjectName = "Bangla 2nd Paper",
+        classNames = listOf("Class 6", "Class 9"),
+        fullMarks = 100.0,
+        components = listOf(Component("CQ", 70.0, 23.0), Component("MCQ", 30.0, 10.0)),
+        byClass = mapOf("Class 6" to ClassMarking(fullMarks = 50.0, components = emptyList())),
+    )
+
+    @Test
+    fun marksItTheSeniorWayWhereNothingIsOverridden() {
+        val got = subjectForClass(ban2Junior, "Class 9")
+        assertEquals(100.0, got.fullMarks, 0.001)
+        assertEquals(2, got.components.size)
+    }
+
+    @Test
+    fun marksItTheJuniorWayWhereItIs() {
+        val got = subjectForClass(ban2Junior, "Class 6")
+        assertEquals(50.0, got.fullMarks, 0.001)
+        assertTrue(got.components.isEmpty())
+    }
+
+    @Test
+    fun handsEveryScreenTheVersionItsClassUses() {
+        assertEquals(50.0, subjectsForClass(listOf(ban2Junior), "Class 6")[0].fullMarks, 0.001)
+        assertEquals(50.0, subjectsForStudent(listOf(ban2Junior), Sitter("Class 6"))[0].fullMarks, 0.001)
+        assertEquals(100.0, subjectsForStudent(listOf(ban2Junior), Sitter("Class 9"))[0].fullMarks, 0.001)
+    }
+
+    @Test
+    fun leavesASubjectWithNoOverridesCompletelyAlone() {
+        assertSame(bangla, subjectForClass(bangla, "Class 6"))
+    }
 
     @Test
     fun `gives a student the optional they actually take, and not the other one`() {
