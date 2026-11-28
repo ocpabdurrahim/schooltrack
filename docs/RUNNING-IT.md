@@ -84,18 +84,69 @@ keystore file somewhere that is not this machine.
 
 ## 5. Backups
 
-Firestore on the free plan has no automatic export. What exists today:
+**Set up on 2026-11-28 and proven by restoring.** Firestore's own scheduled
+export needs the Blaze plan and a billing account; this school is on the free
+plan, so the backup is a script on this machine instead.
 
-- The **source and rules** are on GitHub.
-- The **data** is not backed up anywhere automatically.
+```
+node tools/backup-firestore.mjs
+node tools/backup-firestore.mjs --out "E:\SchoolTrack backups" --keep 60
+```
 
-If the school's records matter — and they do — set up an export. The simplest
-is a scheduled export to Cloud Storage from the Firebase console (needs the
-Blaze plan), or a periodic manual run of a read-only script against
-`tools/serviceAccount.json`. Until that exists, a wrong bulk operation is
-permanent.
+It reads every document in every collection — including subcollections, and
+including children of a parent document that no longer exists — and writes one
+dated NDJSON file. It **only reads**; it cannot write to Firestore. It keeps
+the last 30 files and deletes older ones. If it finds nothing it exits with an
+error rather than leaving an empty file that looks like a success.
 
----
+**Where the files go:** `D:\For Claude Project\SchoolTrack-backups` — a sibling
+of the project folder, deliberately **outside the
+repository**. The script refuses to write inside the working tree, because this
+repo is public and a backup is nothing but real names, parents' mobile numbers
+and what each family paid. One `git add -A` would publish the school.
+
+**It runs on its own.** A Windows scheduled task, *SchoolTrack Firestore
+backup*, runs it **daily at 21:00**, and catches up if the machine was off.
+To see it: `Get-ScheduledTaskInfo -TaskName "SchoolTrack Firestore backup"`
+(`LastTaskResult` of 0 means it worked). To stop it:
+`Unregister-ScheduledTask -TaskName "SchoolTrack Firestore backup"`.
+
+### Restoring
+
+```
+node tools/restore-firestore.mjs <file>                        # into the emulator
+node tools/restore-firestore.mjs <file> --target live --i-mean-it
+```
+
+Restoring is a **separate script on purpose**, so the thing that runs every
+night cannot overwrite the school. It defaults to the local emulator. Going to
+live needs both flags *and* a typed `RESTORE`. It puts documents back where
+they came from, overwriting what is there; it does **not** delete anything the
+backup does not contain, because a restore that also emptied collections would
+turn one bad afternoon into a total loss.
+
+**The round trip was tested, not assumed:** the live school's 480 documents
+were backed up, restored into the emulator, read back and compared field by
+field — 480 of 480, nothing missing, nothing altered, timestamps intact.
+
+**Do that drill again every few months.** A backup nobody has restored is a
+guess. Restoring into the emulator is free and touches nothing real.
+
+### The gap that is left
+
+The files are on **this machine only**. A failed disk, a theft or a
+ransomware afternoon takes the school's records and every backup of them at
+the same time. Fix it by pointing the task at a folder that syncs off the
+machine — OneDrive, Google Drive, or an external disk you actually plug in:
+
+```
+node tools/backup-firestore.mjs --out "C:\Users\Masum\OneDrive\SchoolTrack-backups"
+```
+
+That puts real student data in a personal cloud account, which is a decision
+about the school's records rather than a technical detail — make it
+deliberately. An external disk kept at the school is just as good and keeps the
+data in the building.
 
 ## 6. Putting it on your own domain
 
@@ -157,7 +208,9 @@ class one section and no fee rates; add what a test needs.
 
 ## 8. Known gaps, honestly
 
-- **No automatic backup of the data.** See section 5. This is the biggest one.
+- ~~No automatic backup of the data~~ — **done 2026-11-28**: nightly, and the
+  restore has been proven. The files are still only on one machine; see the end
+  of section 5.
 - **One ADMIN account.** See section 4.
 - **83 students have no father, mother, mobile or date of birth.** Certificates
   and ID cards print blanks where those belong.
