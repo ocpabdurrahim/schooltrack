@@ -23,11 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.ocpabdurrahim.schooltrack.data.AttendanceRepository
 import io.github.ocpabdurrahim.schooltrack.data.Collectable
 import io.github.ocpabdurrahim.schooltrack.data.FeeHead
 import io.github.ocpabdurrahim.schooltrack.data.FeesRepository
 import io.github.ocpabdurrahim.schooltrack.data.PaymentLine
 import io.github.ocpabdurrahim.schooltrack.data.PeopleRepository
+import io.github.ocpabdurrahim.schooltrack.data.SchoolClass
 import io.github.ocpabdurrahim.schooltrack.data.StudentDetail
 import io.github.ocpabdurrahim.schooltrack.data.money
 import kotlinx.coroutines.delay
@@ -47,9 +49,20 @@ fun CollectScreen(
     onBack: () -> Unit,
     fees: FeesRepository = remember { FeesRepository() },
     people: PeopleRepository = remember { PeopleRepository() },
+    attendance: AttendanceRepository = remember { AttendanceRepository() },
 ) {
     val scope = rememberCoroutineScope()
-    val year = remember { fees.currentYear() }
+
+    var year by remember { mutableStateOf(fees.currentYear()) }
+    /** This session and the one before it: arrears are collected, next year's fees are not. */
+    val years = remember {
+        listOf((fees.currentYear().toInt() - 1).toString(), fees.currentYear())
+    }
+
+    var classes by remember { mutableStateOf<List<SchoolClass>>(emptyList()) }
+    var className by remember { mutableStateOf("") }
+    var classId by remember { mutableStateOf("") }
+    var roster by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
 
     var search by remember { mutableStateOf("") }
     var found by remember { mutableStateOf<List<StudentDetail>>(emptyList()) }
@@ -73,6 +86,36 @@ fun CollectScreen(
         heads = try { fees.listFeeHeads().filter { it.active } } catch (_: Exception) { emptyList() }
     }
 
+    val classNames = classes.map { it.className }.distinct()
+    val sections = classes.filter { it.className == className }
+
+    LaunchedEffect(Unit) {
+        try {
+            classes = attendance.listClasses()
+            className = classes.firstOrNull()?.className.orEmpty()
+        } catch (_: Exception) {
+            problem = "Could not read the class list."
+        }
+    }
+
+    // Keep the section inside the chosen class. Deliberately NOT keyed on
+    // classId: this sets it, and watching what it sets would have it argue
+    // with the operator's own choice.
+    LaunchedEffect(className, classes) {
+        if (sections.isNotEmpty() && sections.none { it.classId == classId }) {
+            classId = sections.first().classId
+        }
+    }
+
+    /** The chosen section's roll, in roll order, for the Student list. */
+    LaunchedEffect(classId) {
+        roster = if (classId.isEmpty()) {
+            emptyList()
+        } else {
+            try { people.findStudents(classId, "") } catch (_: Exception) { emptyList() }
+        }
+    }
+
     LaunchedEffect(search) {
         if (search.trim().length < 2) { found = emptyList(); return@LaunchedEffect }
         delay(250)
@@ -81,21 +124,43 @@ fun CollectScreen(
 
     fun key(c: Collectable) = c.head.feeHeadId + "|" + c.periodLabel
 
-    fun choose(s: StudentDetail) {
-        student = s; search = ""; found = emptyList(); problem = ""; busy = true
-        scope.launch {
-            try {
-                val cs = fees.collectablesFor(s, year)
-                rows = cs
-                // nothing is ticked by default: the collector decides what is paid
-                picked = cs.associate {
-                    key(it) to Picked(false, "0", money(it.outstanding).replace(",", ""))
-                }
-            } catch (_: Exception) {
-                problem = "Could not work out what this student owes."
-            }
-            busy = false
+    /**
+     * What the chosen student owes for the chosen session.
+     *
+     * Keyed on the year as well as the student, so changing Year after someone
+     * is picked reloads their obligations instead of leaving one session's list
+     * on screen under another session's heading.
+     */
+    LaunchedEffect(student, year) {
+        val s = student
+        if (s == null) {
+            rows = emptyList()
+            picked = emptyMap()
+            return@LaunchedEffect
         }
+        busy = true
+        problem = ""
+        try {
+            val cs = fees.collectablesFor(s, year)
+            rows = cs
+            // nothing is ticked by default: the collector decides what is paid
+            picked = cs.associate {
+                key(it) to Picked(false, "0", money(it.outstanding).replace(",", ""))
+            }
+        } catch (_: Exception) {
+            problem = "Could not work out what this student owes."
+        }
+        busy = false
+    }
+
+    /** Chosen from the search results: move the pickers to where they are. */
+    fun choose(s: StudentDetail) {
+        student = s
+        search = ""
+        found = emptyList()
+        problem = ""
+        className = s.className
+        classId = s.classId
     }
 
     val lines = buildList {
@@ -141,7 +206,43 @@ fun CollectScreen(
     ) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Field("Name, roll or student number", search) { search = it }
+                Picker("Year", years.map { it to it }, year) { year = it }
+                Picker("Class", classNames.map { it to it }, className) {
+                    className = it
+                    student = null
+                }
+                Picker(
+                    "Section",
+                    sections.map { c -> c.classId to c.section.ifBlank { c.displayName } },
+                    classId,
+                ) {
+                    classId = it
+                    student = null
+                }
+                Picker(
+                    "Student",
+                    listOf(
+                        "" to if (roster.isEmpty()) {
+                            "\u2014 nobody on this roll \u2014"
+                        } else {
+                            "\u2014 choose one of " + roster.size + " \u2014"
+                        },
+                    ) + roster.map { s -> s.studentId to (s.rollNo.toString() + "  \u00b7  " + s.fullName) },
+                    student?.studentId ?: "",
+                ) { id -> student = roster.firstOrNull { it.studentId == id } }
+
+                if (year != fees.currentYear()) {
+                    Text(
+                        year + " is a past session. The rates read are the ones set for the " +
+                            "student's CURRENT class, because the roll keeps no class " +
+                            "history \u2014 check the amount before collecting arrears.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+
+                Field("Or search the whole school", search) { search = it }
                 found.forEach { s ->
                     Row(
                         Modifier.fillMaxWidth().clickable { choose(s) }.padding(vertical = 10.dp),
@@ -211,8 +312,14 @@ fun CollectScreen(
                     }
 
                     Text(
-                        "Monthly heads are listed up to this month only. An exam fee is not " +
-                            "predicted — add it below, naming the exam.",
+                        (
+                            if (year == fees.currentYear()) {
+                                "Monthly heads are listed up to this month only. "
+                            } else {
+                                "Every month of " + year + " is listed, because that session " +
+                                    "is over. "
+                            }
+                            ) + "An exam fee is not predicted — add it below, naming the exam.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 10.dp),
